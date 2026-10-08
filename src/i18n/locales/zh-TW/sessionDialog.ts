@@ -1,12 +1,9 @@
-// 新工作階段對話方塊（連線流程）。涵蓋對話方塊外框、主機／GCP 分頁、狀態橫幅、
-// 連線表單欄位／標籤／預留位置、各通訊協定專屬的欄位群組（SSH／序列埠／WSL／
-// Git Bash）、驗證訊息，以及捨棄變更的確認。
+// Connection dialogs (SSH / Telnet, Serial, GCP, Web): dialog chrome, the
+// status banner, connection form fields/labels/placeholders, SSH and Serial
+// field groups, validation messages, and the discard-changes confirmation.
 export const sessionDialog = {
   defaultSessionName: '{{protocol}} 工作階段',
-  title: '新工作階段',
   tabs: {
-    sourceAriaLabel: '連線來源',
-    hosts: '主機',
     gcp: 'GCP',
     web: '網頁',
   },
@@ -76,9 +73,6 @@ export const sessionDialog = {
   flowControl: {
     none: '無',
   },
-  distributionLabel: '發行版',
-  noWslDistros: '找不到 WSL 發行版。',
-  gitBashNotInstalled: '尚未安裝 Git Bash。',
   encodingLabel: '編碼',
   fixedTerminalSizeLabel: '固定終端機尺寸',
   fixedTerminalSizeDefault: '使用全域設定',

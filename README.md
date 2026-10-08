@@ -17,17 +17,17 @@ HoTTY is a multi-protocol terminal emulator for Windows that supports SSH, Telne
 
 ### Multi-Pane Layout
 - Flexible grid layouts: 1x1, 1x2, 2x1, 2x2, 2x3, 3x2
-- Collapsible sidebars on all four edges (left, right, top, bottom)
+- Collapsible edge bars on all four edges (left, right, top, bottom)
 - Keyboard pane focus navigation (`Ctrl+Tab` / `Ctrl+Shift+Tab`)
 - Drag-and-drop tab reordering and pane assignment
-- Tab bar with session and feature pane management
+- **Dock** — the icon column and a vertical tab list kept together on any window edge. Tabs on screen carry their pane's number mark; hidden tabs show their target or the newest line of output, with a dot for connected / disconnected / new output
 - **Multiple windows** — open additional windows (New Window / `Ctrl+Shift+N`) in a single process; each window has its own panes and sessions, while settings, theme, host tree and bookmarks stay shared and in sync across windows
 
 ### Integrated Utility Tools
-- **Log Viewer** — browse and read session log files, AI chat transcripts and Ping Monitor CSV logs, with in-pane search (`Ctrl+F`) supporting regular expressions, case matching, and a matching-lines-only view; `.md` transcripts render as formatted conversations and `.csv` logs as searchable tables, each with a one-click switch back to the raw file
-- **Ping Monitor** — monitor multiple targets with configurable intervals, pinging every target in a cycle concurrently, with optional CSV logging to the app log folder
-- **Interface Traffic** — live SNMP interface counters (bps / pps / errors / discards) for switches and routers over SNMP v2c or v3, with interface discovery, sortable/filterable table, 64-bit `ifXTable` counters where available, and DPAPI-encrypted credential storage
-- **File Server** — built-in TFTP & SFTP servers for uploading firmware/config to network devices (e.g. Cisco), with path-jailed serving and Windows Firewall detection
+- **Log Viewer** — browse session logs, AI chat transcripts and Ping Monitor CSV logs, listed by day under the device they came from; open another folder from the pane, and follow a log that is still being written. In-pane search (`Ctrl+F`) supporting regular expressions, case matching, and a matching-lines-only view; `.md` transcripts render as formatted conversations and `.csv` logs as searchable tables, each with a one-click switch back to the raw file
+- **Ping Monitor** — add targets straight into the table (paste several at once), see the last 60 replies as a bar graph with loss and average, change the interval or start CSV recording while it runs
+- **Interface Traffic** — live SNMP interface traffic for switches and routers over SNMP v2c or v3: a utilisation bar and a graph of recent polls per port, errors and discards flagged only when they grow, a larger graph per port, devices used before one click away, 64-bit `ifXTable` counters where available, and DPAPI-encrypted credential storage
+- **File Server** — built-in TFTP & SFTP servers for uploading firmware/config to network devices (e.g. Cisco): shows the PC address the device should use and the command to type, checks Windows Firewall before a server starts, and serves only inside the chosen folder
 - **Web Browser** — embedded browser pane (Edge WebView2) for network-device web admin UIs, opened from New Session → Web with folder-organized bookmarks; keeps login sessions, can save/autofill passwords, supports per-page zoom, and can clear browsing data (cookies, cache, history, passwords) on demand
 
 ### Theming & Appearance

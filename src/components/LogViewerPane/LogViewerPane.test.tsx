@@ -9,6 +9,7 @@ vi.mock('../../services/tauriService', () => ({
     listLogFiles: vi.fn(),
     readLogFile: vi.fn(),
     confirmLogDir: vi.fn().mockResolvedValue(true),
+    selectFolder: vi.fn().mockResolvedValue('/logs'),
     // A link inside a log file is routed here rather than navigating the window.
     openExternal: vi.fn().mockResolvedValue(undefined),
   },
@@ -18,13 +19,14 @@ vi.mock('../../stores/settingsStore', () => ({
   useSettingsStore: vi.fn((selector) => selector({ loggingPath: '' })),
 }));
 
-vi.mock('../../hooks/useResize', () => ({
-  useResize: () => ({ startResize: vi.fn(), isResizing: false }),
-}));
-
 const mockListLogFiles = vi.mocked(tauriService.listLogFiles);
 const mockReadLogFile = vi.mocked(tauriService.readLogFile);
 const mockOpenExternal = vi.mocked(tauriService.openExternal);
+const mockSelectFolder = vi.mocked(tauriService.selectFolder);
+
+/** Press the folder button and pick a folder (the picker answers '/logs' unless told otherwise). */
+const chooseFolder = () =>
+  fireEvent.click(screen.getAllByRole('button', { name: 'Choose a log folder…' })[0]);
 
 // jsdom does not implement scrollIntoView; the pane calls it to reveal the
 // focused match.
@@ -32,6 +34,7 @@ Element.prototype.scrollIntoView = vi.fn();
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockSelectFolder.mockResolvedValue('/logs');
 });
 
 /** Render the pane, open /logs, and select a single log file with `content`. */
@@ -42,8 +45,7 @@ async function openLog(content: string, active = true) {
   mockReadLogFile.mockResolvedValue({ content });
 
   const result = render(<LogViewerPane paneId="lv-1" active={active} />);
-  fireEvent.change(screen.getByPlaceholderText('Log folder path...'), { target: { value: '/logs' } });
-  fireEvent.click(screen.getByText('Open'));
+  chooseFolder();
 
   await waitFor(() => {
     expect(screen.getByText('test.log')).toBeTruthy();
@@ -73,13 +75,12 @@ async function openCsv(content: string, name = '20260820120000-PING-MONITOR.csv'
   mockReadLogFile.mockResolvedValue({ content });
 
   const result = render(<LogViewerPane paneId="lv-1" active={true} />);
-  fireEvent.change(screen.getByPlaceholderText('Log folder path...'), { target: { value: '/logs' } });
-  fireEvent.click(screen.getByText('Open'));
+  chooseFolder();
 
   await waitFor(() => {
-    expect(screen.getByText(name)).toBeTruthy();
+    expect(screen.getByTitle(name)).toBeTruthy();
   });
-  fireEvent.click(screen.getByText(name));
+  fireEvent.click(screen.getByTitle(name));
   await waitFor(() => {
     expect(document.querySelector('.log-viewer-search-bar')).toBeTruthy();
   });
@@ -94,13 +95,12 @@ async function openMd(content: string, name = '20260727091402-AICHAT-router-a.md
   mockReadLogFile.mockResolvedValue({ content });
 
   const result = render(<LogViewerPane paneId="lv-1" active={true} />);
-  fireEvent.change(screen.getByPlaceholderText('Log folder path...'), { target: { value: '/logs' } });
-  fireEvent.click(screen.getByText('Open'));
+  chooseFolder();
 
   await waitFor(() => {
-    expect(screen.getByText(name)).toBeTruthy();
+    expect(screen.getByTitle(name)).toBeTruthy();
   });
-  fireEvent.click(screen.getByText(name));
+  fireEvent.click(screen.getByTitle(name));
   await waitFor(() => {
     expect(document.querySelector('.log-viewer-search-bar')).toBeTruthy();
   });
@@ -153,65 +153,66 @@ const marks = () => Array.from(document.querySelectorAll('mark')).map((m) => m.t
 const countText = () => document.querySelector('.log-viewer-search-count')!.textContent;
 
 describe('LogViewerPane', () => {
-  it('renders folder input toolbar when no folder is set', () => {
+  it('offers a folder button and a file filter when no folder is set', () => {
     render(<LogViewerPane paneId="lv-1" active={true} />);
-    expect(screen.getByPlaceholderText('Log folder path...')).toBeTruthy();
-    expect(screen.getByText('Open')).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: 'Choose a log folder…' }).length).toBeGreaterThan(0);
+    expect(screen.getByPlaceholderText('Filter files…')).toBeTruthy();
   });
 
-  it('Open button is disabled when input is empty', () => {
+  it('opens another folder from the folder button', async () => {
+    mockListLogFiles.mockResolvedValue({ files: [] });
     render(<LogViewerPane paneId="lv-1" active={true} />);
-    const btn = screen.getByText('Open');
-    expect((btn as HTMLButtonElement).disabled).toBe(true);
+    chooseFolder();
+    await waitFor(() => expect(screen.getByRole('button', { name: '/logs' })).toBeTruthy());
+    mockSelectFolder.mockResolvedValueOnce('/other');
+    fireEvent.click(screen.getByRole('button', { name: '/logs' }));
+    await waitFor(() => expect(mockListLogFiles).toHaveBeenLastCalledWith('/other'));
   });
 
-  it('renders filter input and Refresh button in file list panel', () => {
+  it('names a session log by its device and groups files by day', async () => {
+    const now = Date.now();
+    mockListLogFiles.mockResolvedValue({
+      files: [
+        { name: '20261009140322-SSH-sw-01.txt', path: '/logs/a.txt', mtime: now - 5_000, size: 120 },
+        { name: '20261001090000-SERIAL-COM3.txt', path: '/logs/b.txt', mtime: now - 9 * 86_400_000, size: 40 },
+      ],
+    });
     render(<LogViewerPane paneId="lv-1" active={true} />);
-    expect(screen.getByPlaceholderText('Filter files...')).toBeTruthy();
-    expect(screen.getByText('Refresh')).toBeTruthy();
+    chooseFolder();
+    await waitFor(() => expect(screen.getByText('sw-01')).toBeTruthy());
+    expect(screen.getByText('TODAY')).toBeTruthy();
+    expect(screen.getByText('COM3')).toBeTruthy();
+    // Written to seconds ago: marked as still being written.
+    expect(screen.getByTitle('20261009140322-SSH-sw-01.txt').querySelector('.log-viewer-live')).toBeTruthy();
   });
 
-  it('renders divider with collapse toggle', () => {
+  it('opens a file still being written following its end, an old one not', async () => {
+    const now = Date.now();
+    mockListLogFiles.mockResolvedValue({
+      files: [
+        { name: 'live.log', path: '/logs/live.log', mtime: now, size: 10 },
+        { name: 'old.log', path: '/logs/old.log', mtime: now - 86_400_000, size: 10 },
+      ],
+    });
+    mockReadLogFile.mockResolvedValue({ content: 'x' });
     render(<LogViewerPane paneId="lv-1" active={true} />);
-    const divider = document.querySelector('.log-viewer-divider');
-    expect(divider).toBeTruthy();
-    const toggle = document.querySelector('.log-viewer-divider-toggle');
-    expect(toggle).toBeTruthy();
-  });
-
-  it('collapses file list panel when toggle is clicked', () => {
-    render(<LogViewerPane paneId="lv-1" active={true} />);
-    expect(document.querySelector('.log-viewer-file-list')).toBeTruthy();
-
-    const toggle = document.querySelector('.log-viewer-divider-toggle') as HTMLButtonElement;
-    fireEvent.click(toggle);
-
-    expect(document.querySelector('.log-viewer-file-list')).toBeNull();
-    expect(toggle.classList.contains('collapsed')).toBe(true);
-  });
-
-  it('expands file list panel when toggle is clicked again', () => {
-    render(<LogViewerPane paneId="lv-1" active={true} />);
-    const toggle = document.querySelector('.log-viewer-divider-toggle') as HTMLButtonElement;
-
-    fireEvent.click(toggle); // collapse
-    expect(document.querySelector('.log-viewer-file-list')).toBeNull();
-
-    fireEvent.click(toggle); // expand
-    expect(document.querySelector('.log-viewer-file-list')).toBeTruthy();
+    chooseFolder();
+    await waitFor(() => screen.getByTitle('live.log'));
+    fireEvent.click(screen.getByTitle('live.log'));
+    await waitFor(() => expect(screen.getByRole('button', { name: /Follow the end/ }).getAttribute('aria-pressed')).toBe('true'));
+    fireEvent.click(screen.getByTitle('old.log'));
+    await waitFor(() => expect(screen.getByRole('button', { name: /Follow the end/ }).getAttribute('aria-pressed')).toBe('false'));
   });
 
   it('shows path header after folder is opened', async () => {
     mockListLogFiles.mockResolvedValue({ files: [] });
 
     render(<LogViewerPane paneId="lv-1" active={true} />);
-    const input = screen.getByPlaceholderText('Log folder path...');
-    fireEvent.change(input, { target: { value: '/logs' } });
-    fireEvent.click(screen.getByText('Open'));
+    chooseFolder();
 
     await waitFor(() => {
       expect(screen.getByText('Log Viewer')).toBeTruthy();
-      expect(screen.getByText('/logs')).toBeTruthy();
+      expect(screen.getByRole('button', { name: '/logs' })).toBeTruthy();
     });
   });
 
@@ -223,9 +224,7 @@ describe('LogViewerPane', () => {
     });
 
     render(<LogViewerPane paneId="lv-1" active={true} />);
-    const input = screen.getByPlaceholderText('Log folder path...');
-    fireEvent.change(input, { target: { value: '/logs' } });
-    fireEvent.click(screen.getByText('Open'));
+    chooseFolder();
 
     await waitFor(() => {
       expect(screen.getByText('test.log')).toBeTruthy();
@@ -242,16 +241,14 @@ describe('LogViewerPane', () => {
     });
 
     render(<LogViewerPane paneId="lv-1" active={true} />);
-    const folderInput = screen.getByPlaceholderText('Log folder path...');
-    fireEvent.change(folderInput, { target: { value: '/logs' } });
-    fireEvent.click(screen.getByText('Open'));
+    chooseFolder();
 
     await waitFor(() => {
       expect(screen.getByText('app.log')).toBeTruthy();
       expect(screen.getByText('error.log')).toBeTruthy();
     });
 
-    const filterInput = screen.getByPlaceholderText('Filter files...');
+    const filterInput = screen.getByPlaceholderText('Filter files…');
     fireEvent.change(filterInput, { target: { value: 'error' } });
 
     expect(screen.queryByText('app.log')).toBeNull();
@@ -269,9 +266,7 @@ describe('LogViewerPane', () => {
     });
 
     render(<LogViewerPane paneId="lv-1" active={true} />);
-    const input = screen.getByPlaceholderText('Log folder path...');
-    fireEvent.change(input, { target: { value: '/logs' } });
-    fireEvent.click(screen.getByText('Open'));
+    chooseFolder();
 
     await waitFor(() => {
       expect(screen.getByText('test.log')).toBeTruthy();
@@ -301,14 +296,13 @@ describe('LogViewerPane', () => {
     });
 
     render(<LogViewerPane paneId="lv-1" active={true} />);
-    fireEvent.change(screen.getByPlaceholderText('Log folder path...'), { target: { value: '/logs' } });
-    fireEvent.click(screen.getByText('Open'));
+    chooseFolder();
 
     await waitFor(() => {
-      expect(screen.getByText(chatLog)).toBeTruthy();
+      expect(screen.getByTitle(chatLog)).toBeTruthy();
     });
 
-    fireEvent.click(screen.getByText(chatLog));
+    fireEvent.click(screen.getByTitle(chatLog));
 
     await waitFor(() => {
       const md = document.querySelector('.log-viewer-md .md-content');
@@ -329,9 +323,8 @@ describe('LogViewerPane', () => {
     });
 
     render(<LogViewerPane paneId="lv-1" active={true} />);
-    const input = screen.getByPlaceholderText('Log folder path...');
-    fireEvent.change(input, { target: { value: '/forbidden' } });
-    fireEvent.click(screen.getByText('Open'));
+    mockSelectFolder.mockResolvedValueOnce('/forbidden');
+    chooseFolder();
 
     await waitFor(() => {
       expect(screen.getByText('Log folder is not registered')).toBeTruthy();
@@ -340,34 +333,20 @@ describe('LogViewerPane', () => {
 
   it('shows placeholder when no folder is set', () => {
     render(<LogViewerPane paneId="lv-1" active={true} />);
-    expect(screen.getByText('Enter a folder path to browse log files')).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: 'Choose a log folder…' })).toHaveLength(2);
   });
 
   it('shows select file placeholder after folder is opened', async () => {
     mockListLogFiles.mockResolvedValue({ files: [] });
 
     render(<LogViewerPane paneId="lv-1" active={true} />);
-    const input = screen.getByPlaceholderText('Log folder path...');
-    fireEvent.change(input, { target: { value: '/logs' } });
-    fireEvent.click(screen.getByText('Open'));
+    chooseFolder();
 
     await waitFor(() => {
       expect(screen.getByText('Select a file to view its content.')).toBeTruthy();
     });
   });
 
-  it('Enter key in input triggers folder open', async () => {
-    mockListLogFiles.mockResolvedValue({ files: [] });
-
-    render(<LogViewerPane paneId="lv-1" active={true} />);
-    const input = screen.getByPlaceholderText('Log folder path...');
-    fireEvent.change(input, { target: { value: '/logs' } });
-    fireEvent.keyDown(input, { key: 'Enter' });
-
-    await waitFor(() => {
-      expect(mockListLogFiles).toHaveBeenCalledWith('/logs');
-    });
-  });
 });
 
 describe('LogViewerPane in-log search', () => {
@@ -381,8 +360,7 @@ describe('LogViewerPane in-log search', () => {
   it('shows the find bar only once a file is open', async () => {
     mockListLogFiles.mockResolvedValue({ files: [] });
     render(<LogViewerPane paneId="lv-1" active={true} />);
-    fireEvent.change(screen.getByPlaceholderText('Log folder path...'), { target: { value: '/logs' } });
-    fireEvent.click(screen.getByText('Open'));
+    chooseFolder();
 
     await waitFor(() => {
       expect(screen.getByText('Select a file to view its content.')).toBeTruthy();
@@ -476,7 +454,7 @@ describe('LogViewerPane in-log search', () => {
     await openLog(LOG);
     await search('timeout');
 
-    fireEvent.click(screen.getByLabelText('Matching lines only'));
+    fireEvent.click(screen.getByRole('button', { name: 'Matching lines' }));
     await waitFor(() => {
       expect(document.querySelector('.log-viewer-filtered')).toBeTruthy();
     });
@@ -494,7 +472,7 @@ describe('LogViewerPane in-log search', () => {
 
   it('reports no matches in filtered mode', async () => {
     await openLog(LOG);
-    fireEvent.click(screen.getByLabelText('Matching lines only'));
+    fireEvent.click(screen.getByRole('button', { name: 'Matching lines' }));
     await search('nosuchthing');
 
     // Both the counter and the empty content area report it.
@@ -566,8 +544,7 @@ describe('LogViewerPane in-log search', () => {
     mockReadLogFile.mockResolvedValue({ content: 'has timeout here' });
 
     render(<LogViewerPane paneId="lv-1" active={true} />);
-    fireEvent.change(screen.getByPlaceholderText('Log folder path...'), { target: { value: '/logs' } });
-    fireEvent.click(screen.getByText('Open'));
+    chooseFolder();
     await waitFor(() => {
       expect(screen.getByText('a.log')).toBeTruthy();
     });
@@ -614,7 +591,7 @@ describe('LogViewerPane in-log search', () => {
       expect(document.querySelector('.log-viewer-csv-table')).toBeTruthy();
     });
 
-    fireEvent.click(screen.getByLabelText('Show as table'));
+    fireEvent.click(screen.getByRole('button', { name: 'Text' }));
 
     await waitFor(() => {
       expect(document.querySelector('.log-viewer-csv-table')).toBeNull();
@@ -624,7 +601,7 @@ describe('LogViewerPane in-log search', () => {
 
   it('offers the table toggle only for .csv files', async () => {
     await openLog('plain log line');
-    expect(screen.queryByLabelText('Show as table')).toBeNull();
+    expect(screen.queryByRole('group', { name: 'View' })).toBeNull();
   });
 
   it('highlights matches inside table cells and counts them', async () => {
@@ -647,7 +624,7 @@ describe('LogViewerPane in-log search', () => {
     });
 
     await search('8.8.8.8');
-    fireEvent.click(screen.getByLabelText('Matching lines only'));
+    fireEvent.click(screen.getByRole('button', { name: 'Matching lines' }));
 
     await waitFor(() => {
       expect(tableRows()).toHaveLength(1);
@@ -662,7 +639,7 @@ describe('LogViewerPane in-log search', () => {
     });
 
     await search('no-such-value');
-    fireEvent.click(screen.getByLabelText('Matching lines only'));
+    fireEvent.click(screen.getByRole('button', { name: 'Matching lines' }));
 
     await waitFor(() => {
       expect(document.querySelector('.log-viewer-csv-table')).toBeNull();
@@ -714,7 +691,7 @@ describe('LogViewerPane markdown view', () => {
       expect(document.querySelector('.log-viewer-md')).toBeTruthy();
     });
 
-    fireEvent.click(screen.getByLabelText('Show formatted'));
+    fireEvent.click(screen.getByRole('button', { name: 'Text' }));
 
     await waitFor(() => {
       expect(document.querySelector('.log-viewer-md')).toBeNull();
@@ -724,7 +701,7 @@ describe('LogViewerPane markdown view', () => {
 
   it('offers the formatting toggle only for .md files', async () => {
     await openLog('plain log line');
-    expect(screen.queryByLabelText('Show formatted')).toBeNull();
+    expect(screen.queryByRole('group', { name: 'View' })).toBeNull();
   });
 
   it('highlights matches inside the formatted document and counts them', async () => {
@@ -766,10 +743,9 @@ describe('LogViewerPane markdown view', () => {
     await waitFor(() => expect(current()).toBe('0'));
   });
 
-  it('disables "Matching lines only" — a formatted document has no lines', async () => {
+  it('disables "Matching lines" — a formatted document has no lines', async () => {
     await openMd(CHAT_MD);
-    const checkbox = screen.getByLabelText('Matching lines only', { selector: 'input' });
-    expect(checkbox).toHaveProperty('disabled', true);
+    expect(screen.getByRole('button', { name: 'Matching lines' })).toHaveProperty('disabled', true);
   });
 
   it('shows the source with a notice when the file is too big to format', async () => {

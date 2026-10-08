@@ -1,0 +1,191 @@
+/* Shared pieces for the tool panes (Ping Monitor, Interface Traffic, File
+   Server, Log Viewer): the run status + start/stop pair, the segmented picker,
+   and the small history graphs. One look for all four, so "is it running and
+   how do I stop it" reads the same everywhere. */
+
+/* Run status: a pill whose colour says the state. */
+.pt-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-family: var(--ui-font-family);
+  font-size: calc(var(--font-size-base) - 2px);
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+.pt-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+.pt-status.running {
+  color: var(--success-color);
+  background: color-mix(in srgb, var(--success-color) 14%, transparent);
+}
+
+.pt-status.waiting {
+  color: var(--color-warning);
+  background: color-mix(in srgb, var(--color-warning) 16%, transparent);
+}
+
+.pt-status.running .pt-status-dot,
+.pt-status.waiting .pt-status-dot {
+  animation: pt-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes pt-pulse {
+  50% { opacity: 0.35; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pt-status.running .pt-status-dot,
+  .pt-status.waiting .pt-status-dot {
+    animation: none;
+  }
+}
+
+/* Start / Stop. */
+.pt-run-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: var(--ui-font-family);
+  font-size: calc(var(--font-size-base) - 2px);
+  font-weight: 600;
+  flex-shrink: 0;
+  transition: background-color 0.1s;
+}
+
+.pt-run-btn.start {
+  background: var(--accent-color);
+  color: var(--text-on-accent);
+}
+
+.pt-run-btn.start:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.pt-run-btn.stop {
+  background: var(--btn-danger-bg);
+  color: var(--text-on-accent);
+}
+
+.pt-run-btn.stop:hover:not(:disabled) {
+  background: var(--btn-danger-hover-bg);
+}
+
+.pt-run-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Segmented picker: joined buttons, the chosen one filled. */
+.pt-seg {
+  display: inline-flex;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.pt-seg-btn {
+  padding: 2px 8px;
+  border: none;
+  background: var(--input-bg);
+  color: var(--text-secondary);
+  font-family: var(--ui-font-family);
+  font-size: calc(var(--font-size-base) - 2px);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.1s;
+}
+
+.pt-seg-btn + .pt-seg-btn {
+  border-left: 1px solid var(--border-color);
+}
+
+.pt-seg-btn:hover:not(:disabled):not(.active) {
+  background: var(--hover-bg);
+  color: var(--text-primary);
+}
+
+.pt-seg-btn.active {
+  background: var(--accent-color);
+  color: var(--text-on-accent);
+  font-weight: 600;
+}
+
+.pt-seg-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* A small label in front of a picker ("Interval"). */
+.pt-label {
+  font-family: var(--ui-font-family);
+  font-size: calc(var(--font-size-base) - 2px);
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+/* Graphs. Colours come from classes so a theme switch repaints them. */
+.pt-spark {
+  display: block;
+  flex-shrink: 0;
+}
+
+.pt-spark-ok {
+  fill: var(--success-color);
+  opacity: 0.8;
+}
+
+.pt-spark-fail {
+  fill: var(--color-danger);
+  opacity: 0.8;
+}
+
+.pt-spark-line {
+  fill: none;
+  stroke: var(--accent-color);
+  stroke-width: 1.2;
+}
+
+.pt-spark-area {
+  fill: var(--accent-color);
+  opacity: 0.15;
+}
+
+.pt-spark-end {
+  fill: var(--accent-color);
+}
+
+.pt-spark.hot .pt-spark-line {
+  stroke: var(--color-warning);
+}
+
+.pt-spark.hot .pt-spark-area,
+.pt-spark.hot .pt-spark-end {
+  fill: var(--color-warning);
+}
+
+.pt-spark-line.second {
+  stroke: var(--success-color);
+}
+
+.pt-spark-axis {
+  stroke: var(--border-color);
+  stroke-width: 1;
+}

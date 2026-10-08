@@ -10,6 +10,7 @@ pub mod iap_tunnel;
 pub mod jumpbox;
 pub mod known_hosts;
 pub mod local;
+pub mod local_addresses;
 pub mod log_manager;
 pub mod net_validation;
 pub mod netbox;

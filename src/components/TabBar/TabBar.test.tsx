@@ -1,10 +1,26 @@
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { ComponentProps } from 'react';
+import { render, screen, fireEvent, within, waitFor } from '@testing-library/react';
 import { TabBar } from './TabBar';
-import { buildTabItems, type TabItem } from './tabBarHelpers';
+import { useTabActivityStore } from '../../stores/tabActivityStore';
+import { buildTabItems, hiddenTabsThatFit, type TabItem } from './tabBarHelpers';
 import { useUiOverlayStore } from '../../stores/uiOverlayStore';
+import { useSettingsStore } from '../../stores/settingsStore';
 import type { SessionRecord } from '../../hooks/useSessionManager';
 import type { FeaturePaneInfo } from '../../utils/paneTypes';
+import { resetLocalShellsCache } from '../../hooks/useLocalShells';
+
+// What the New Session menu finds installed. Each test can change the answers.
+const shells = vi.hoisted(() => ({
+  listWslDistributions: vi.fn(),
+  detectGitBash: vi.fn(),
+}));
+vi.mock('../../services/tauriService', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../services/tauriService')>();
+  return { ...actual, tauriService: { ...actual.tauriService, ...shells } };
+});
+
+const GIT_BASH = 'C:/Program Files/Git/bin/bash.exe';
 
 /** Minimal DataTransfer stand-in (jsdom lacks one) for drag-event tests. */
 function makeDataTransfer() {
@@ -53,16 +69,71 @@ const defaultProps = {
   onSelect: () => {},
   onClose: () => {},
   onNew: () => {},
-  onReorder: () => {},
 };
+
+type BarProps = Partial<ComponentProps<typeof TabBar>> & {
+  tabItems: TabItem[];
+  /** Tabs on screen, in pane order: the n-th one is shown in pane "n". */
+  visibleTabIds?: string[];
+};
+
+/** TabBar with the pane wiring derived from a plain list of shown tab ids. */
+function Bar({ visibleTabIds = [], ...rest }: BarProps) {
+  const visiblePanes = visibleTabIds.map((_, i) => String(i));
+  const paneAllocations = Object.fromEntries(visibleTabIds.map((id, i) => [String(i), id]));
+  return (
+    <TabBar
+      activeTabId={null}
+      orientation="vertical"
+      menuPlacement="down"
+      visiblePanes={visiblePanes}
+      paneAllocations={paneAllocations}
+      onSelect={() => {}}
+      onClose={() => {}}
+      onNew={() => {}}
+      onOpenLocal={() => {}}
+      onMoveHidden={() => {}}
+      onPlace={() => {}}
+      onHide={() => {}}
+      {...rest}
+    />
+  );
+}
+
+/** The tab rows only (the New Session row is also styled as a tab). */
+const rows = (c: HTMLElement) => c.querySelectorAll('.tab[data-session-id]');
+const firstRow = (c: HTMLElement) => c.querySelector('.tab[data-session-id]');
+
+beforeEach(() => {
+  useTabActivityStore.setState({ activity: {} });
+  resetLocalShellsCache();
+  shells.listWslDistributions.mockResolvedValue(['Ubuntu-24.04']);
+  shells.detectGitBash.mockResolvedValue(GIT_BASH);
+});
+
+/** Open the New Session menu and wait until it knows what is installed. */
+async function openNewSessionMenu() {
+  fireEvent.click(screen.getByTitle('New Session'));
+  await waitFor(() => expect(shells.detectGitBash).toHaveBeenCalled());
+  await waitFor(() => {
+    const menu = screen.getAllByRole('menu')[0];
+    for (const b of within(menu).getAllByRole('menuitem')) {
+      if (b.textContent?.startsWith('WSL') || b.textContent?.startsWith('Git Bash')) {
+        // Settled once each row is either enabled or says why it is not.
+        expect((b as HTMLButtonElement).disabled ? b.textContent : 'enabled').not.toMatch(/^(WSL|Git Bash)$/);
+      }
+    }
+  });
+  return screen.getAllByRole('menu')[0];
+}
 
 describe('TabBar', () => {
   it('renders one tab per item and marks the active one', () => {
     const items = [makeTabItem('a'), makeTabItem('b')];
     const { container } = render(
-      <TabBar {...defaultProps} tabItems={items} activeTabId="b" visibleTabIds={['a', 'b']} />
+      <Bar {...defaultProps} tabItems={items} activeTabId="b" visibleTabIds={['a', 'b']} />
     );
-    const tabs = container.querySelectorAll('.tab');
+    const tabs = rows(container);
     expect(tabs.length).toBe(2);
     expect(tabs[1].classList.contains('active')).toBe(true);
     expect(tabs[0].classList.contains('active')).toBe(false);
@@ -71,9 +142,9 @@ describe('TabBar', () => {
   it('adds hidden-tab class for items not in visibleTabIds', () => {
     const items = [makeTabItem('a'), makeTabItem('b')];
     const { container } = render(
-      <TabBar {...defaultProps} tabItems={items} visibleTabIds={['a']} />
+      <Bar {...defaultProps} tabItems={items} visibleTabIds={['a']} />
     );
-    const tabs = container.querySelectorAll('.tab');
+    const tabs = rows(container);
     expect(tabs[0].classList.contains('hidden-tab')).toBe(false);
     expect(tabs[1].classList.contains('hidden-tab')).toBe(true);
   });
@@ -83,7 +154,7 @@ describe('TabBar', () => {
     const onClose = vi.fn();
     const items = [makeTabItem('a')];
     render(
-      <TabBar
+      <Bar
         {...defaultProps}
         tabItems={items}
         visibleTabIds={['a']}
@@ -99,108 +170,150 @@ describe('TabBar', () => {
     expect(onSelect).toHaveBeenCalledTimes(1);
   });
 
-  it('new-tab button invokes onNew', () => {
+  it('the New Session menu lists the sessions, then GCP and Web; dialog rows ask for their dialog', async () => {
     const onNew = vi.fn();
-    render(<TabBar {...defaultProps} onNew={onNew} />);
-    fireEvent.click(screen.getByTitle('New Session'));
-    expect(onNew).toHaveBeenCalledTimes(1);
+    render(<Bar {...defaultProps} onNew={onNew} onNewLogViewer={() => {}} />);
+    const menu = await openNewSessionMenu();
+    const items = within(menu).getAllByRole('menuitem').map((b) => b.textContent);
+    expect(items).toEqual([
+      'SSH', 'Telnet', 'Serial', 'WSL', 'Command Prompt', 'PowerShell', 'Git Bash', 'GCP', 'Web', 'Log Viewer',
+    ]);
+    fireEvent.click(screen.getByText('Telnet'));
+    expect(onNew).toHaveBeenCalledWith('telnet');
+    expect(screen.queryByRole('menu')).toBeNull();
+
+    for (const [row, choice] of [['Serial', 'serial'], ['GCP', 'gcp'], ['Web', 'web']] as const) {
+      fireEvent.click(screen.getByTitle('New Session'));
+      fireEvent.click(within(screen.getByRole('menu')).getByText(row));
+      expect(onNew).toHaveBeenLastCalledWith(choice);
+    }
   });
 
-  it('renders feature tabs with label only (no icon)', () => {
+  it('the local shells start at once, with no dialog', async () => {
+    const onNew = vi.fn();
+    const onOpenLocal = vi.fn();
+    render(<Bar {...defaultProps} onNew={onNew} onOpenLocal={onOpenLocal} />);
+    const picks = [
+      ['Command Prompt', { protocol: 'cmd' }],
+      ['PowerShell', { protocol: 'powershell' }],
+      ['Git Bash', { protocol: 'git-bash', shellPath: GIT_BASH }],
+      // Only one distribution: no list beside the menu.
+      ['WSL', { protocol: 'wsl', distribution: 'Ubuntu-24.04' }],
+    ] as const;
+    for (const [row, choice] of picks) {
+      const menu = await openNewSessionMenu();
+      fireEvent.click(within(menu).getByText(row));
+      expect(onOpenLocal).toHaveBeenLastCalledWith(choice);
+      expect(screen.queryByRole('menu')).toBeNull();
+    }
+    expect(onNew).not.toHaveBeenCalled();
+  });
+
+  it('with several WSL distributions, WSL lists them beside the menu', async () => {
+    shells.listWslDistributions.mockResolvedValue(['Ubuntu-24.04', 'Debian']);
+    const onOpenLocal = vi.fn();
+    render(<Bar {...defaultProps} onOpenLocal={onOpenLocal} />);
+    const menu = await openNewSessionMenu();
+    await waitFor(() => expect(within(menu).getByText('WSL').closest('button')!.getAttribute('aria-haspopup')).toBe('menu'));
+    fireEvent.click(within(menu).getByText('WSL'));
+    const sub = screen.getByRole('menu', { name: 'WSL' });
+    expect(within(sub).getAllByRole('menuitem').map((b) => b.textContent)).toEqual(['Ubuntu-24.04', 'Debian']);
+    fireEvent.click(within(sub).getByText('Debian'));
+    expect(onOpenLocal).toHaveBeenCalledWith({ protocol: 'wsl', distribution: 'Debian' });
+    expect(screen.queryByRole('menu')).toBeNull();
+  });
+
+  it('WSL and Git Bash are greyed out and say so when not installed', async () => {
+    shells.listWslDistributions.mockResolvedValue([]);
+    shells.detectGitBash.mockResolvedValue(null);
+    const onOpenLocal = vi.fn();
+    render(<Bar {...defaultProps} onOpenLocal={onOpenLocal} />);
+    const menu = await openNewSessionMenu();
+    for (const row of ['WSL', 'Git Bash']) {
+      const button = within(menu).getByText(row).closest('button')!;
+      expect(button.disabled).toBe(true);
+      expect(button.textContent).toBe(`${row}Not installed`);
+      fireEvent.click(button);
+    }
+    expect(onOpenLocal).not.toHaveBeenCalled();
+  });
+
+  it('the New Session menu leaves out Web while the Web Browser feature is off', () => {
+    const before = useSettingsStore.getState().enabledFeatures;
+    useSettingsStore.setState({ enabledFeatures: { ...before, 'web-browser': false } });
+    try {
+      render(<Bar {...defaultProps} />);
+      fireEvent.click(screen.getByTitle('New Session'));
+      const menu = screen.getByRole('menu');
+      expect(within(menu).getByText('GCP')).toBeTruthy();
+      expect(within(menu).queryByText('Web')).toBeNull();
+    } finally {
+      useSettingsStore.setState({ enabledFeatures: before });
+    }
+  });
+
+  it('feature tabs carry no state dot', () => {
     const items: TabItem[] = [
       makeTabItem('lv-1', { kind: 'feature', displayName: 'Log Viewer', featureType: 'log-viewer' }),
     ];
     const { container } = render(
-      <TabBar {...defaultProps} tabItems={items} visibleTabIds={['lv-1']} />
+      <Bar {...defaultProps} tabItems={items} visibleTabIds={['lv-1']} />
     );
-    expect(container.querySelector('.tab-feature-icon')).toBeNull();
-    expect(container.querySelector('.tab-status')).toBeNull();
+    expect(container.querySelector('.tab-state-dot')).toBeNull();
     expect(screen.getByText('Log Viewer')).toBeTruthy();
   });
 
-  it('renders session tabs without status dot', () => {
-    const items = [makeTabItem('s-1')];
+  it('session tabs show their connection state as a dot', () => {
+    const items = [
+      makeTabItem('a', { status: 'connected' }),
+      makeTabItem('b', { status: 'connecting' }),
+      makeTabItem('c', { status: 'error' }),
+      makeTabItem('d', { status: 'disconnected' }),
+    ];
     const { container } = render(
-      <TabBar {...defaultProps} tabItems={items} visibleTabIds={['s-1']} />
+      <Bar {...defaultProps} tabItems={items} visibleTabIds={['a', 'b', 'c', 'd']} />
     );
-    expect(container.querySelector('.tab-status')).toBeNull();
-    expect(container.querySelector('.tab-feature-icon')).toBeNull();
+    const dots = Array.from(rows(container)).map((r) => r.querySelector('.tab-state-dot')?.className);
+    expect(dots).toEqual([
+      'tab-state-dot ok',
+      'tab-state-dot connecting',
+      'tab-state-dot bad',
+      'tab-state-dot bad',
+    ]);
   });
 
-  // --- Features dropdown ---
+  // --- New Session menu: dialog + enabled feature panes ---
 
-  it('does not render Features button when no feature callbacks are provided', () => {
-    render(<TabBar {...defaultProps} />);
-    expect(screen.queryByTitle('Features')).toBeNull();
+  it('the New Session menu lists only the features that are enabled', () => {
+    render(<Bar {...defaultProps} onNewLogViewer={() => {}} onNewFileServer={() => {}} />);
+    fireEvent.click(screen.getByTitle('New Session'));
+    const menu = screen.getByRole('menu');
+    expect(within(menu).getByText('Log Viewer')).toBeTruthy();
+    expect(within(menu).getByText('File Server')).toBeTruthy();
+    expect(within(menu).queryByText('Ping Monitor')).toBeNull();
+    expect(within(menu).queryByText('AI Chat')).toBeNull();
   });
 
-  it('renders Features button when feature callbacks are provided', () => {
-    render(
-      <TabBar
-        {...defaultProps}
-        onNewLogViewer={() => {}}
-        onNewPingMonitor={() => {}}
-        onNewFileServer={() => {}}
-        onNewAiChat={() => {}}
-      />
-    );
-    expect(screen.getByTitle('Features')).toBeTruthy();
-  });
-
-  it('clicking Features button shows dropdown with 4 items', () => {
-    render(
-      <TabBar
-        {...defaultProps}
-        onNewLogViewer={() => {}}
-        onNewPingMonitor={() => {}}
-        onNewFileServer={() => {}}
-        onNewAiChat={() => {}}
-      />
-    );
-    fireEvent.click(screen.getByTitle('Features'));
-
-    expect(screen.getByText('Log Viewer')).toBeTruthy();
-    expect(screen.getByText('Ping Monitor')).toBeTruthy();
-    expect(screen.getByText('File Server')).toBeTruthy();
-    expect(screen.getByText('AI Chat')).toBeTruthy();
-  });
-
-  it('clicking a feature item calls the callback and closes dropdown', () => {
+  it('picking a feature calls its callback and closes the menu', () => {
     const onNewLogViewer = vi.fn();
-    const onNewFileServer = vi.fn();
-    render(
-      <TabBar
-        {...defaultProps}
-        onNewLogViewer={onNewLogViewer}
-        onNewPingMonitor={() => {}}
-        onNewFileServer={onNewFileServer}
-        onNewAiChat={() => {}}
-      />
-    );
-    fireEvent.click(screen.getByTitle('Features'));
+    const onNewAiChat = vi.fn();
+    render(<Bar {...defaultProps} onNewLogViewer={onNewLogViewer} onNewAiChat={onNewAiChat} />);
+    fireEvent.click(screen.getByTitle('New Session'));
     fireEvent.click(screen.getByText('Log Viewer'));
     expect(onNewLogViewer).toHaveBeenCalledTimes(1);
-    expect(screen.queryByText('Log Viewer')).toBeNull();
+    expect(screen.queryByRole('menu')).toBeNull();
 
-    fireEvent.click(screen.getByTitle('Features'));
-    fireEvent.click(screen.getByText('File Server'));
-    expect(onNewFileServer).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByTitle('New Session'));
+    fireEvent.click(screen.getByText('AI Chat'));
+    expect(onNewAiChat).toHaveBeenCalledTimes(1);
   });
 
-  it('only renders dropdown items for provided callbacks', () => {
-    render(
-      <TabBar
-        {...defaultProps}
-        onNewLogViewer={() => {}}
-        onNewFileServer={() => {}}
-      />
-    );
-    fireEvent.click(screen.getByTitle('Features'));
-
-    expect(screen.getByText('Log Viewer')).toBeTruthy();
-    expect(screen.getByText('File Server')).toBeTruthy();
-    expect(screen.queryByText('Ping Monitor')).toBeNull();
-    expect(screen.queryByText('AI Chat')).toBeNull();
+  it('Escape closes the New Session menu', () => {
+    render(<Bar {...defaultProps} onNewLogViewer={() => {}} />);
+    fireEvent.click(screen.getByTitle('New Session'));
+    expect(screen.getByRole('menu')).toBeTruthy();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('menu')).toBeNull();
   });
 
   // --- AI Watch button ---
@@ -208,7 +321,7 @@ describe('TabBar', () => {
   it('renders watch button on session tabs when onToggleWatch is provided', () => {
     const items = [makeTabItem('s-1')];
     const { container } = render(
-      <TabBar {...defaultProps} tabItems={items} visibleTabIds={['s-1']} onToggleWatch={() => {}} />
+      <Bar {...defaultProps} tabItems={items} visibleTabIds={['s-1']} onToggleWatch={() => {}} />
     );
     expect(container.querySelector('.tab-watch-btn')).toBeTruthy();
   });
@@ -218,7 +331,7 @@ describe('TabBar', () => {
       makeTabItem('lv-1', { kind: 'feature', displayName: 'Log Viewer', featureType: 'log-viewer' }),
     ];
     const { container } = render(
-      <TabBar {...defaultProps} tabItems={items} visibleTabIds={['lv-1']} onToggleWatch={() => {}} />
+      <Bar {...defaultProps} tabItems={items} visibleTabIds={['lv-1']} onToggleWatch={() => {}} />
     );
     expect(container.querySelector('.tab-watch-btn')).toBeNull();
   });
@@ -226,7 +339,7 @@ describe('TabBar', () => {
   it('does not render watch button when onToggleWatch is not provided', () => {
     const items = [makeTabItem('s-1')];
     const { container } = render(
-      <TabBar {...defaultProps} tabItems={items} visibleTabIds={['s-1']} />
+      <Bar {...defaultProps} tabItems={items} visibleTabIds={['s-1']} />
     );
     expect(container.querySelector('.tab-watch-btn')).toBeNull();
   });
@@ -236,7 +349,7 @@ describe('TabBar', () => {
     const onSelect = vi.fn();
     const items = [makeTabItem('s-1')];
     render(
-      <TabBar {...defaultProps} tabItems={items} visibleTabIds={['s-1']} onSelect={onSelect} onToggleWatch={onToggleWatch} />
+      <Bar {...defaultProps} tabItems={items} visibleTabIds={['s-1']} onSelect={onSelect} onToggleWatch={onToggleWatch} />
     );
     fireEvent.click(screen.getByLabelText('Start AI Watch'));
     expect(onToggleWatch).toHaveBeenCalledWith('s-1');
@@ -246,9 +359,9 @@ describe('TabBar', () => {
   it('adds active-pane-tab class on the active tab', () => {
     const items = [makeTabItem('a'), makeTabItem('b')];
     const { container } = render(
-      <TabBar {...defaultProps} tabItems={items} activeTabId="b" visibleTabIds={['a', 'b']} />
+      <Bar {...defaultProps} tabItems={items} activeTabId="b" visibleTabIds={['a', 'b']} />
     );
-    const tabs = container.querySelectorAll('.tab');
+    const tabs = rows(container);
     expect(tabs[0].classList.contains('active-pane-tab')).toBe(false);
     expect(tabs[1].classList.contains('active-pane-tab')).toBe(true);
   });
@@ -259,9 +372,9 @@ describe('TabBar', () => {
       makeTabItem('lv-1', { kind: 'feature', displayName: 'Log Viewer', featureType: 'log-viewer' }),
     ];
     const { container } = render(
-      <TabBar {...defaultProps} tabItems={items} visibleTabIds={['ai-1', 'lv-1']} />
+      <Bar {...defaultProps} tabItems={items} visibleTabIds={['ai-1', 'lv-1']} />
     );
-    const tabs = container.querySelectorAll('.tab');
+    const tabs = rows(container);
     expect(tabs[0].classList.contains('is-ai-tab')).toBe(true);
     expect(tabs[1].classList.contains('is-ai-tab')).toBe(false);
   });
@@ -269,7 +382,7 @@ describe('TabBar', () => {
   it('adds gemini-linked-tab class when isWatching is true', () => {
     const items = [makeTabItem('s-1', { isWatching: true })];
     const { container } = render(
-      <TabBar {...defaultProps} tabItems={items} visibleTabIds={['s-1']} onToggleWatch={() => {}} />
+      <Bar {...defaultProps} tabItems={items} visibleTabIds={['s-1']} onToggleWatch={() => {}} />
     );
     expect(container.querySelector('.tab.gemini-linked-tab')).toBeTruthy();
     expect(container.querySelector('.tab-watch-btn.watching')).toBeTruthy();
@@ -278,7 +391,7 @@ describe('TabBar', () => {
   it('does not add gemini-linked-tab class when isWatching is false', () => {
     const items = [makeTabItem('s-1', { isWatching: false })];
     const { container } = render(
-      <TabBar {...defaultProps} tabItems={items} visibleTabIds={['s-1']} onToggleWatch={() => {}} />
+      <Bar {...defaultProps} tabItems={items} visibleTabIds={['s-1']} onToggleWatch={() => {}} />
     );
     expect(container.querySelector('.tab.gemini-linked-tab')).toBeNull();
   });
@@ -286,9 +399,9 @@ describe('TabBar', () => {
   it('adds connecting class when status is connecting', () => {
     const items = [makeTabItem('s-1', { status: 'connecting' })];
     const { container } = render(
-      <TabBar {...defaultProps} tabItems={items} visibleTabIds={['s-1']} />
+      <Bar {...defaultProps} tabItems={items} visibleTabIds={['s-1']} />
     );
-    const tab = container.querySelector('.tab');
+    const tab = firstRow(container);
     expect(tab?.classList.contains('connecting')).toBe(true);
     expect(tab?.classList.contains('error')).toBe(false);
   });
@@ -296,18 +409,18 @@ describe('TabBar', () => {
   it('does not add connecting class when status is connected', () => {
     const items = [makeTabItem('s-1', { status: 'connected' })];
     const { container } = render(
-      <TabBar {...defaultProps} tabItems={items} visibleTabIds={['s-1']} />
+      <Bar {...defaultProps} tabItems={items} visibleTabIds={['s-1']} />
     );
-    const tab = container.querySelector('.tab');
+    const tab = firstRow(container);
     expect(tab?.classList.contains('connecting')).toBe(false);
   });
 
   it('connecting and error are mutually exclusive on a tab', () => {
     const items = [makeTabItem('s-1', { status: 'error' })];
     const { container } = render(
-      <TabBar {...defaultProps} tabItems={items} visibleTabIds={['s-1']} />
+      <Bar {...defaultProps} tabItems={items} visibleTabIds={['s-1']} />
     );
-    const tab = container.querySelector('.tab');
+    const tab = firstRow(container);
     expect(tab?.classList.contains('error')).toBe(true);
     expect(tab?.classList.contains('connecting')).toBe(false);
   });
@@ -318,9 +431,9 @@ describe('TabBar', () => {
     useUiOverlayStore.setState({ sessionDragging: false });
     const items = [makeTabItem('a'), makeTabItem('b')];
     const { container } = render(
-      <TabBar {...defaultProps} tabItems={items} visibleTabIds={['a', 'b']} />
+      <Bar {...defaultProps} tabItems={items} visibleTabIds={['a', 'b']} />
     );
-    const tab = container.querySelector('.tab') as HTMLElement;
+    const tab = firstRow(container) as HTMLElement;
 
     fireEvent.dragStart(tab, { dataTransfer: makeDataTransfer() });
     expect(useUiOverlayStore.getState().sessionDragging).toBe(true);
@@ -334,7 +447,7 @@ describe('TabBar', () => {
   it('right-click on SSH session tab shows Watch + Save to Host Tree (no Bookmark)', () => {
     const items = [makeTabItem('s-1', { protocol: 'ssh' })];
     render(
-      <TabBar
+      <Bar
         {...defaultProps}
         tabItems={items}
         visibleTabIds={['s-1']}
@@ -351,7 +464,7 @@ describe('TabBar', () => {
   it('right-click on Telnet session tab opens the menu', () => {
     const items = [makeTabItem('s-1', { protocol: 'telnet' })];
     render(
-      <TabBar
+      <Bar
         {...defaultProps}
         tabItems={items}
         visibleTabIds={['s-1']}
@@ -365,7 +478,7 @@ describe('TabBar', () => {
   it('Watch item label reflects the isWatching state', () => {
     const off = [makeTabItem('s-1', { protocol: 'ssh', isWatching: false })];
     const { rerender } = render(
-      <TabBar {...defaultProps} tabItems={off} visibleTabIds={['s-1']} onToggleWatch={() => {}} />,
+      <Bar {...defaultProps} tabItems={off} visibleTabIds={['s-1']} onToggleWatch={() => {}} />,
     );
     fireEvent.contextMenu(screen.getByText('Session s-1'));
     expect(screen.getByText('AI Watch')).toBeTruthy();
@@ -374,7 +487,7 @@ describe('TabBar', () => {
 
     const on = [makeTabItem('s-1', { protocol: 'ssh', isWatching: true })];
     rerender(
-      <TabBar {...defaultProps} tabItems={on} visibleTabIds={['s-1']} onToggleWatch={() => {}} />,
+      <Bar {...defaultProps} tabItems={on} visibleTabIds={['s-1']} onToggleWatch={() => {}} />,
     );
     fireEvent.contextMenu(screen.getByText('Session s-1'));
     expect(screen.getByText('Stop AI Watch')).toBeTruthy();
@@ -385,7 +498,7 @@ describe('TabBar', () => {
     const onToggleWatch = vi.fn();
     const items = [makeTabItem('s-1', { protocol: 'ssh' })];
     render(
-      <TabBar {...defaultProps} tabItems={items} visibleTabIds={['s-1']} onToggleWatch={onToggleWatch} />,
+      <Bar {...defaultProps} tabItems={items} visibleTabIds={['s-1']} onToggleWatch={onToggleWatch} />,
     );
     fireEvent.contextMenu(screen.getByText('Session s-1'));
     fireEvent.click(screen.getByText('AI Watch'));
@@ -396,7 +509,7 @@ describe('TabBar', () => {
   it('non-SSH/Telnet session tab shows Watch but NOT Save to Host Tree', () => {
     const items = [makeTabItem('s-1', { protocol: 'serial' })];
     render(
-      <TabBar
+      <Bar
         {...defaultProps}
         tabItems={items}
         visibleTabIds={['s-1']}
@@ -412,7 +525,7 @@ describe('TabBar', () => {
   it('session tab with no applicable callbacks does NOT open the menu', () => {
     const items = [makeTabItem('s-1', { protocol: 'serial' })];
     render(
-      <TabBar {...defaultProps} tabItems={items} visibleTabIds={['s-1']} onSaveToHostTree={() => {}} />,
+      <Bar {...defaultProps} tabItems={items} visibleTabIds={['s-1']} onSaveToHostTree={() => {}} />,
     );
     fireEvent.contextMenu(screen.getByText('Session s-1'));
     expect(screen.queryByRole('menu')).toBeNull();
@@ -422,7 +535,7 @@ describe('TabBar', () => {
     const onSaveToHostTree = vi.fn();
     const items = [makeTabItem('s-1', { protocol: 'ssh' })];
     render(
-      <TabBar
+      <Bar
         {...defaultProps}
         tabItems={items}
         visibleTabIds={['s-1']}
@@ -441,7 +554,7 @@ describe('TabBar', () => {
       makeTabItem('wb-1', { kind: 'feature', displayName: 'Web', featureType: 'web-browser' }),
     ];
     render(
-      <TabBar {...defaultProps} tabItems={items} visibleTabIds={['wb-1']} onBookmark={onBookmark} />,
+      <Bar {...defaultProps} tabItems={items} visibleTabIds={['wb-1']} onBookmark={onBookmark} />,
     );
     fireEvent.contextMenu(screen.getByText('Web'));
     expect(screen.getByText('Add Bookmark…')).toBeTruthy();
@@ -456,7 +569,7 @@ describe('TabBar', () => {
     const items: TabItem[] = [
       makeTabItem('wb-1', { kind: 'feature', displayName: 'Web', featureType: 'web-browser' }),
     ];
-    render(<TabBar {...defaultProps} tabItems={items} visibleTabIds={['wb-1']} />);
+    render(<Bar {...defaultProps} tabItems={items} visibleTabIds={['wb-1']} />);
     fireEvent.contextMenu(screen.getByText('Web'));
     expect(screen.queryByRole('menu')).toBeNull();
   });
@@ -466,7 +579,7 @@ describe('TabBar', () => {
       makeTabItem('lv-1', { kind: 'feature', displayName: 'Log Viewer', featureType: 'log-viewer' }),
     ];
     render(
-      <TabBar {...defaultProps} tabItems={items} visibleTabIds={['lv-1']} onSaveToHostTree={() => {}} />,
+      <Bar {...defaultProps} tabItems={items} visibleTabIds={['lv-1']} onSaveToHostTree={() => {}} />,
     );
     // fireEvent returns false when a handler called preventDefault (default suppressed).
     const notPrevented = fireEvent.contextMenu(screen.getByText('Log Viewer'));
@@ -477,7 +590,7 @@ describe('TabBar', () => {
   it('Escape key closes the context menu', () => {
     const items = [makeTabItem('s-1', { protocol: 'ssh' })];
     render(
-      <TabBar
+      <Bar
         {...defaultProps}
         tabItems={items}
         visibleTabIds={['s-1']}
@@ -545,7 +658,7 @@ describe('TabBar — "Watch in ▸" picker', () => {
     const onToggleWatch = vi.fn();
     const onWatchInConversation = vi.fn();
     render(
-      <TabBar
+      <Bar
         {...defaultProps}
         tabItems={[makeTabItem('s-1')]}
         visibleTabIds={['s-1']}
@@ -564,7 +677,7 @@ describe('TabBar — "Watch in ▸" picker', () => {
     const onToggleWatch = vi.fn();
     const onWatchInConversation = vi.fn();
     render(
-      <TabBar
+      <Bar
         {...defaultProps}
         tabItems={[makeTabItem('s-1')]}
         visibleTabIds={['s-1']}
@@ -584,7 +697,7 @@ describe('TabBar — "Watch in ▸" picker', () => {
   it('routes a conversation pick and "New conversation" to onWatchInConversation', () => {
     const onWatchInConversation = vi.fn();
     render(
-      <TabBar
+      <Bar
         {...defaultProps}
         tabItems={[makeTabItem('s-1', { isWatching: true, watchColorIndex: 0, watchOwnerTabId: 'c1' })]}
         visibleTabIds={['s-1']}
@@ -601,5 +714,153 @@ describe('TabBar — "Watch in ▸" picker', () => {
     fireEvent.click(screen.getByRole('button', { name: /ai watch/i }));
     fireEvent.click(screen.getByText('New conversation'));
     expect(onWatchInConversation).toHaveBeenCalledWith('s-1', 'new');
+  });
+});
+
+describe('TabBar — groups, unread output and moving tabs', () => {
+  const items = [makeTabItem('a'), makeTabItem('b', { detail: 'SSH · 192.0.2.2' }), makeTabItem('c')];
+
+  it('puts shown tabs under "On screen" with their pane mark, the rest under "Hidden"', () => {
+    const { container } = render(<Bar {...defaultProps} tabItems={items} visibleTabIds={['c', 'a']} />);
+    const shown = container.querySelector('.tab-group-shown')!;
+    const hidden = container.querySelector('.tab-group-hidden')!;
+    expect(Array.from(shown.querySelectorAll('[data-session-id]')).map((e) => e.getAttribute('data-session-id'))).toEqual(['c', 'a']);
+    expect(Array.from(hidden.querySelectorAll('[data-session-id]')).map((e) => e.getAttribute('data-session-id'))).toEqual(['b']);
+    expect(shown.querySelector('[data-pane-badge="0"]')?.textContent).toBe('1');
+    expect(shown.querySelector('[data-pane-badge="1"]')?.textContent).toBe('2');
+    expect(screen.getByText('SSH · 192.0.2.2')).toBeTruthy();
+  });
+
+  it('a hidden tab with new output shows the count and the newest line', () => {
+    useTabActivityStore.setState({ activity: { b: { lines: 3, lastLine: '%LINK-3-UPDOWN: Gi0 up' } } });
+    const { container } = render(<Bar {...defaultProps} tabItems={items} visibleTabIds={['a']} />);
+    expect(screen.getByText('+3')).toBeTruthy();
+    expect(screen.getByText('%LINK-3-UPDOWN: Gi0 up').className).toContain('unread');
+    expect(container.querySelector('[data-session-id="b"] .tab-state-dot')?.className).toContain('unread');
+  });
+
+  it('a shown tab never shows unread output', () => {
+    useTabActivityStore.setState({ activity: { a: { lines: 3, lastLine: 'x' } } });
+    render(<Bar {...defaultProps} tabItems={items} visibleTabIds={['a']} />);
+    expect(screen.queryByText('+3')).toBeNull();
+  });
+
+  function drag(from: Element, to: Element, toClient = { clientY: 0, clientX: 0 }) {
+    const dt = makeDataTransfer();
+    fireEvent.dragStart(from, { dataTransfer: dt });
+    fireEvent.dragOver(to, { dataTransfer: dt, ...toClient });
+    fireEvent.drop(to, { dataTransfer: dt });
+    fireEvent.dragEnd(from, { dataTransfer: dt });
+  }
+
+  it('dropping a hidden tab on a shown one puts it in that pane', () => {
+    const onPlace = vi.fn();
+    const { container } = render(<Bar {...defaultProps} tabItems={items} visibleTabIds={['a']} onPlace={onPlace} />);
+    drag(container.querySelector('[data-session-id="b"]')!, container.querySelector('[data-session-id="a"]')!);
+    expect(onPlace).toHaveBeenCalledWith('b', '0');
+  });
+
+  it('dropping a shown tab on the hidden group takes it off screen', () => {
+    const onHide = vi.fn();
+    const { container } = render(<Bar {...defaultProps} tabItems={items} visibleTabIds={['a']} onHide={onHide} />);
+    drag(container.querySelector('[data-session-id="a"]')!, container.querySelector('.tab-group-hidden')!);
+    expect(onHide).toHaveBeenCalledWith('a');
+  });
+
+  it('dropping a hidden tab on another hidden one reorders them', () => {
+    const onMoveHidden = vi.fn();
+    const { container } = render(<Bar {...defaultProps} tabItems={items} visibleTabIds={[]} onMoveHidden={onMoveHidden} />);
+    // jsdom rects are all zero, so any pointer position counts as the lower half.
+    drag(container.querySelector('[data-session-id="a"]')!, container.querySelector('[data-session-id="c"]')!, { clientY: 10, clientX: 10 });
+    expect(onMoveHidden).toHaveBeenCalledWith('a', 'c', 'after');
+  });
+
+  it('the filter narrows both groups', () => {
+    const { container } = render(<Bar {...defaultProps} tabItems={items} visibleTabIds={['a']} />);
+    fireEvent.change(screen.getByLabelText('Filter tabs'), { target: { value: '192.0.2.2' } });
+    expect(Array.from(rows(container)).map((e) => e.getAttribute('data-session-id'))).toEqual(['b']);
+  });
+
+  it('horizontally, hidden tabs that do not fit go into the More menu', () => {
+    // jsdom measures every element as 0 px wide, so nothing hidden fits inline.
+    const { container } = render(
+      <Bar {...defaultProps} tabItems={items} visibleTabIds={['a']} orientation="horizontal" />
+    );
+    expect(container.querySelectorAll('.tab-group-hidden [data-session-id]')).toHaveLength(0);
+    fireEvent.click(screen.getByText('Hidden 2'));
+    const menu = screen.getAllByRole('menu').find((m) => m.classList.contains('tab-overflow-menu'))!;
+    expect(within(menu).getByText('Session b')).toBeTruthy();
+    fireEvent.click(within(menu).getByText('Session c'));
+    expect(screen.queryByText('Hidden 2')).toBeTruthy();
+  });
+});
+
+describe('hiddenTabsThatFit', () => {
+  it('fits what the row can hold and leaves room for the More button when some are left over', () => {
+    // 1000 - 2*160 - 96 = 584 → 3 fit at 150 each; all 3 fit, so no More button.
+    expect(hiddenTabsThatFit(1000, 2, 3, false)).toBe(3);
+    // 5 hidden: only 3 fit, so the More button takes 76 → 508 → 3 still fit.
+    expect(hiddenTabsThatFit(1000, 2, 5, false)).toBe(3);
+    // Narrow row: nothing fits.
+    expect(hiddenTabsThatFit(300, 2, 4, false)).toBe(0);
+    // Compact tabs are narrower, so more of them fit.
+    expect(hiddenTabsThatFit(1000, 2, 9, true)).toBe(4);
+  });
+});
+
+describe('TabBar keyboard', () => {
+  it('moves between the tabs on screen only, never pulling a hidden tab in', () => {
+    const onSelect = vi.fn();
+    const items = [makeTabItem('a'), makeTabItem('b'), makeTabItem('c')];
+    const { container } = render(
+      <Bar tabItems={items} activeTabId="b" visibleTabIds={['a', 'b']} onSelect={onSelect} />
+    );
+    const list = container.querySelector('.tab-list')!;
+    fireEvent.keyDown(list, { key: 'ArrowDown' });
+    // Wraps to the first shown tab instead of selecting hidden 'c'.
+    expect(onSelect).toHaveBeenLastCalledWith('a');
+    fireEvent.keyDown(list, { key: 'End' });
+    expect(onSelect).not.toHaveBeenCalledWith('c');
+  });
+
+  it('leaves Home/End and the arrows to the filter box', () => {
+    const onSelect = vi.fn();
+    const items = [makeTabItem('a'), makeTabItem('b')];
+    const { container } = render(
+      <Bar tabItems={items} activeTabId="b" visibleTabIds={['a', 'b']} onSelect={onSelect} />
+    );
+    const filter = container.querySelector('.tab-filter')!;
+    for (const key of ['Home', 'End', 'ArrowUp', 'ArrowDown']) {
+      const ev = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+      filter.dispatchEvent(ev);
+      expect(ev.defaultPrevented).toBe(false);
+    }
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+});
+
+describe('TabBar keeping the active tab in view', () => {
+  it('never scrolls the horizontal row, which has no way to scroll back', () => {
+    const items = [makeTabItem('a'), makeTabItem('b')];
+    const { container, rerender } = render(
+      <Bar tabItems={items} activeTabId="a" visibleTabIds={['a', 'b']} orientation="horizontal" />
+    );
+    const list = container.querySelector<HTMLElement>('.tab-list')!;
+    rerender(<Bar tabItems={items} activeTabId="b" visibleTabIds={['a', 'b']} orientation="horizontal" />);
+    expect(list.scrollLeft).toBe(0);
+    expect(list.scrollTop).toBe(0);
+  });
+
+  it('scrolls the vertical list just enough to show the active row', () => {
+    const items = [makeTabItem('a'), makeTabItem('b')];
+    const { container, rerender } = render(
+      <Bar tabItems={items} activeTabId="a" visibleTabIds={['a', 'b']} />
+    );
+    const list = container.querySelector<HTMLElement>('.tab-list')!;
+    const rowB = container.querySelector<HTMLElement>('[data-session-id="b"]')!;
+    list.getBoundingClientRect = () => ({ top: 0, bottom: 100 }) as DOMRect;
+    rowB.getBoundingClientRect = () => ({ top: 110, bottom: 140 }) as DOMRect;
+    rerender(<Bar tabItems={items} activeTabId="b" visibleTabIds={['a', 'b']} />);
+    expect(list.scrollTop).toBe(40);
   });
 });

@@ -1,13 +1,9 @@
-// 新規セッションダイアログ（接続フロー）。ダイアログ枠・ホスト/GCP タブ・
-// ステータスバナー・接続フォームの項目/ラベル/プレースホルダー・
-// プロトコル別フィールド（SSH / シリアル / WSL / Git Bash）・
-// 入力検証メッセージ・変更破棄の確認をまとめています。
+// Connection dialogs (SSH / Telnet, Serial, GCP, Web): dialog chrome, the
+// status banner, connection form fields/labels/placeholders, SSH and Serial
+// field groups, validation messages, and the discard-changes confirmation.
 export const sessionDialog = {
   defaultSessionName: '{{protocol}} セッション',
-  title: '新規セッション',
   tabs: {
-    sourceAriaLabel: '接続元',
-    hosts: 'ホスト',
     gcp: 'GCP',
     web: 'Web',
   },
@@ -77,9 +73,6 @@ export const sessionDialog = {
   flowControl: {
     none: 'なし',
   },
-  distributionLabel: 'ディストリビューション',
-  noWslDistros: 'WSL ディストリビューションが見つかりません。',
-  gitBashNotInstalled: 'Git Bash がインストールされていません。',
   encodingLabel: 'エンコーディング',
   fixedTerminalSizeLabel: '端末サイズの固定',
   fixedTerminalSizeDefault: 'グローバル設定に従う',

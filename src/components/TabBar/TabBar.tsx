@@ -1,21 +1,45 @@
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type DragEvent, type MouseEvent, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useTabKeyboardNav } from '../../hooks/useTabKeyboardNav';
-import { ScrollStrip } from '../ScrollStrip/ScrollStrip';
 import { useUiOverlayStore } from '../../stores/uiOverlayStore';
-import { type TabItem, type ConversationSummary } from './tabBarHelpers';
+import { useTabActivityStore } from '../../stores/tabActivityStore';
 import { FEATURE_LABEL_KEYS } from '../../utils/paneTypes';
-import { conversationColorVar } from '../../utils/conversationColor';
+import { DockMenu, type DockMenuPlacement } from '../Dock/DockMenu';
+import { groupTabs, hiddenTabsThatFit, type TabItem, type ConversationSummary } from './tabBarHelpers';
+import { TabRow } from './TabRow';
+import { TabContextMenu, type TabContextMenuState } from './TabContextMenu';
+import { useWatchPicker } from './useWatchPicker';
+import { NewSessionMenu } from './NewSessionMenu';
+import { ChevronIcon } from './TabIcons';
+import type { LocalShellChoice, NewSessionChoice } from '../../types/appTypes';
 import './TabBar.css';
+
+export const SESSION_DRAG_TYPE = 'application/x-hotty-session';
 
 interface TabBarProps {
   tabItems: TabItem[];
   activeTabId: string | null;
-  visibleTabIds: string[];
+  /** Every pane on screen, in visual order (grid first, then shown edge bars). */
+  visiblePanes: readonly string[];
+  paneAllocations: Readonly<Record<string, string | null>>;
+  orientation: 'vertical' | 'horizontal';
+  compact?: boolean;
+  /** Which way menus opened from the tab list unfold. */
+  menuPlacement: DockMenuPlacement;
+  /** The dock's own controls (grip, position, compact), placed by the list. */
+  header?: ReactNode;
   onSelect: (id: string) => void;
   onClose: (id: string) => void;
-  onNew: () => void;
-  onReorder: (fromIndex: number, toIndex: number) => void;
+  /** Open the dialog for a New Session menu row. */
+  onNew: (choice: NewSessionChoice) => void;
+  /** Start a local shell from the New Session menu, with no dialog. */
+  onOpenLocal: (choice: LocalShellChoice) => void;
+  /** Reorder within the hidden group: put `dragId` before or after `targetId`. */
+  onMoveHidden: (dragId: string, targetId: string, place: 'before' | 'after') => void;
+  /** Show `id` in `paneId` (swapping with what is there). */
+  onPlace: (id: string, paneId: string) => void;
+  /** Take a shown tab off screen without closing it. */
+  onHide: (id: string) => void;
   onToggleWatch?: (id: string) => void;
   /** AI Chat conversations (of the singleton pane) for the "Watch in ▸" picker. */
   conversations?: ConversationSummary[];
@@ -23,9 +47,7 @@ interface TabBarProps {
   onWatchInConversation?: (sessionId: string, target: string | 'new') => void;
   /**
    * Watch this terminal from the AI Chat WINDOW: hand it to the AI window if one
-   * is open, otherwise move AI Chat out into one first. A shortcut, not a new
-   * capability — the AI Chat link picker's "other windows" group can already do
-   * this in two steps.
+   * is open, otherwise move AI Chat out into one first.
    */
   onWatchInAiWindow?: (sessionId: string) => void;
   onSaveToHostTree?: (id: string) => void;
@@ -38,38 +60,35 @@ interface TabBarProps {
   onNewAiChat?: () => void;
 }
 
-type DragOverSide = 'left' | 'right' | null;
-
-interface ContextMenuState {
-  tabId: string;
-  kind: 'session' | 'feature';
-  isWebBrowser: boolean;
-  isSshOrTelnet: boolean;
-  isWatching: boolean;
-  fixedSize: boolean;
-  /** Pinned width, if known (connect-time pty cols). Undefined hides the toggle. */
-  ptyCols?: number;
-  x: number;
-  y: number;
+interface DragOverState {
+  id: string;
+  where: 'before' | 'after' | 'into';
 }
 
-interface WatchMenuState {
-  /** Terminal session the "Watch in ▸" picker is acting on. */
-  sessionId: string;
-  /** The conversation tab currently watching it, if any (marked as owner). */
-  ownerTabId?: string;
-  x: number;
-  y: number;
-}
-
+/**
+ * The tab list of the dock. Tabs are split into the ones on screen — in pane
+ * order, each with its pane's mark — and the hidden ones, which show what
+ * they are connected to or, when output arrived while they were away, the
+ * newest line of it. Vertical (dock on the left/right) it is a column that
+ * scrolls; horizontal (top/bottom) it never scrolls: hidden tabs that do not
+ * fit are gathered into one "More" menu.
+ */
 export function TabBar({
   tabItems,
   activeTabId,
-  visibleTabIds,
+  visiblePanes,
+  paneAllocations,
+  orientation,
+  compact = false,
+  menuPlacement,
+  header,
   onSelect,
   onClose,
   onNew,
-  onReorder,
+  onOpenLocal,
+  onMoveHidden,
+  onPlace,
+  onHide,
   onToggleWatch,
   conversations = [],
   onWatchInConversation,
@@ -84,497 +103,310 @@ export function TabBar({
   onNewAiChat,
 }: TabBarProps) {
   const { t } = useTranslation();
-  const [dragSourceIndex, setDragSourceIndex] = useState<number | null>(null);
-  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
-  const [dragOverSide, setDragOverSide] = useState<DragOverSide>(null);
-  const [showFeaturesMenu, setShowFeaturesMenu] = useState(false);
-  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
-  const [watchMenu, setWatchMenu] = useState<WatchMenuState | null>(null);
-  const featuresRef = useRef<HTMLDivElement>(null);
-  const contextMenuRef = useRef<HTMLDivElement>(null);
-  const watchMenuRef = useRef<HTMLDivElement>(null);
-
-  const visibleSet = new Set(visibleTabIds);
+  const vertical = orientation === 'vertical';
+  const activity = useTabActivityStore((s) => s.activity);
+  const [filter, setFilter] = useState('');
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState<DragOverState | null>(null);
+  const [hiddenGroupOver, setHiddenGroupOver] = useState(false);
+  const [contextMenu, setContextMenu] = useState<TabContextMenuState | null>(null);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [listWidth, setListWidth] = useState(0);
+  const listRef = useRef<HTMLDivElement>(null);
+  const moreRef = useRef<HTMLButtonElement>(null);
+  const activeRowRef = useRef<HTMLDivElement>(null);
 
   /**
    * What the tab is called. A feature tab's generic name belongs to its *type*,
-   * not to the pane, so it is translated here instead of being stored in English
-   * when the pane is created — that is what left a Japanese UI opening "Log
-   * Viewer" from a translated Features menu. An explicit `displayName` still
-   * wins: a session's name, or the site a Web Browser pane is showing.
+   * so it is translated here rather than stored in English when the pane is
+   * created. An explicit `displayName` still wins: a session's name, or the
+   * site a Web Browser pane is showing.
    */
   const tabLabel = (item: TabItem): string =>
     item.displayName ?? (item.featureType ? t(FEATURE_LABEL_KEYS[item.featureType]) : '');
 
-  const hasAnyFeatureCallback =
-    onNewLogViewer ||
-    onNewPingMonitor ||
-    onNewInterfaceTraffic ||
-    onNewFileServer ||
-    onNewAiChat;
+  const { shown, hidden } = groupTabs(tabItems, visiblePanes, paneAllocations);
+  const paneOf = new Map(shown.map((p) => [p.item.id, p.paneId]));
+  const isShown = (id: string) => paneOf.has(id);
 
-  // Close features menu on click outside
+  const needle = vertical && !compact ? filter.trim().toLowerCase() : '';
+  const matches = (item: TabItem) =>
+    !needle || `${tabLabel(item)} ${item.detail ?? ''}`.toLowerCase().includes(needle);
+  const shownRows = shown.filter((p) => matches(p.item));
+  const hiddenRows = hidden.filter(matches);
+
+  // Horizontal: measure the row and decide how many hidden tabs it can hold.
+  useLayoutEffect(() => {
+    const el = listRef.current;
+    if (vertical || !el || typeof ResizeObserver === 'undefined') return;
+    // The observer reports the current size as soon as it starts observing.
+    const ro = new ResizeObserver(() => setListWidth(el.clientWidth));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [vertical]);
+  const fit = vertical ? hiddenRows.length : hiddenTabsThatFit(listWidth, shownRows.length, hiddenRows.length, compact);
+  const inlineHidden = hiddenRows.slice(0, fit);
+  const overflow = hiddenRows.slice(fit);
+
+  // Keep the selected tab in view when it changes from elsewhere. Only the
+  // vertical list scrolls, and only it is moved: scrollIntoView would also
+  // scroll the horizontal row (overflow: hidden is still scrollable by script,
+  // with nothing on screen to scroll it back) and the window's own ancestors.
   useEffect(() => {
-    if (!showFeaturesMenu) return;
-    const handleClickOutside = (e: MouseEvent) => {
-      if (featuresRef.current && !featuresRef.current.contains(e.target as Node)) {
-        setShowFeaturesMenu(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showFeaturesMenu]);
+    const list = listRef.current;
+    const rowEl = activeRowRef.current;
+    if (!vertical || !list || !rowEl) return;
+    const l = list.getBoundingClientRect();
+    const r = rowEl.getBoundingClientRect();
+    if (r.top < l.top) list.scrollTop -= l.top - r.top;
+    else if (r.bottom > l.bottom) list.scrollTop += r.bottom - l.bottom;
+  }, [activeTabId, vertical]);
 
-  // Close tab context menu on outside click or Esc
-  useEffect(() => {
-    if (!contextMenu) return;
-    const handleClickOutside = (e: MouseEvent) => {
-      if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
-        setContextMenu(null);
-      }
-    };
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setContextMenu(null);
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    document.addEventListener('keydown', handleKey);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('keydown', handleKey);
-    };
-  }, [contextMenu]);
+  // Arrow keys move between the tabs on screen only. Selecting a hidden tab
+  // swaps it into the active pane, which moves the previous tab into the hidden
+  // group and reorders the list under the next key press; hidden tabs are
+  // brought out by a click instead.
+  const { onKeyDown } = useTabKeyboardNav({
+    ids: shownRows.map((p) => p.item.id),
+    activeId: activeTabId,
+    onSelect,
+    orientation,
+  });
 
-  // Close the "Watch in ▸" picker on outside click or Esc (mirrors the context menu).
-  useEffect(() => {
-    if (!watchMenu) return;
-    const handleClickOutside = (e: MouseEvent) => {
-      if (watchMenuRef.current && !watchMenuRef.current.contains(e.target as Node)) {
-        setWatchMenu(null);
-      }
-    };
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setWatchMenu(null);
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    document.addEventListener('keydown', handleKey);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('keydown', handleKey);
-    };
-  }, [watchMenu]);
+  // ── Drag & drop ──────────────────────────────────────────────────────────
+  const clearDrag = () => {
+    setDragId(null);
+    setDragOver(null);
+    setHiddenGroupOver(false);
+  };
 
-  const handleDragStart = (index: number, itemId: string) => (e: React.DragEvent) => {
-    setDragSourceIndex(index);
+  const handleDragStart = (e: DragEvent, item: TabItem) => {
+    setDragId(item.id);
     e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('application/x-hotty-session', itemId);
-    e.dataTransfer.setData('text/plain', itemId);
+    e.dataTransfer.setData(SESSION_DRAG_TYPE, item.id);
+    e.dataTransfer.setData('text/plain', item.id);
     // Hide any Web Browser pane's native webview for the drag's duration so its
     // OS-composited window stops swallowing the pane drop target's DOM events.
     useUiOverlayStore.getState().setSessionDragging(true);
   };
 
-  const handleDragOver = (index: number) => (e: React.DragEvent) => {
-    if (dragSourceIndex === null) return;
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const side: DragOverSide = e.clientX - rect.left < rect.width / 2 ? 'left' : 'right';
-    setDragOverIndex(index);
-    setDragOverSide(side);
-  };
-
-  const handleDragLeave = () => {
-    setDragOverIndex(null);
-    setDragOverSide(null);
-  };
-
-  const handleDrop = (index: number) => (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (dragSourceIndex === null) return;
-    let target = index;
-    if (dragOverSide === 'right') target = index + 1;
-    if (target > dragSourceIndex) target -= 1;
-    if (target !== dragSourceIndex) onReorder(dragSourceIndex, target);
-    setDragSourceIndex(null);
-    setDragOverIndex(null);
-    setDragOverSide(null);
-  };
-
   const handleDragEnd = () => {
-    setDragSourceIndex(null);
-    setDragOverIndex(null);
-    setDragOverSide(null);
-    // Drag finished (dropped or cancelled) — restore the browser webview(s).
+    clearDrag();
     useUiOverlayStore.getState().setSessionDragging(false);
   };
 
-  // Terminal tabs scroll like every other strip in the app. Note that dragging
-  // a tab here reorders it — which is exactly why no strip in the app scrolls
-  // by dragging, and all three use the end arrows instead.
-  const activeTabRef = useRef<HTMLDivElement | null>(null);
-  const { onKeyDown: onTabKeyDown } = useTabKeyboardNav({
-    ids: tabItems.map((item) => item.id),
-    activeId: activeTabId,
-    onSelect,
+  /** Dropping on a shown row puts the dragged tab in that row's pane. */
+  const overShownRow = (e: DragEvent, item: TabItem) => {
+    if (!dragId || dragId === item.id) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOver?.id !== item.id || dragOver.where !== 'into') setDragOver({ id: item.id, where: 'into' });
+  };
+  const dropOnShownRow = (e: DragEvent, item: TabItem) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const pane = paneOf.get(item.id);
+    if (dragId && pane && dragId !== item.id) onPlace(dragId, pane);
+    clearDrag();
+  };
+
+  /** Hidden rows reorder among themselves; a shown tab dropped there is hidden. */
+  const overHiddenRow = (e: DragEvent, item: TabItem) => {
+    if (!dragId || dragId === item.id) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+    if (isShown(dragId)) {
+      if (!hiddenGroupOver) setHiddenGroupOver(true);
+      if (dragOver) setDragOver(null);
+      return;
+    }
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const before = vertical ? e.clientY - r.top < r.height / 2 : e.clientX - r.left < r.width / 2;
+    const where = before ? 'before' : 'after';
+    if (dragOver?.id !== item.id || dragOver.where !== where) setDragOver({ id: item.id, where });
+  };
+  const dropOnHiddenRow = (e: DragEvent, item: TabItem) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (dragId && dragId !== item.id) {
+      if (isShown(dragId)) onHide(dragId);
+      else if (dragOver?.id === item.id && dragOver.where !== 'into') onMoveHidden(dragId, item.id, dragOver.where);
+    }
+    clearDrag();
+  };
+
+  const overHiddenGroup = (e: DragEvent) => {
+    if (!dragId || !isShown(dragId)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (!hiddenGroupOver) setHiddenGroupOver(true);
+  };
+  const dropOnHiddenGroup = (e: DragEvent) => {
+    e.preventDefault();
+    if (dragId && isShown(dragId)) onHide(dragId);
+    clearDrag();
+  };
+
+  // ── Menus ────────────────────────────────────────────────────────────────
+  const openContextMenu = (e: MouseEvent, item: TabItem) => {
+    // Always suppress the default WebView2 menu on tabs, then open ours only
+    // when there is something in it for this tab.
+    e.preventDefault();
+    e.stopPropagation();
+    const isWebBrowser = item.kind === 'feature' && item.featureType === 'web-browser';
+    const isSession = item.kind === 'session';
+    const isSshOrTelnet = item.protocol === 'ssh' || item.protocol === 'telnet';
+    const canToggleFixedSize = isSshOrTelnet && !!onToggleFixedSize && item.ptyCols != null;
+    const sessionHasItems =
+      isSession && (!!onToggleWatch || (isSshOrTelnet && !!onSaveToHostTree) || canToggleFixedSize);
+    const webHasItems = isWebBrowser && !!onBookmark;
+    if (!sessionHasItems && !webHasItems) return;
+    setContextMenu({
+      tabId: item.id,
+      kind: item.kind,
+      isWebBrowser,
+      isSshOrTelnet,
+      isWatching: !!item.isWatching,
+      fixedSize: !!item.fixedSize,
+      ptyCols: item.ptyCols,
+      x: e.clientX,
+      y: e.clientY,
+    });
+  };
+
+  const { onWatchClick: pickWatch, menuElement: watchMenuElement } = useWatchPicker({
+    conversations,
+    onToggleWatch,
+    onWatchInConversation,
   });
+  const handleWatchClick = pickWatch
+    ? (e: MouseEvent, item: TabItem) => pickWatch(e, item.id, item.watchOwnerTabId)
+    : undefined;
+
+  const row = (item: TabItem, paneId: string | null, inMenu = false) => {
+    const isActive = item.id === activeTabId;
+    return (
+      <TabRow
+        key={item.id}
+        ref={isActive && !inMenu ? activeRowRef : undefined}
+        item={item}
+        label={tabLabel(item)}
+        paneId={paneId}
+        isActive={isActive}
+        activity={paneId === null ? activity[item.id] : undefined}
+        dragOver={dragOver?.id === item.id ? dragOver.where : null}
+        onSelect={(id) => {
+          if (inMenu) setMoreOpen(false);
+          onSelect(id);
+        }}
+        onClose={onClose}
+        onContextMenu={openContextMenu}
+        onWatchClick={handleWatchClick}
+        onDragStart={handleDragStart}
+        onDragOver={inMenu ? undefined : paneId !== null ? overShownRow : overHiddenRow}
+        onDragLeave={() => setDragOver(null)}
+        onDrop={inMenu ? undefined : paneId !== null ? dropOnShownRow : dropOnHiddenRow}
+        onDragEnd={handleDragEnd}
+      />
+    );
+  };
+
+  const overflowUnread = overflow.some((i) => (activity[i.id]?.lines ?? 0) > 0);
+  const overflowBad = overflow.some((i) => i.status === 'error' || i.status === 'disconnected');
 
   return (
-    <div className="tab-bar">
-      <ScrollStrip
-        className="tab-list"
-        tabIndex={0}
-        onKeyDown={onTabKeyDown}
-        // Follow the selection: an arrow-key move, or a tab activated from
-        // elsewhere (a new session, the AI opening one), can land off-screen.
-        activeChildRef={activeTabRef}
-        revealKey={activeTabId}
-      >
-        {tabItems.map((item, i) => {
-          const isActive = item.id === activeTabId;
-          const isHidden = !visibleSet.has(item.id);
-          const dragOverCls =
-            dragOverIndex === i && dragOverSide
-              ? ` drag-over-${dragOverSide}`
-              : '';
-          // Paint a watched terminal in its owning conversation's color. Exposed as
-          // `--tab-watch-color`, consumed by the watch-dot fill and the linked bar.
-          const watchColor =
-            item.isWatching && item.watchColorIndex != null
-              ? conversationColorVar(item.watchColorIndex)
-              : undefined;
-          const tabStyle = watchColor
-            ? ({ '--tab-watch-color': watchColor } as React.CSSProperties)
-            : undefined;
-          return (
-            <div
-              key={item.id}
-              ref={isActive ? activeTabRef : undefined}
-              data-session-id={item.id}
-              draggable
-              style={tabStyle}
-              className={`tab${isActive ? ' active active-pane-tab' : ''}${
-                item.status === 'error' ? ' error' : ''
-              }${item.status === 'connecting' ? ' connecting' : ''}${
-                isHidden ? ' hidden-tab' : ''
-              }${dragOverCls}${
-                item.isWatching ? ' gemini-linked-tab' : ''
-              }${item.isAiTab ? ' is-ai-tab' : ''}`}
-              onClick={() => onSelect(item.id)}
-              onContextMenu={(e) => {
-                // Always suppress the default WebView2 menu on tabs, then open our
-                // custom menu only when there's an applicable action for this tab.
-                e.preventDefault();
-                e.stopPropagation();
-                const isWebBrowser = item.kind === 'feature' && item.featureType === 'web-browser';
-                const isSession = item.kind === 'session';
-                const isSshOrTelnet = item.protocol === 'ssh' || item.protocol === 'telnet';
-                // The fixed-size toggle only applies once the connect-time width
-                // is known (ptyCols) for an ssh/telnet session.
-                const canToggleFixedSize =
-                  isSshOrTelnet && !!onToggleFixedSize && item.ptyCols != null;
-                const sessionHasItems =
-                  isSession &&
-                  (!!onToggleWatch || (isSshOrTelnet && !!onSaveToHostTree) || canToggleFixedSize);
-                const webHasItems = isWebBrowser && !!onBookmark;
-                if (!sessionHasItems && !webHasItems) return;
-                setContextMenu({
-                  tabId: item.id,
-                  kind: item.kind,
-                  isWebBrowser,
-                  isSshOrTelnet,
-                  isWatching: !!item.isWatching,
-                  fixedSize: !!item.fixedSize,
-                  ptyCols: item.ptyCols,
-                  x: e.clientX,
-                  y: e.clientY,
-                });
-              }}
-              onDragStart={handleDragStart(i, item.id)}
-              onDragOver={handleDragOver(i)}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop(i)}
-              onDragEnd={handleDragEnd}
-              title={item.errorMessage ?? tabLabel(item)}
-            >
-              <span className="tab-label">{tabLabel(item)}</span>
-              {item.kind === 'session' && onToggleWatch && (
-                <button
-                  type="button"
-                  className={`tab-watch-btn${item.isWatching ? ' watching' : ''}`}
-                  title={item.isWatching ? t('chrome.tabBar.aiMonitorActive') : t('chrome.tabBar.aiMonitorStart')}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    // With 2+ conversations the destination is ambiguous, so open the
-                    // "Watch in ▸" picker instead of silently attaching to the active
-                    // one. With 0–1 conversations, one-click toggle as before.
-                    if (conversations.length >= 2 && onWatchInConversation) {
-                      const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                      setWatchMenu({ sessionId: item.id, ownerTabId: item.watchOwnerTabId, x: r.left, y: r.bottom + 2 });
-                    } else {
-                      onToggleWatch(item.id);
-                    }
-                  }}
-                  aria-label={item.isWatching ? t('chrome.tabBar.aiMonitorStopAria') : t('chrome.tabBar.aiMonitorStartAria')}
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                    <circle cx="12" cy="12" r="10"
-                      fill={item.isWatching ? 'var(--tab-watch-color, var(--success-color, #4ade80))' : 'currentColor'}
-                      opacity={item.isWatching ? 1 : 0.7} />
-                    <circle cx="12" cy="12" r="6"
-                      fill={item.isWatching ? 'var(--tab-watch-color, var(--accent-light, #42a5f5))' : 'currentColor'}
-                      opacity={item.isWatching ? 0.9 : 0.45} />
-                  </svg>
-                </button>
-              )}
-              <button
-                type="button"
-                className="tab-close"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onClose(item.id);
-                }}
-                aria-label={t('chrome.tabBar.closeTab')}
-              >
-                ×
-              </button>
-            </div>
-          );
-        })}
-      </ScrollStrip>
-      <div className="new-tab-btn" onClick={onNew} title={t('chrome.tabBar.newSession')} role="button" tabIndex={0}>
-        <svg
-          width="20"
-          height="20"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="M12 22s-8-4.5-8-11.8A8 8 0 0 1 12 3a8 8 0 0 1 8 7.2" />
-          <rect x="16" y="12" width="6" height="8" rx="1" />
-          <path d="M19 12V10" />
-          <line x1="12" y1="8" x2="12" y2="14" />
-          <line x1="9" y1="11" x2="15" y2="11" />
-        </svg>
-      </div>
-
-      {/* Features dropdown */}
-      {hasAnyFeatureCallback && (
-        <div className="features-btn" ref={featuresRef}>
-          <div
-            className={`features-btn-icon${showFeaturesMenu ? ' active' : ''}`}
-            onClick={() => setShowFeaturesMenu((v) => !v)}
-            title={t('chrome.tabBar.features')}
-            role="button"
-            tabIndex={0}
-          >
-            <svg
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <rect x="3" y="3" width="7" height="7" rx="1" />
-              <rect x="14" y="3" width="7" height="7" rx="1" />
-              <rect x="3" y="14" width="7" height="7" rx="1" />
-              <rect x="14" y="14" width="7" height="7" rx="1" />
-            </svg>
-          </div>
-          {showFeaturesMenu && (
-            <div className="features-dropdown">
-              {onNewLogViewer && (
-                <div
-                  className="features-dropdown-item"
-                  onClick={() => { onNewLogViewer(); setShowFeaturesMenu(false); }}
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                    <polyline points="14 2 14 8 20 8" />
-                    <line x1="8" y1="13" x2="16" y2="13" />
-                    <line x1="8" y1="17" x2="14" y2="17" />
-                  </svg>
-                  {t('chrome.tabBar.logViewer')}
-                </div>
-              )}
-              {onNewPingMonitor && (
-                <div
-                  className="features-dropdown-item"
-                  onClick={() => { onNewPingMonitor(); setShowFeaturesMenu(false); }}
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="12" cy="12" r="10" />
-                    <polyline points="12 6 12 12 16 14" />
-                  </svg>
-                  {t('chrome.tabBar.pingMonitor')}
-                </div>
-              )}
-              {onNewInterfaceTraffic && (
-                <div
-                  className="features-dropdown-item"
-                  onClick={() => { onNewInterfaceTraffic(); setShowFeaturesMenu(false); }}
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="3 17 9 11 13 15 21 7" />
-                    <polyline points="15 7 21 7 21 13" />
-                  </svg>
-                  {t('chrome.tabBar.interfaceTraffic')}
-                </div>
-              )}
-              {onNewFileServer && (
-                <div
-                  className="features-dropdown-item"
-                  onClick={() => { onNewFileServer(); setShowFeaturesMenu(false); }}
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="2" y="3" width="20" height="6" rx="1" />
-                    <rect x="2" y="15" width="20" height="6" rx="1" />
-                    <line x1="6" y1="6" x2="6.01" y2="6" />
-                    <line x1="6" y1="18" x2="6.01" y2="18" />
-                  </svg>
-                  {t('chrome.tabBar.fileServer')}
-                </div>
-              )}
-              {onNewAiChat && (
-                <div
-                  className="features-dropdown-item"
-                  onClick={() => { onNewAiChat(); setShowFeaturesMenu(false); }}
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 2L14.8 9.2L22 12L14.8 14.8L12 22L9.2 14.8L2 12L9.2 9.2L12 2Z" />
-                  </svg>
-                  {t('chrome.tabBar.aiChat')}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+    <div
+      className={`tab-bar tab-bar-${orientation}${compact ? ' compact' : ''}${dragId ? ' dragging' : ''}`}
+    >
+      {vertical && header}
+      {vertical && !compact && (
+        <input
+          className="tab-filter"
+          type="text"
+          value={filter}
+          placeholder={t('chrome.dock.filterPlaceholder')}
+          aria-label={t('chrome.dock.filterPlaceholder')}
+          onChange={(e) => setFilter(e.target.value)}
+        />
       )}
+      {/* The keys are taken here, not on the whole bar, so Home/End and the
+          arrows still edit the filter box and drive the menus. */}
+      <div className="tab-list" ref={listRef} tabIndex={0} onKeyDown={onKeyDown}>
+        <div className="tab-group-label">{t('chrome.dock.shown')}</div>
+        <div className="tab-group tab-group-shown">{shownRows.map((p) => row(p.item, p.paneId))}</div>
+        <div className="tab-group-sep" />
+        <div className="tab-group-label">
+          {t('chrome.dock.hidden')}
+          <span className="tab-group-count">{hidden.length}</span>
+        </div>
+        <div
+          className={`tab-group tab-group-hidden${hiddenGroupOver ? ' drop-target' : ''}`}
+          onDragOver={overHiddenGroup}
+          onDragLeave={(e) => {
+            if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) setHiddenGroupOver(false);
+          }}
+          onDrop={dropOnHiddenGroup}
+        >
+          {inlineHidden.map((item) => row(item, null))}
+        </div>
+        {overflow.length > 0 && (
+          <button
+            ref={moreRef}
+            type="button"
+            className={`tab tab-more${moreOpen ? ' open' : ''}`}
+            aria-haspopup="menu"
+            aria-expanded={moreOpen}
+            onClick={() => setMoreOpen((v) => !v)}
+          >
+            <span className="tab-label">
+              {inlineHidden.length > 0
+                ? t('chrome.dock.moreHidden', { count: overflow.length })
+                : `${t('chrome.dock.hidden')} ${overflow.length}`}
+            </span>
+            {(overflowUnread || overflowBad) && (
+              <span className={`tab-state-dot ${overflowUnread ? 'unread' : 'bad'}`} aria-hidden="true" />
+            )}
+            <ChevronIcon up={menuPlacement === 'up' ? !moreOpen : moreOpen} />
+          </button>
+        )}
+      </div>
+      <DockMenu
+        open={moreOpen && overflow.length > 0}
+        onClose={() => setMoreOpen(false)}
+        anchorRef={moreRef}
+        placement={menuPlacement}
+        className="tab-overflow-menu"
+      >
+        {overflow.map((item) => row(item, null, true))}
+      </DockMenu>
+      <div className="tab-new-wrap">
+        <NewSessionMenu
+          placement={menuPlacement}
+          onNew={onNew}
+          onOpenLocal={onOpenLocal}
+          onNewLogViewer={onNewLogViewer}
+          onNewPingMonitor={onNewPingMonitor}
+          onNewInterfaceTraffic={onNewInterfaceTraffic}
+          onNewFileServer={onNewFileServer}
+          onNewAiChat={onNewAiChat}
+        />
+      </div>
+      {!vertical && header}
 
       {contextMenu && (
-        <div
-          ref={contextMenuRef}
-          className="tab-context-menu"
-          style={{ top: contextMenu.y, left: contextMenu.x }}
-          role="menu"
-        >
-          {contextMenu.kind === 'session' && onToggleWatch && (
-            <div
-              className="tab-context-menu-item"
-              role="menuitem"
-              onClick={() => {
-                onToggleWatch(contextMenu.tabId);
-                setContextMenu(null);
-              }}
-            >
-              {contextMenu.isWatching ? t('chrome.tabBar.stopWatchAi') : t('chrome.tabBar.watchAi')}
-            </div>
-          )}
-          {contextMenu.kind === 'session' && onWatchInAiWindow && (
-            <div
-              className="tab-context-menu-item"
-              role="menuitem"
-              onClick={() => {
-                onWatchInAiWindow(contextMenu.tabId);
-                setContextMenu(null);
-              }}
-            >
-              {t('chrome.tabBar.watchInAiWindow')}
-            </div>
-          )}
-          {contextMenu.kind === 'session' && contextMenu.isSshOrTelnet && onSaveToHostTree && (
-            <div
-              className="tab-context-menu-item"
-              role="menuitem"
-              onClick={() => {
-                onSaveToHostTree(contextMenu.tabId);
-                setContextMenu(null);
-              }}
-            >
-              {t('chrome.tabBar.saveToHostTree')}
-            </div>
-          )}
-          {contextMenu.kind === 'session' &&
-            contextMenu.isSshOrTelnet &&
-            onToggleFixedSize &&
-            contextMenu.ptyCols != null && (
-              <div
-                className="tab-context-menu-item"
-                role="menuitemcheckbox"
-                aria-checked={contextMenu.fixedSize}
-                onClick={() => {
-                  onToggleFixedSize(contextMenu.tabId);
-                  setContextMenu(null);
-                }}
-              >
-                {(contextMenu.fixedSize ? '✓ ' : '') +
-                  t('chrome.tabBar.fixedTerminalSize', { cols: contextMenu.ptyCols })}
-              </div>
-            )}
-          {contextMenu.isWebBrowser && onBookmark && (
-            <div
-              className="tab-context-menu-item"
-              role="menuitem"
-              onClick={() => {
-                onBookmark(contextMenu.tabId);
-                setContextMenu(null);
-              }}
-            >
-              {t('chrome.tabBar.bookmark')}
-            </div>
-          )}
-        </div>
+        <TabContextMenu
+          menu={contextMenu}
+          onClose={() => setContextMenu(null)}
+          onToggleWatch={onToggleWatch}
+          onWatchInAiWindow={onWatchInAiWindow}
+          onSaveToHostTree={onSaveToHostTree}
+          onToggleFixedSize={onToggleFixedSize}
+          onBookmark={onBookmark}
+        />
       )}
-
-      {watchMenu && onWatchInConversation && (
-        <div
-          ref={watchMenuRef}
-          className="tab-watch-menu"
-          style={{ top: watchMenu.y, left: watchMenu.x }}
-          role="menu"
-        >
-          <div className="tab-watch-menu-title">{t('chrome.tabBar.watchInTitle')}</div>
-          {conversations.map((c) => {
-            const isOwner = c.id === watchMenu.ownerTabId;
-            return (
-              <div
-                key={c.id}
-                className={`tab-watch-menu-item${isOwner ? ' owner' : ''}`}
-                role="menuitemradio"
-                aria-checked={isOwner}
-                onClick={() => {
-                  onWatchInConversation(watchMenu.sessionId, c.id);
-                  setWatchMenu(null);
-                }}
-              >
-                <span
-                  className="tab-watch-menu-dot"
-                  style={{ background: conversationColorVar(c.colorIndex) }}
-                />
-                <span className="tab-watch-menu-label">{c.title}</span>
-                {isOwner && <span className="tab-watch-menu-check">✓</span>}
-              </div>
-            );
-          })}
-          <div
-            className="tab-watch-menu-item tab-watch-menu-new"
-            role="menuitem"
-            onClick={() => {
-              onWatchInConversation(watchMenu.sessionId, 'new');
-              setWatchMenu(null);
-            }}
-          >
-            <span className="tab-watch-menu-dot tab-watch-menu-plus" aria-hidden="true">+</span>
-            <span className="tab-watch-menu-label">{t('chrome.tabBar.watchInNew')}</span>
-          </div>
-        </div>
-      )}
+      {watchMenuElement}
     </div>
   );
 }

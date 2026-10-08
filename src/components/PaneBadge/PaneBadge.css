@@ -1,0 +1,23 @@
+.pane-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  background: var(--pane-badge-color);
+  color: var(--pane-badge-text);
+  font-family: var(--ui-font-family);
+  font-size: calc(var(--font-size-base) - 3px);
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* An empty pane's mark, in its middle above "Drop Tab Here". */
+.pane-badge.pane-badge-large {
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  font-size: calc(var(--font-size-base) * 1.8);
+}

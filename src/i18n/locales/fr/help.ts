@@ -9,7 +9,6 @@ export const help = {
 
   shortcuts: {
     summary: 'Raccourcis',
-    newSession: 'Boîte de dialogue Nouvelle session',
     newWindow: 'Nouvelle fenêtre',
     focusNext: 'Activer le volet suivant',
     focusPrev: 'Activer le volet précédent',
@@ -25,7 +24,7 @@ export const help = {
   gettingStarted: {
     summary: 'Premiers pas',
     openDialog:
-      'Ouvrez la boîte de dialogue de connexion via <0>Ctrl + N</0> ou le bouton <1>« Nouveau »</1> dans la barre latérale. Vous pouvez gérer vos hôtes et dossiers dans l\'arborescence des hôtes.',
+      "Cliquez sur <1>+ Nouvelle session</1> à la fin de la liste des onglets et choisissez SSH ou Telnet pour ouvrir la boîte de dialogue de connexion. Vous pouvez gérer vos hôtes et dossiers dans l'arborescence des hôtes.",
     doubleClick:
       '<0>Double-clic :</0> double-cliquez sur un hôte dans l\'arborescence pour vous connecter immédiatement. Double-cliquez sur un dossier — ou cliquez sur la flèche à sa gauche — pour le replier ou le déplier ; un simple clic ne fait que le sélectionner.',
     hostFilter:
@@ -44,9 +43,9 @@ export const help = {
     jumpbox:
       '<0>Jumpbox (hôte bastion) :</0> les connexions SSH et Telnet peuvent être routées via un jumpbox. Marquez n\'importe quel hôte SSH comme jumpbox dans l\'arborescence des hôtes, puis sélectionnez-le comme hôte « via » lors de la modification d\'un hôte cible.',
     gcpIap:
-      '<0>Google Cloud IAP :</0> connectez-vous aux VM Google Compute Engine via Identity-Aware Proxy sans exposer les VM à l\'Internet public. Ouvrez l\'onglet <1>GCP</1> dans la boîte de dialogue Nouvelle session pour parcourir toutes vos instances GCE de chaque projet auquel vous avez accès — regroupées par projet, avec un statut en direct (🟢 RUNNING / 🔴 arrêtée / 🟡 en transition) — puis double-cliquez sur une instance pour vous connecter. Le volet dispose aussi de boutons pour <2>démarrer</2> ou <3>arrêter</3> une instance directement, et d\'une action <4>Actualiser</4> pour réinterroger vos projets et instances. Une <5>zone de recherche</5> filtre la liste par nom de projet ou d\'instance au fur et à mesure de la saisie. La dernière liste connue est affichée <6>instantanément au lancement</6> et revalidée en arrière-plan, pour que vous n\'attendiez pas une requête complète à chaque ouverture du volet. Si vous double-cliquez sur une VM arrêtée, HoTTY demande confirmation avant de la démarrer (ou la démarre automatiquement lorsque c\'est configuré sur un hôte IAP enregistré). <7>Aucun nom d\'utilisateur SSH, mot de passe ni clé privée n\'est requis</7> — HoTTY délègue la connexion à <8>gcloud compute ssh --tunnel-through-iap</8>, qui gère le tunneling IAP, le mappage OS Login, la génération automatique de clé SSH (<9>~/.ssh/google_compute_engine</9>), l\'enregistrement de la clé et l\'authentification en votre nom. Nécessite le Google Cloud SDK et un <10>gcloud auth login</10> effectué.',
+      '<0>Google Cloud IAP :</0> connectez-vous aux VM Google Compute Engine via Identity-Aware Proxy sans exposer les VM à l\'Internet public. Choisissez <1>GCP</1> dans le menu Nouvelle session pour parcourir toutes vos instances GCE de chaque projet auquel vous avez accès — regroupées par projet, avec un statut en direct (🟢 RUNNING / 🔴 arrêtée / 🟡 en transition) — puis double-cliquez sur une instance pour vous connecter. Le volet dispose aussi de boutons pour <2>démarrer</2> ou <3>arrêter</3> une instance directement, et d\'une action <4>Actualiser</4> pour réinterroger vos projets et instances. Une <5>zone de recherche</5> filtre la liste par nom de projet ou d\'instance au fur et à mesure de la saisie. La dernière liste connue est affichée <6>instantanément au lancement</6> et revalidée en arrière-plan, pour que vous n\'attendiez pas une requête complète à chaque ouverture du volet. Si vous double-cliquez sur une VM arrêtée, HoTTY demande confirmation avant de la démarrer (ou la démarre automatiquement lorsque c\'est configuré sur un hôte IAP enregistré). <7>Aucun nom d\'utilisateur SSH, mot de passe ni clé privée n\'est requis</7> — HoTTY délègue la connexion à <8>gcloud compute ssh --tunnel-through-iap</8>, qui gère le tunneling IAP, le mappage OS Login, la génération automatique de clé SSH (<9>~/.ssh/google_compute_engine</9>), l\'enregistrement de la clé et l\'authentification en votre nom. Nécessite le Google Cloud SDK et un <10>gcloud auth login</10> effectué.',
     gcpSshUser:
-      '<0>Utilisateur SSH (à laisser vide en général) :</0> HoTTY détermine le compte Linux de connexion en interrogeant gcloud ; le champ <1>SSH user</1> de l\'onglet GCP reste donc normalement vide. Ne le renseignez que si une VM accepte un compte différent de celui détecté — la connexion échoue alors avec <2>Permission denied (publickey)</2> et l\'erreur indique le compte essayé. Sur une machine dont la clé SSH n\'a jamais été enregistrée, HoTTY l\'inscrit désormais automatiquement dans les métadonnées de l\'instance (ou du projet) lors de la première connexion, si bien que vous n\'avez plus besoin d\'exécuter <3>gcloud compute ssh &lt;instance&gt; --tunnel-through-iap</3> à la main.',
+      '<0>Utilisateur SSH (à laisser vide en général) :</0> HoTTY détermine le compte Linux de connexion en interrogeant gcloud ; le champ <1>SSH user</1> de la boîte de dialogue GCP reste donc normalement vide. Ne le renseignez que si une VM accepte un compte différent de celui détecté — la connexion échoue alors avec <2>Permission denied (publickey)</2> et l\'erreur indique le compte essayé. Sur une machine dont la clé SSH n\'a jamais été enregistrée, HoTTY l\'inscrit désormais automatiquement dans les métadonnées de l\'instance (ou du projet) lors de la première connexion, si bien que vous n\'avez plus besoin d\'exécuter <3>gcloud compute ssh &lt;instance&gt; --tunnel-through-iap</3> à la main.',
     gcpFiltering:
       '<0>Filtrage GCP sensible aux accès :</0> le volet GCP sonde <1>iap.tunnelInstances.accessViaIAP</1> au niveau du projet et de l\'instance (via <2>gcloud projects test-iam-permissions</2>) et masque les VM pour lesquelles vous n\'avez aucune autorisation de tunnel IAP. Un bouton compteur 🔒 dans l\'en-tête du volet permet de réafficher les instances masquées ; les instances sans autorisation OS Login restent affichées mais montrent un symbole d\'avertissement 🔑 car SSH peut tout de même fonctionner via une clé de métadonnées. Lorsque la sonde IAM elle-même échoue (coupure réseau, projet supprimé), les instances restent visibles afin que les VM accessibles ne soient jamais masquées par accident.',
     updateNotifications:
@@ -93,7 +92,9 @@ export const help = {
   layout: {
     summary: 'Maîtriser la disposition',
     flexibleTabs:
-      '<0>Onglets flexibles :</0> glissez-déposez les onglets non seulement pour les réordonner, mais aussi pour les déplacer entre les volets de grille, les barres latérales ou les barres supérieure/inférieure.',
+      "<0>Onglets flexibles :</0> faites glisser un onglet sur un volet ou une barre latérale pour l'y afficher, sur un onglet à l'écran pour prendre son volet, ou sur le groupe « Masqués » pour le mettre de côté sans le fermer. Les onglets masqués se réordonnent par glisser-déposer, et un clic du milieu ferme n'importe quel onglet.",
+    dock:
+      "<0>Le dock :</0> la colonne d'icônes et la liste des onglets se déplacent ensemble. Placez-les sur n'importe quel bord de la fenêtre avec les quatre boutons au-dessus des onglets ou en faisant glisser la poignée à côté ; <1>Paramètres → Apparence → Position du dock</1> fait de même. Un onglet à l'écran porte le numéro de son volet, et le même numéro figure dans le coin de ce volet. Un onglet masqué indique à quoi il est connecté ou, en jaune, la dernière ligne de sortie arrivée pendant qu'il était masqué. En haut ou en bas, les onglets masqués qui ne tiennent pas sont regroupés sous un bouton.",
     resizing:
       '<0>Redimensionnement :</0> redimensionnez tout en faisant glisser les séparateurs ou le <1>point d\'intersection 2D</1> (là où 4 volets se rejoignent).',
     emptyPaneHints:
@@ -103,7 +104,7 @@ export const help = {
     fixedTerminalSize:
       '<0>Taille de terminal fixe :</0> certains équipements réseau (p. ex. Huawei USG/VRP) verrouillent la largeur de leur terminal à la connexion et ignorent les redimensionnements ultérieurs ; l\'édition d\'une commande rappelée qui se replie se désynchronise donc. <1>Paramètres → Général → Terminal → Taille de terminal fixe</1> fige la grille à la largeur négociée à la connexion. <2>Auto</2> ne fige que les appareils reconnus par HoTTY à partir de l\'identification SSH ; vous pouvez aussi forcer l\'option globalement, par connexion dans le formulaire de connexion, ou pour l\'onglet courant depuis son menu contextuel. Un terminal figé affiche une bande teintée lorsque le volet est plus large que la grille, et défile horizontalement lorsqu\'il est plus étroit.',
     multiWindow:
-      '<0>Fenêtres multiples :</0> ouvrez une autre fenêtre avec le bouton <1>Nouvelle fenêtre</1> de la barre latérale ou avec <2>Ctrl + Shift + N</2> — relancer HoTTY ouvre également une nouvelle fenêtre dans le même processus. Chaque fenêtre conserve ses propres volets et sessions de terminal, tandis que vos paramètres, votre thème, votre arborescence d\'hôtes et vos favoris restent partagés et synchronisés entre toutes les fenêtres. Un chat IA peut même être lié à un terminal exécuté dans une autre fenêtre.',
+      "<0>Fenêtres multiples :</0> ouvrez une autre fenêtre avec le bouton <1>Nouvelle fenêtre</1> du dock ou avec <2>Ctrl + Shift + N</2> — relancer HoTTY ouvre également une nouvelle fenêtre dans le même processus. Chaque fenêtre conserve ses propres volets et sessions de terminal, tandis que vos paramètres, votre thème, votre arborescence d'hôtes et vos favoris restent partagés et synchronisés entre toutes les fenêtres. Un chat IA peut même être lié à un terminal exécuté dans une autre fenêtre.",
   },
 
   copyPaste: {
@@ -135,13 +136,13 @@ export const help = {
     aiChatLogging:
       '<0>Journaux du chat IA :</0> Lorsque la journalisation est active, chaque conversation du chat IA est ajoutée à un fichier Markdown (<1>...-AICHAT-....md</1>) dans le même dossier et apparaît dans la visionneuse de journaux. Les images jointes sont signalées mais non enregistrées. Démarrer un nouveau chat, fermer un onglet ou changer de fournisseur IA commence un nouveau fichier. Le texte que vous saisissez est enregistré tel quel : évitez de taper des identifiants dans le chat.',
     logViewer:
-      '<0>Visionneuse de journaux :</0> cliquez sur le bouton <1>Visionneuse de journaux</1> dans la barre d\'onglets pour ouvrir un volet dédié à la navigation des journaux. Il répertorie tous les fichiers journaux enregistrés et vous permet de les ouvrir et de les rechercher sans quitter HoTTY.',
+      '<0>Visionneuse de journaux :</0> ouvrez <1>Nouvelle session → Visionneuse de journaux</1> à la fin de la liste des onglets pour un volet dédié à la consultation des journaux. Les fichiers sont classés par jour sous l’équipement ou le chat dont ils proviennent, avec un point rouge sur celui encore en cours d’écriture. Appuyez sur le nom du dossier en haut pour ouvrir un autre dossier. Un fichier encore en cours d’écriture s’ouvre en suivant sa fin, de sorte que les nouvelles lignes défilent à l’écran ; faites défiler vers le haut pour arrêter.',
     fileTypes:
-      '<0>Types de fichiers :</0> un journal de session s\'ouvre en texte brut. Une transcription de chat IA (<1>.md</1>) s\'ouvre mise en forme — titres, tableaux et blocs de code, exactement comme la réponse apparaissait dans le volet Chat IA. Un journal du Moniteur ping (<2>.csv</2>) s\'ouvre sous forme de tableau. Un bouton de la barre de recherche ramène l\'une ou l\'autre vue au fichier brut, et la recherche fonctionne de la même façon dans toutes.',
+      '<0>Types de fichiers :</0> un journal de session s’ouvre en texte brut. Une transcription de chat IA (<1>.md</1>) s’ouvre mise en forme — titres, tableaux et blocs de code, exactement comme la réponse dans le volet Chat IA. Un journal du Moniteur ping (<2>.csv</2>) s’ouvre sous forme de tableau. Le choix à côté du nom du fichier ramène l’un ou l’autre au texte brut, et la recherche fonctionne de la même façon dans chaque affichage.',
     pingCsv:
-      '<0>CSV du Moniteur ping :</0> le Moniteur ping enregistre ses résultats dans le même dossier de journalisation défini dans <1>Paramètres → Général</1>, de sorte que ses fichiers apparaissent dans la Visionneuse de journaux à côté de vos journaux de session. Sa case <2>Journalisation CSV</2> reste indisponible tant que ce dossier n\'est pas défini.',
+      '<0>CSV du Moniteur ping :</0> le Moniteur ping enregistre ses résultats dans le même dossier de journalisation défini dans <1>Paramètres → Général</1>, ses fichiers apparaissent donc dans la Visionneuse de journaux à côté de vos journaux de session. Appuyez sur <2>Enregistrer en CSV</2> pour démarrer un fichier ; si aucun dossier n’est encore défini, les Paramètres s’ouvrent à la place.',
     search:
-      '<0>Recherche :</0> utilisez la barre de recherche dans la Visionneuse de journaux pour filtrer les lignes. Basculez le bouton <1>.*</1> pour passer entre la recherche en texte brut et par expression régulière.',
+      '<0>Recherche :</0> utilisez la barre de recherche dans la Visionneuse de journaux pour trouver du texte, et choisissez Lignes correspondantes pour ne voir que les lignes qui correspondent. Basculez le bouton <1>.*</1> pour passer de la recherche en texte brut à la recherche par expression régulière.',
   },
 
 
@@ -149,35 +150,35 @@ export const help = {
     summary:
       'Serveur de fichiers (TFTP / SFTP)',
     intro:
-      'Ouvrez le panneau Serveur de fichiers via <0><1></1></0> (Features) → <2>« File Server »</2>. Choisissez un dossier à partager et démarrez un serveur TFTP ou SFTP pour que les équipements réseau (p. ex. Cisco) téléchargent ou envoient le firmware via le LAN.',
+      'Ouvrez le panneau Serveur de fichiers via <0><1></1> Nouvelle session</0> → <2>« File Server »</2>. Choisissez un dossier à partager, puis activez TFTP et/ou SFTP avec leurs interrupteurs pour que les équipements réseau (p. ex. Cisco) puissent récupérer ou envoyer du firmware via le LAN. Le haut du panneau indique l’adresse que les équipements doivent utiliser, et chaque serveur en marche indique quoi saisir sur l’équipement, avec un bouton de copie.',
     serve:
-      '<0>Dossier partagé :</0> Choisissez le dossier avec Parcourir. Seuls les fichiers qu\'il contient sont accessibles ; la traversée de chemin et les liens symboliques sont bloqués.',
+      '<0>Dossier partagé :</0> Appuyez sur le bouton de dossier en haut pour le choisir. Seuls les fichiers qu’il contient sont accessibles ; la traversée de chemin et les échappements par lien symbolique sont bloqués.',
     tftp:
-      '<0>TFTP :</0> UDP (port 69 par défaut). La méthode classique pour charger le firmware Cisco IOS avec <1>copy tftp: flash:</1>. Lecture seule par défaut ; activez <2>Allow uploads</2> pour les transferts équipement→PC.',
+      '<0>TFTP :</0> UDP (port 69 par défaut). La méthode classique pour charger le firmware Cisco IOS avec <1>copy tftp: flash:</1>. Téléchargement seul par défaut ; choisissez <2>Accepter les envois</2> pour les transferts équipement→PC.',
     sftp:
       '<0>SFTP :</0> Basé sur SSH (port 2222 par défaut) avec authentification par identifiant/mot de passe. La clé d\'hôte est générée automatiquement et stockée chiffrée.',
     firewall:
-      '<0>Pare-feu Windows :</0> Si le trafic entrant est bloqué, le panneau l\'indique et propose <1>Allow through firewall</1> (un clic, administrateur requis).',
+      '<0>Pare-feu Windows :</0> Chaque serveur vérifie le pare-feu avant que vous le démarriez. Si le trafic entrant est bloqué, il l’indique et propose <1>Autoriser via le pare-feu</1> (un clic, administrateur requis).',
     security:
-      '<0>Sécurité :</0> Démarrer un serveur expose le dossier choisi à votre réseau local. Ne partagez que des fichiers de confiance et laissez les envois désactivés sauf si nécessaire.',
+      '<0>Sécurité :</0> Un serveur en marche expose le dossier choisi à votre réseau local. Ne partagez que des fichiers de confiance et laissez les envois désactivés sauf si vous en avez besoin — le panneau vous avertit tant qu’un serveur en marche accepte les envois.',
   },
 
   interfaceTraffic: {
     summary: 'Trafic des interfaces (SNMP)',
     intro:
-      'Ouvrez le volet Trafic des interfaces via <0><1></1></0> (Fonctionnalités) → <2>« Interface Traffic »</2>. Il interroge un équipement réseau en SNMP et affiche le débit par interface en temps réel, à côté de vos terminaux.',
+      'Ouvrez le volet Trafic des interfaces via <0><1></1> Nouvelle session</0> → <2>« Interface Traffic »</2>. Il interroge un équipement réseau en SNMP et affiche le débit par interface en temps réel, à côté de vos terminaux.',
     connect:
-      '<0>Connexion :</0> Saisissez le nom d\'hôte ou l\'adresse IP de l\'équipement et choisissez la version SNMP. <1>v2c</1> utilise une chaîne de communauté ; <2>v3</2> demande un nom d\'utilisateur et un niveau de sécurité.',
+      '<0>Connexion :</0> Saisissez l’hôte ou l’adresse IP de l’équipement, choisissez <1>v2c</1> (chaîne de communauté) ou <2>v3</2> (nom d’utilisateur et niveau de sécurité), puis appuyez sur Se connecter et surveiller. Les équipements déjà utilisés sont listés au-dessus du formulaire ; appuyez sur l’un d’eux pour le remplir.',
     discover:
-      '<0>Lister les interfaces :</0> Teste la connexion et liste les interfaces de l\'équipement. <1>Démarrer</1> lance ensuite l\'interrogation : les débits apparaissent à partir du deuxième relevé, le premier servant de référence.',
+      '<0>Pendant la surveillance :</0> Le formulaire se replie en une ligne indiquant l’équipement, avec l’intervalle et Arrêter. <1>Modifier</1> arrête et revient au formulaire. Les débits apparaissent à partir du deuxième sondage, car le premier fixe la référence — le tableau affiche un compte à rebours jusque-là.',
     columns:
-      '<0>Colonnes :</0> <1>bps</1> et <2>pps</2> en entrée/sortie, erreurs et rejets en entrée/sortie, ainsi que le nom, la description, l\'état et la vitesse de chaque interface. Cliquez sur une colonne pour trier, filtrez par nom ou description, ou cochez <3>Actives uniquement</3> pour masquer les interfaces hors service.',
+      '<0>Colonnes :</0> Réception et émission affichent une barre d’utilisation, le débit et un graphique des sondages récents ; survolez pour voir <1>%</1> et <2>pps</2>. Les erreurs et rejets n’apparaissent que s’ils ont augmenté depuis le dernier sondage. Cliquez sur une ligne pour un graphique plus grand, sur une colonne pour trier, et laissez <3>En service uniquement</3> activé pour masquer les interfaces inactives.',
     v3:
       '<0>Sécurité SNMP v3 :</0> <1>noAuthNoPriv</1>, <2>authNoPriv</2> (authentification MD5/SHA) et <3>authPriv</3> (ajoute le chiffrement DES/AES) sont pris en charge, avec un nom de contexte facultatif. noAuthNoPriv transmet tout sans authentification ni chiffrement.',
     counters:
       '<0>Compteurs 64 bits :</0> Utilisés lorsque l\'équipement propose <1>ifXTable</1>. Les équipements limités aux compteurs 32 bits fonctionnent toujours, mais le volet le signale : ceux-ci débordent en 34 secondes environ sur un lien 1 Gbit/s saturé.',
     remember:
-      '<0>Paramètres enregistrés :</0> Chaque volet conserve ses propres paramètres d\'équipement. Cochez <1>Mémoriser ces paramètres de connexion</1> pour enregistrer aussi les identifiants : ils sont chiffrés avec Windows DPAPI avant d\'être stockés. Laissez la case décochée pour les saisir à chaque fois.',
+      '<0>Équipements enregistrés :</0> Chaque équipement auquel vous vous connectez est conservé dans la liste Déjà utilisés, partagée par tous les volets ; × en oublie un. Cochez <1>Mémoriser aussi les mots de passe</1> pour enregistrer aussi les identifiants — ils sont chiffrés avec Windows DPAPI avant d’être enregistrés.',
     enable:
       '<0>Activer / désactiver :</0> Le volet peut être désactivé dans <1>Paramètres → Fonctionnalités</1>.',
   },
@@ -185,11 +186,11 @@ export const help = {
   webBrowser: {
     summary: 'Navigateur web et favoris',
     intro:
-      'Ouvrez des pages web dans HoTTY grâce à un navigateur intégré — pratique pour les interfaces web d’administration des équipements réseau (routeurs, commutateurs, iLO/iDRAC) à côté de vos terminaux. Ouvrez-le depuis l’onglet <1>🌐 Web</1> de la boîte de dialogue <0>Nouvelle session</0> : cliquez sur <2>🆕 Nouveau navigateur web</2> pour un onglet vierge, ou double-cliquez sur un favori enregistré pour ouvrir ce site.',
+      'Ouvrez des pages web dans HoTTY grâce à un navigateur intégré — pratique pour les interfaces web d’administration des équipements réseau (routeurs, commutateurs, iLO/iDRAC) à côté de vos terminaux. Choisissez <1>🌐 Web</1> dans le menu <0>Nouvelle session</0>, puis cliquez sur <2>🆕 Nouveau navigateur web</2> pour un onglet vierge, ou double-cliquez sur un favori enregistré pour ouvrir ce site.',
     bookmarks:
-      '<0>Favoris :</0> Organisez les sites dans une arborescence de dossiers sous l’onglet <1>Web</1> : ajoutez, renommez, supprimez et glissez pour réorganiser. Double-cliquez sur un favori pour l’ouvrir dans un nouveau volet de navigateur. Pendant la navigation, le bouton des favoris de la barre d’outils affiche vos favoris enregistrés pour un accès rapide.',
+      '<0>Favoris :</0> Organisez les sites dans une arborescence de dossiers dans la boîte de dialogue <1>Web</1> : ajoutez, renommez, supprimez et glissez pour réorganiser. Double-cliquez sur un favori pour l’ouvrir dans un nouveau volet de navigateur. Pendant la navigation, le bouton des favoris de la barre d’outils affiche vos favoris enregistrés pour un accès rapide.',
     openAll:
-      '<0>Ouvrir tous les favoris :</0> Faites un clic droit sur un dossier de favoris — dans l’onglet <1>Web</1> ou la liste des favoris du navigateur — et choisissez <2>Tout ouvrir</2> pour ouvrir chaque favori qu’il contient (y compris les sous-dossiers), chacun dans son propre volet de navigateur. Lorsqu’un dossier contient 5 favoris ou plus, une confirmation est demandée au préalable.',
+      '<0>Ouvrir tous les favoris :</0> Faites un clic droit sur un dossier de favoris — dans la boîte de dialogue <1>Web</1> ou la liste des favoris du navigateur — et choisissez <2>Tout ouvrir</2> pour ouvrir chaque favori qu’il contient (y compris les sous-dossiers), chacun dans son propre volet de navigateur. Lorsqu’un dossier contient 5 favoris ou plus, une confirmation est demandée au préalable.',
     star:
       '<0>★ Ajouter cette page aux favoris :</0> Pendant la navigation, cliquez sur le bouton <1>★</1> de la barre d’outils pour enregistrer la page actuelle dans le dossier de votre choix.',
     toolbar:
@@ -199,7 +200,7 @@ export const help = {
     clearData:
       '<0>Effacer les données de navigation :</0> Ouvrez le menu ⋯ Plus de la barre d’outils et choisissez Effacer les données de navigation pour effacer les cookies et données de sites, le cache, l’historique, les mots de passe enregistrés et la saisie automatique — vous choisissez quoi supprimer. Vos favoris et les paramètres de HoTTY sont toujours conservés.',
     enable:
-      '<0>Activer / désactiver :</0> L’onglet Web peut être désactivé dans <1>Paramètres → Fonctionnalités</1>.',
+      '<0>Activer / désactiver :</0> L’entrée Web du menu Nouvelle session peut être désactivée dans <1>Paramètres → Fonctionnalités</1>.',
   },
 
 
@@ -221,7 +222,7 @@ export const help = {
     summary: 'Aperçu des fonctionnalités d\'IA',
     aiChatHeading: 'Chat IA',
     aiChatIntro:
-      'Cliquez sur <0><1></1></0> (Fonctionnalités) dans la barre d\'onglets → <2>« Chat IA »</2> pour ouvrir le volet de chat IA. À l\'intérieur, la bande d\'onglets en haut vous permet de conserver plusieurs conversations en parallèle — utilisez <3>+</3> pour démarrer un nouvel onglet. Saisissez votre question et appuyez sur <4>Ctrl + Entrée</4> pour l\'envoyer.',
+      "Cliquez sur <0><1></1> Nouvelle session</0> → <2>« Chat IA »</2> pour ouvrir le volet de chat IA. À l'intérieur, la bande d'onglets en haut vous permet de conserver plusieurs conversations en parallèle — utilisez <3>+</3> pour démarrer un nouvel onglet. Saisissez votre question et appuyez sur <4>Ctrl + Entrée</4> pour l'envoyer.",
     linkedTerminal:
       '<0>Terminaux surveillés :</0> démarrer la Surveillance IA sur un terminal l\'ajoute à votre onglet de chat IA actif — activez-la sur plusieurs terminaux et une seule conversation les surveille tous à la fois. Chaque terminal surveillé apparaît sous forme de pastille à côté de la zone de saisie ; cliquez sur une pastille pour aller à ce terminal, sur son × pour arrêter de le surveiller, ou sur le + à côté des pastilles pour en ajouter un autre (un terminal déconnecté est grisé et se relie automatiquement à la reconnexion). Lorsque plusieurs terminaux sont surveillés, l\'IA dirige chaque commande vers le bon ; sinon elle s\'exécute sur le terminal utilisé le plus récemment. Utilisez + dans la barre d\'onglets pour une conversation distincte avec son propre ensemble de terminaux.',
     streamWatchdog:

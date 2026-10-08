@@ -23,7 +23,9 @@ describe('HelpModal', () => {
 
   it('renders keyboard shortcuts', () => {
     render(<HelpModal open={true} onClose={() => {}} />);
-    expect(screen.getAllByText('Ctrl + N').length).toBeGreaterThanOrEqual(1);
+    // Ctrl + N is the shell's own key in a terminal; HoTTY does not take it.
+    expect(screen.queryByText('Ctrl + N')).toBeNull();
+    expect(screen.getAllByText('Ctrl + Shift + N').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('Ctrl + W')).toBeTruthy();
     expect(screen.getAllByText('Ctrl + V').length).toBeGreaterThanOrEqual(1);
   });

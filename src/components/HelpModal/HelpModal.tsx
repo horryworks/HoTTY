@@ -7,12 +7,10 @@ import './HelpModal.css';
 const DEFAULT_SIZE = { width: 560, height: 640 };
 const MIN_SIZE = { width: 380, height: 300 };
 
-const FeaturesIcon: React.FC<{ size?: number }> = ({ size = 14 }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'inline', verticalAlign: 'middle', marginInline: '2px' }}>
-    <rect x="3" y="3" width="7" height="7" rx="1" />
-    <rect x="14" y="3" width="7" height="7" rx="1" />
-    <rect x="3" y="14" width="7" height="7" rx="1" />
-    <rect x="14" y="14" width="7" height="7" rx="1" />
+/** The "+" of the New Session row at the end of the tab list. */
+const NewSessionIcon: React.FC<{ size?: number }> = ({ size = 14 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'inline', verticalAlign: 'middle', marginInline: '2px' }}>
+    <path d="M12 5v14M5 12h14" />
   </svg>
 );
 
@@ -48,7 +46,6 @@ export function HelpModal({ open, onClose }: HelpModalProps) {
             <summary>{t('help.shortcuts.summary')}</summary>
             <div className="help-section-body">
               <ul className="shortcuts-list">
-                <li><code>Ctrl + N</code> {t('help.shortcuts.newSession')}</li>
                 <li><code>Ctrl + Shift + N</code> {t('help.shortcuts.newWindow')}</li>
                 <li><code>Ctrl + Tab</code> {t('help.shortcuts.focusNext')}</li>
                 <li><code>Ctrl + Shift + Tab</code> {t('help.shortcuts.focusPrev')}</li>
@@ -246,6 +243,9 @@ export function HelpModal({ open, onClose }: HelpModalProps) {
                 <Trans i18nKey="help.layout.flexibleTabs" components={[<strong key="0" />]} />
               </p>
               <p className="help-text">
+                <Trans i18nKey="help.layout.dock" components={[<strong key="0" />, <strong key="1" />]} />
+              </p>
+              <p className="help-text">
                 <Trans i18nKey="help.layout.resizing" components={[<strong key="0" />, <strong key="1" />]} />
               </p>
               <p className="help-text">
@@ -334,7 +334,7 @@ export function HelpModal({ open, onClose }: HelpModalProps) {
             <summary>{t('help.fileServer.summary')}</summary>
             <div className="help-section-body">
               <p className="help-text">
-                <Trans i18nKey="help.fileServer.intro" components={[<strong key="0" />, <FeaturesIcon key="1" />, <strong key="2" />]} />
+                <Trans i18nKey="help.fileServer.intro" components={[<strong key="0" />, <NewSessionIcon key="1" />, <strong key="2" />]} />
               </p>
               <ul className="shortcuts-list">
                 <li><Trans i18nKey="help.fileServer.serve" components={[<strong key="0" />]} /></li>
@@ -350,7 +350,7 @@ export function HelpModal({ open, onClose }: HelpModalProps) {
             <summary>{t('help.interfaceTraffic.summary')}</summary>
             <div className="help-section-body">
               <p className="help-text">
-                <Trans i18nKey="help.interfaceTraffic.intro" components={[<strong key="0" />, <FeaturesIcon key="1" />, <strong key="2" />]} />
+                <Trans i18nKey="help.interfaceTraffic.intro" components={[<strong key="0" />, <NewSessionIcon key="1" />, <strong key="2" />]} />
               </p>
               <ul className="shortcuts-list">
                 <li><Trans i18nKey="help.interfaceTraffic.connect" components={[<strong key="0" />, <strong key="1" />, <strong key="2" />]} /></li>
@@ -410,7 +410,7 @@ export function HelpModal({ open, onClose }: HelpModalProps) {
             <div className="help-section-body">
               <p className="help-text" style={{ marginBottom: '4px' }}><strong>{t('help.aiFeatures.aiChatHeading')}</strong></p>
               <p className="help-text">
-                <Trans i18nKey="help.aiFeatures.aiChatIntro" components={[<strong key="0" />, <FeaturesIcon key="1" />, <strong key="2" />, <strong key="3" />, <code key="4" />]} />
+                <Trans i18nKey="help.aiFeatures.aiChatIntro" components={[<strong key="0" />, <NewSessionIcon key="1" />, <strong key="2" />, <strong key="3" />, <code key="4" />]} />
               </p>
               <p className="help-text">
                 <Trans i18nKey="help.aiFeatures.linkedTerminal" components={[<strong key="0" />]} />

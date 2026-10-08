@@ -11,6 +11,9 @@ export type Encoding = 'utf8' | 'shift_jis' | 'euc-jp';
 
 export type LayoutMode = '1x1' | '1x2' | '2x1' | '2x2' | '2x3' | '3x2';
 
+/** Which window edge the dock (the icon column plus the tab list) sits on. */
+export type DockPosition = 'left' | 'right' | 'top' | 'bottom';
+
 export type SessionStatus = 'connected' | 'disconnected';
 
 export type SessionRecordStatus = SessionStatus | 'connecting' | 'error';
@@ -385,6 +388,34 @@ export interface SnmpConfig {
   retries?: number;
 }
 
+/** Ping Monitor targets and interval, kept so a new pane starts where the last one left off. */
+export interface PingMonitorConfig {
+  targets: string[];
+  intervalMs: number;
+}
+
+/**
+ * A device the Interface Traffic pane has connected to, newest first. Secrets
+ * are only present when `remember` is on, and are always DPAPI-encrypted.
+ */
+export interface SnmpSavedDevice {
+  host: string;
+  port: number;
+  version: SnmpVersion;
+  username: string;
+  securityLevel: SnmpSecurityLevel;
+  authProtocol: SnmpAuthProtocol;
+  privProtocol: SnmpPrivProtocol;
+  contextName: string;
+  intervalMs: number;
+  remember: boolean;
+  /** The device's sysName from the last poll, shown on its button. */
+  sysName?: string;
+  community?: string;
+  authPassword?: string;
+  privPassword?: string;
+}
+
 /** One interface row in the live table. */
 export interface SnmpIfRow {
   ifIndex: number;
@@ -493,6 +524,13 @@ export interface FirewallReport {
 }
 
 /** Persisted File Server pane configuration (password is never persisted). */
+/** One of this PC's IPv4 addresses (mirrors the Rust `LocalAddress`). */
+export interface LocalAddress {
+  /** The adapter's friendly name ("Ethernet", "Wi-Fi"); empty when unknown. */
+  name: string;
+  address: string;
+}
+
 export interface FileServerConfig {
   rootDir: string;
   bindAddr: string;
@@ -1043,6 +1081,36 @@ export interface SessionDialogPrefill {
   displayName?: string;
   nonce: number;
 }
+
+/**
+ * Which connection dialog is open. Each one offers only what its kind needs:
+ * `hosts` is the host tree with an SSH / Telnet form, `serial` a small serial
+ * form, `gcp` the GCP instance list, `web` the Web bookmarks.
+ */
+export type SessionDialogKind = 'hosts' | 'serial' | 'gcp' | 'web';
+
+/**
+ * A New Session menu row that opens a dialog. The local shells (WSL, Command
+ * Prompt, PowerShell, Git Bash) open straight away instead; see
+ * `LocalShellChoice`.
+ */
+export type NewSessionChoice = 'ssh' | 'telnet' | 'serial' | 'gcp' | 'web';
+
+/**
+ * Open the SSH / Telnet dialog on a blank form of this protocol. `nonce`
+ * changes per pick so choosing the same one again re-applies it.
+ */
+export interface SessionDialogProtocolPick {
+  protocol: 'ssh' | 'telnet';
+  nonce: number;
+}
+
+/** A local shell started from the New Session menu without a dialog. */
+export type LocalShellChoice =
+  | { protocol: 'wsl'; distribution: string }
+  | { protocol: 'cmd' }
+  | { protocol: 'powershell' }
+  | { protocol: 'git-bash'; shellPath: string };
 
 // ---------------------------------------------------------------------------
 // SSH keys (Settings -> SSH Keys, and the session dialog's key picker)

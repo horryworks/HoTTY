@@ -2,9 +2,11 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { GridLayout } from './components/GridLayout/GridLayout';
 import { Sidebar } from './components/Sidebar/Sidebar';
 import { sidebarPaneId } from './components/Sidebar/sidebarHelpers';
-import { AppSidebar } from './components/AppSidebar/AppSidebar';
-import { TabBar } from './components/TabBar/TabBar';
+import { Dock } from './components/Dock/Dock';
+import { PaneBadge } from './components/PaneBadge/PaneBadge';
 import { buildTabItems, type ConversationSummary } from './components/TabBar/tabBarHelpers';
+import { TerminalPaneHeader } from './components/TerminalPaneHeader/TerminalPaneHeader';
+import { PaneHeader } from './components/PaneHeader/PaneHeader';
 import { conversationColorIndex } from './utils/conversationColor';
 import { TerminalView } from './components/Terminal/Terminal';
 import { ConnectingOverlay } from './components/ConnectingOverlay/ConnectingOverlay';
@@ -57,7 +59,9 @@ import { useAiWorkerSessions, configForAdopt } from './hooks/useAiWorkerSessions
 import type { AiWorkerSession } from './stores/aiWorkerSessionStore';
 import { useSessionNameShare } from './hooks/useSessionNameShare';
 import { connectDeclinedNote } from './components/AIChatPane/terminalOutputUtils';
-import { usePaneStore, gridPaneIds, AI_WINDOW_PANE_ID, SIDEBAR_PANE_IDS } from './stores/paneStore';
+import { usePaneStore, gridPaneIds, AI_WINDOW_PANE_ID } from './stores/paneStore';
+import { useSidebarLayoutStore } from './stores/sidebarLayoutStore';
+import { useTabActivity } from './hooks/useTabActivity';
 import { initOverlayWatcher } from './stores/uiOverlayStore';
 import { useWebBrowserBookmarkStore } from './stores/webBrowserBookmarkStore';
 import { useWebBrowserZoomStore } from './stores/webBrowserZoomStore';
@@ -76,12 +80,15 @@ import { viewFromRecord } from './utils/sessionLookup';
 import { disposePaneStreams } from './hooks/useChatStream';
 import type { AiDialogRequest } from './utils/aiWindowHandover';
 import { remoteSessionName } from './utils/sessionNameShare';
-import type { LinkableSession, SessionDialogPrefill, SessionInfo } from './types/appTypes';
+import type { LinkableSession, LocalShellChoice, NewSessionChoice, SessionDialogKind, SessionDialogPrefill, SessionDialogProtocolPick, SessionInfo } from './types/appTypes';
+import { localShellPayload } from './utils/localShellPayload';
+import { forgetPaneMemory } from './hooks/usePaneMemory';
 import {
   makeFeaturePaneId,
   getPaneContentType,
   isFeaturePane,
   isWorkerSessionId,
+  FEATURE_LABEL_KEYS,
   type FeaturePaneInfo,
   type FeaturePaneType,
 } from './utils/paneTypes';
@@ -145,7 +152,7 @@ function App() {
   // orchestrator (wired in an effect below) is sufficient.
   const handleSessionRemovedRef = useRef<(id: string) => void>(() => {});
   const onSessionRemoved = useCallback((id: string) => handleSessionRemovedRef.current(id), []);
-  const { sessions, openSession, adoptSession, closeSession, setSessionFixedSize } = useSessionManager({
+  const { sessions, openSession, adoptSession, closeSession, getSession, setSessionFixedSize } = useSessionManager({
     onPasteRequest: handlePasteRequest,
     onSessionRemoved,
   });
@@ -181,6 +188,11 @@ function App() {
   const removeSessionFromStore = usePaneStore((s) => s.removeSession);
   const reorderSessionInStore = usePaneStore((s) => s.reorderSession);
   const moveSessionToPane = usePaneStore((s) => s.moveSessionToPane);
+  const unplaceSession = usePaneStore((s) => s.unplaceSession);
+  const showLeftBar = useSidebarLayoutStore((s) => s.showLeftSidebar);
+  const showRightBar = useSidebarLayoutStore((s) => s.showRightSidebar);
+  const showTopBar = useSidebarLayoutStore((s) => s.showTopBar);
+  const showBottomBar = useSidebarLayoutStore((s) => s.showBottomBar);
 
   // Publish this window's terminal names and take in the other windows', so a
   // popped-out AI Chat shows real names and can auto-rebind on reconnect. The
@@ -209,7 +221,7 @@ function App() {
   // the AI Chat pane immediately instead of on the next unrelated App re-render.
   const terminalBackground = useSettingsStore((s) => s.terminalBackground);
   const fontFamily = useSettingsStore((s) => s.fontFamily);
-  const sidebarPosition = useSettingsStore((s) => s.sidebarPosition);
+  const dockPosition = useSettingsStore((s) => s.dockPosition);
   const enabledFeatures = useSettingsStore((s) => s.enabledFeatures);
   const updateSetting = useSettingsStore((s) => s.update);
 
@@ -618,6 +630,7 @@ function App() {
     showDialogForRemote: (req) => {
       setAiDialogIntent({ paneId: req.paneId, tabId: req.tabId, key: req.key, remote: req });
       setDialogPrefill(req.prefill);
+      setDialogKind('hosts');
       setConnectOpen(true);
     },
     onRemoteDialogResult: (paneId, tabId, key, sessionId) => {
@@ -653,16 +666,52 @@ function App() {
       }))
     : [];
 
-  const visibleTabIds: string[] = [
+  // Panes the user can actually see, in visual order: the grid, then the edge
+  // bars that are shown. A hidden bar still holds its tab, but that tab is off
+  // screen, so it belongs with the hidden tabs (and must not count as shown).
+  const visiblePaneIds: string[] = [
     ...gridPaneIds(layoutMode),
-    ...SIDEBAR_PANE_IDS,
-  ]
+    ...(showLeftBar ? [sidebarPaneId('left')] : []),
+    ...(showRightBar ? [sidebarPaneId('right')] : []),
+    ...(showTopBar ? [sidebarPaneId('top')] : []),
+    ...(showBottomBar ? [sidebarPaneId('bottom')] : []),
+  ];
+  const visibleTabIds: string[] = visiblePaneIds
     .map((pid) => paneAllocations[pid])
     .filter((sid): sid is string => !!sid);
 
   const activeTabId: string | null = paneAllocations[activePaneId] ?? null;
 
-  const handleNewConnectionClick = () => setConnectOpen(true);
+  // Count output that arrives for tabs that are off screen.
+  useTabActivity(visibleTabIds, getSession);
+
+  // Hiding an edge bar that held the focus leaves the focus nowhere visible.
+  const activePaneVisible = visiblePaneIds.includes(activePaneId);
+  useEffect(() => {
+    if (!activePaneVisible) setActivePaneId(gridPaneIds(layoutMode)[0]);
+  }, [activePaneVisible, layoutMode, setActivePaneId]);
+
+  // Which dialog the New Session menu row opens: SSH / Telnet (the host tree),
+  // Serial, GCP or Web. Every other way in (an AI prefill) is the host tree.
+  const [dialogKind, setDialogKind] = useState<SessionDialogKind>('hosts');
+  // SSH or Telnet opens the host-tree dialog on a blank form of that protocol.
+  // The pick belongs to that one opening: closing the dialog drops it, or the
+  // next opening (an AI prefill) would reset the form to it again.
+  const [dialogProtocolPick, setDialogProtocolPick] = useState<SessionDialogProtocolPick | undefined>(undefined);
+  const handleNewConnectionClick = (choice: NewSessionChoice) => {
+    if (choice === 'ssh' || choice === 'telnet') {
+      setDialogKind('hosts');
+      setDialogProtocolPick((prev) => ({ protocol: choice, nonce: (prev?.nonce ?? 0) + 1 }));
+    } else {
+      setDialogKind(choice);
+    }
+    setConnectOpen(true);
+  };
+  // The local shells have nothing to fill in, so the menu starts them directly.
+  // A failure surfaces as a toast and the tab closes itself, as for any connect.
+  const handleOpenLocalShell = (choice: LocalShellChoice) => {
+    handleConnectSubmit(localShellPayload(choice, useSettingsStore.getState().globalEncoding));
+  };
 
   const handleConnectSubmit = (payload: ConnectSubmitPayload): string => {
     // Start the connection AND allocate its pane right away, while the dialog
@@ -699,6 +748,7 @@ function App() {
   // belt-and-suspenders alongside TerminalXtermHost's active-effect, which only
   // focuses once the session leaves 'connecting'.
   const handleSessionConnected = (id: string) => {
+    setDialogProtocolPick(undefined);
     setConnectOpen(false);
     // The pane's TerminalXtermHost focuses the terminal itself once the status
     // leaves 'connecting'; this extra focus is belt-and-suspenders and guarded
@@ -716,23 +766,33 @@ function App() {
     removeSessionFromStore(id);
   };
 
+  /** Reorder within the hidden tabs: the list shows them in `sessionOrder`
+   *  order, so positions are looked up there rather than in the list. */
+  const handleMoveHiddenTab = (dragId: string, targetId: string, place: 'before' | 'after') => {
+    const from = sessionOrder.indexOf(dragId);
+    let to = sessionOrder.indexOf(targetId);
+    if (from < 0 || to < 0) return;
+    if (place === 'after') to += 1;
+    if (to > from) to -= 1;
+    if (to !== from) reorderSessionInStore(from, to);
+  };
+
   const handleSelectTab = (id: string) => {
-    const pid = Object.entries(paneAllocations).find(
-      ([, sid]) => sid === id
-    )?.[0];
+    const pid = visiblePaneIds.find((p) => paneAllocations[p] === id);
     if (pid) {
       setActivePaneId(pid);
       return;
     }
-    // A tab in no pane (opened when every pane was taken) is shown in the
-    // active pane; what was there becomes a hidden tab in its place. Before,
-    // the click did nothing, so the only way to see it was dragging it.
-    moveSessionToPane(id, activePaneId);
+    // A tab that is not on screen (opened when every pane was taken, or left
+    // in an edge bar that is now hidden) is shown in the active pane; what was
+    // there becomes a hidden tab in its place.
+    moveSessionToPane(id, visiblePaneIds.includes(activePaneId) ? activePaneId : visiblePaneIds[0]);
   };
 
   const handleCloseTab = async (id: string) => {
     if (isFeaturePane(id)) {
       const type = getPaneContentType(id);
+      forgetPaneMemory(id);
       if (type === 'ping-monitor') {
         tauriService.pingMonitorStop(id).catch(() => {});
       }
@@ -866,11 +926,44 @@ function App() {
     const featureInfo = sid && contentType !== 'session' ? featurePanes.get(sid) : undefined;
 
     const isFlashed = !!sid && sid === flashedSessionId;
+    // Every pane with content gets the same one-line header: the pane mark, its
+    // name and a close button (a terminal adds its target and the AI link).
+    const showHeader = !!sid && !IS_AI_CHAT_WINDOW;
+    const terminalHeader = showHeader && !!session;
+    const featureHeader = showHeader && !!featureInfo;
+    // A feature pane named after its content (a Web Browser's site) says so
+    // after the kind of pane it is.
+    const featureLabel = featureInfo ? t(FEATURE_LABEL_KEYS[featureInfo.type]) : '';
+    const featureName = featureInfo ? tabItems.find((i) => i.id === featureInfo.id)?.displayName : undefined;
     return (
       <div
-        className={`pane${paneId === activePaneId ? ' pane-active' : ''}${isFlashed ? ' pane-flash' : ''}`}
+        className={`pane${paneId === activePaneId ? ' pane-active' : ''}${isFlashed ? ' pane-flash' : ''}${showHeader ? ' pane-has-header' : ''}`}
         onClick={() => setActivePaneId(paneId)}
       >
+        {featureHeader && (
+          <PaneHeader
+            paneId={paneId}
+            title={featureLabel}
+            detail={featureName && featureName !== featureLabel ? featureName : undefined}
+            onClose={() => handleCloseTab(featureInfo.id)}
+          />
+        )}
+        {terminalHeader && (
+          <TerminalPaneHeader
+            paneId={paneId}
+            session={session}
+            watch={(() => {
+              const item = tabItems.find((i) => i.id === session.id);
+              return item?.isWatching
+                ? { colorIndex: item.watchColorIndex, ownerTabId: item.watchOwnerTabId }
+                : undefined;
+            })()}
+            onClose={handleCloseTab}
+            onToggleWatch={toggleWatch}
+            conversations={aiConversations}
+            onWatchInConversation={watchInConversation}
+          />
+        )}
         <div className="pane-body">
           <ErrorBoundary
             fallback={(error, reset) => (
@@ -1015,6 +1108,7 @@ function App() {
                 if (aiWindow.delegateDialog(featureInfo.id, tabId, key, prefill)) return;
                 setAiDialogIntent({ paneId: featureInfo.id, tabId, key });
                 setDialogPrefill(prefill);
+                setDialogKind('hosts');
                 setConnectOpen(true);
               }}
               onMaterializeWorker={(sid) => { void workers.materializeWorker(sid); }}
@@ -1030,9 +1124,7 @@ function App() {
             />
           ) : (
             <div className="pane-empty">
-              {/^\d+$/.test(paneId) && (
-                <span className="pane-label">{t('chrome.pane.label', { number: Number(paneId) + 1 })}</span>
-              )}
+              {/^\d+$/.test(paneId) && <PaneBadge paneId={paneId} variant="large" />}
               <span className="drop-hint">{t('chrome.pane.dropTabHere')}</span>
             </div>
           )}
@@ -1049,22 +1141,24 @@ function App() {
         className={
           IS_AI_CHAT_WINDOW
             ? 'app-container app-container-chat'
-            : `app-container app-container-${sidebarPosition}`
+            : `app-container app-container-dock-${dockPosition}`
         }
       >
         {!IS_AI_CHAT_WINDOW && (
-        <AppSidebar onOpenSettings={() => setSettingsOpen(true)} onOpenHelp={() => setHelpOpen(true)} />
-        )}
-        <div className="main-layout">
-          {!IS_AI_CHAT_WINDOW && (
-          <TabBar
+          <Dock
+            onOpenSettings={() => setSettingsOpen(true)}
+            onOpenHelp={() => setHelpOpen(true)}
             tabItems={tabItems}
             activeTabId={activeTabId}
-            visibleTabIds={visibleTabIds}
+            visiblePanes={visiblePaneIds}
+            paneAllocations={paneAllocations}
             onSelect={handleSelectTab}
             onClose={handleCloseTab}
             onNew={handleNewConnectionClick}
-            onReorder={reorderSessionInStore}
+            onOpenLocal={handleOpenLocalShell}
+            onMoveHidden={handleMoveHiddenTab}
+            onPlace={moveSessionToPane}
+            onHide={unplaceSession}
             onToggleWatch={toggleWatch}
             conversations={aiConversations}
             onWatchInConversation={watchInConversation}
@@ -1101,7 +1195,8 @@ function App() {
             onNewFileServer={enabledFeatures['file-server'] ? () => handleNewFeaturePane('file-server') : undefined}
             onNewAiChat={enabledFeatures['ai-chat'] ? openAiChatPane : undefined}
           />
-          )}
+        )}
+        <div className="main-layout">
           <div className="content-area">
             {IS_AI_CHAT_WINDOW ? (
               // One pane, no grid and no edge bars. It still goes through
@@ -1161,9 +1256,12 @@ function App() {
                 else enqueuePendingMessage(aiDialogIntent.paneId, aiDialogIntent.tabId, connectDeclinedNote(aiDialogIntent.key));
               }
               setDialogPrefill(undefined);
+              setDialogProtocolPick(undefined);
               setConnectOpen(false);
             }}
             prefill={dialogPrefill}
+            kind={dialogKind}
+            initialProtocol={dialogProtocolPick}
             onConnect={handleConnectSubmit}
             onConnected={handleSessionConnected}
             onCancelConnect={handleCancelConnect}

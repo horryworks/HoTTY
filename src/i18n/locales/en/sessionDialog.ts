@@ -1,13 +1,9 @@
-// New Session dialog (connection flow). Covers the dialog chrome, the host/GCP
-// tabs, the status banner, the connection form fields/labels/placeholders, the
-// protocol-specific field groups (SSH / Serial / WSL / Git Bash), validation
-// messages, and the discard-changes confirmation.
+// Connection dialogs (SSH / Telnet, Serial, GCP, Web): dialog chrome, the
+// status banner, connection form fields/labels/placeholders, SSH and Serial
+// field groups, validation messages, and the discard-changes confirmation.
 export const sessionDialog = {
   defaultSessionName: '{{protocol}} session',
-  title: 'New Session',
   tabs: {
-    sourceAriaLabel: 'Connection source',
-    hosts: 'Hosts',
     gcp: 'GCP',
     web: 'Web',
   },
@@ -78,9 +74,6 @@ export const sessionDialog = {
   flowControl: {
     none: 'None',
   },
-  distributionLabel: 'Distribution',
-  noWslDistros: 'No WSL distributions found.',
-  gitBashNotInstalled: 'Git Bash is not installed.',
   encodingLabel: 'Encoding',
   fixedTerminalSizeLabel: 'Fixed terminal size',
   fixedTerminalSizeDefault: 'Use global setting',

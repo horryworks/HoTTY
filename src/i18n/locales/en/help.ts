@@ -9,7 +9,6 @@ export const help = {
 
   shortcuts: {
     summary: 'Shortcuts',
-    newSession: 'New Session Dialog',
     newWindow: 'New Window',
     focusNext: 'Focus next pane',
     focusPrev: 'Focus previous pane',
@@ -25,7 +24,7 @@ export const help = {
   gettingStarted: {
     summary: 'Getting Started',
     openDialog:
-      'Open the connection dialog via <0>Ctrl + N</0> or the <1>"New"</1> button in the sidebar. You can manage your hosts and folders in the host tree.',
+      'Click <1>+ New Session</1> at the end of the tab list and choose SSH or Telnet to open the connection dialog. You can manage your hosts and folders in the host tree.',
     doubleClick:
       '<0>Double-click:</0> Double-click a host in the tree to connect immediately. Double-click a folder — or click the arrow to its left — to open and close it; a single click only selects it.',
     hostFilter:
@@ -44,9 +43,9 @@ export const help = {
     jumpbox:
       '<0>Jumpbox (Bastion Host):</0> SSH and Telnet connections can be routed through a jumpbox. Mark any SSH host as a jumpbox in the host tree, then select it as the "via" host when editing a target host.',
     gcpIap:
-      '<0>Google Cloud IAP:</0> Connect to Google Compute Engine VMs via Identity-Aware Proxy without exposing VMs to the public internet. Open the <1>GCP</1> tab in the New Session dialog to browse all your GCE instances across every project you have access to — grouped by project, with live status (🟢 RUNNING / 🔴 stopped / 🟡 transitioning) — then double-click an instance to connect. The pane also has buttons to <2>start</2> or <3>stop</3> an instance directly, and a <4>Refresh</4> action to re-query your projects and instances. A <5>search box</5> filters the list by project or instance name as you type. The last-known list is shown <6>instantly on launch</6> and revalidated in the background, so you don\'t wait for a full query every time the pane opens. If you double-click a stopped VM, HoTTY prompts before starting it (or auto-starts when configured on a saved IAP host). <7>No SSH username, password, or private key is required</7> — HoTTY delegates the connection to <8>gcloud compute ssh --tunnel-through-iap</8>, which handles IAP tunneling, OS Login mapping, automatic SSH key generation (<9>~/.ssh/google_compute_engine</9>), key registration, and authentication on your behalf. Requires the Google Cloud SDK and a completed <10>gcloud auth login</10>.',
+      '<0>Google Cloud IAP:</0> Connect to Google Compute Engine VMs via Identity-Aware Proxy without exposing VMs to the public internet. Choose <1>GCP</1> in the New Session menu to browse all your GCE instances across every project you have access to — grouped by project, with live status (🟢 RUNNING / 🔴 stopped / 🟡 transitioning) — then double-click an instance to connect. The pane also has buttons to <2>start</2> or <3>stop</3> an instance directly, and a <4>Refresh</4> action to re-query your projects and instances. A <5>search box</5> filters the list by project or instance name as you type. The last-known list is shown <6>instantly on launch</6> and revalidated in the background, so you don\'t wait for a full query every time the pane opens. If you double-click a stopped VM, HoTTY prompts before starting it (or auto-starts when configured on a saved IAP host). <7>No SSH username, password, or private key is required</7> — HoTTY delegates the connection to <8>gcloud compute ssh --tunnel-through-iap</8>, which handles IAP tunneling, OS Login mapping, automatic SSH key generation (<9>~/.ssh/google_compute_engine</9>), key registration, and authentication on your behalf. Requires the Google Cloud SDK and a completed <10>gcloud auth login</10>.',
     gcpSshUser:
-      '<0>SSH user (usually leave blank):</0> HoTTY works out which Linux account to log in as by asking gcloud, so the <1>SSH user</1> box in the GCP tab is normally left empty. Fill it in only if a VM accepts a different account than the one detected — the connection then fails with <2>Permission denied (publickey)</2> and the error names the account that was tried. On a PC whose SSH key was never registered, HoTTY now enrolls it into the instance (or project) metadata automatically on the first connect, so you no longer need to run <3>gcloud compute ssh &lt;instance&gt; --tunnel-through-iap</3> by hand first.',
+      '<0>SSH user (usually leave blank):</0> HoTTY works out which Linux account to log in as by asking gcloud, so the <1>SSH user</1> box in the GCP dialog is normally left empty. Fill it in only if a VM accepts a different account than the one detected — the connection then fails with <2>Permission denied (publickey)</2> and the error names the account that was tried. On a PC whose SSH key was never registered, HoTTY now enrolls it into the instance (or project) metadata automatically on the first connect, so you no longer need to run <3>gcloud compute ssh &lt;instance&gt; --tunnel-through-iap</3> by hand first.',
     gcpFiltering:
       '<0>GCP access-aware filtering:</0> The GCP pane probes <1>iap.tunnelInstances.accessViaIAP</1> at the project and instance level (via <2>gcloud projects test-iam-permissions</2>) and hides VMs you have no IAP tunnel permission for. A 🔒 counter button in the pane header lets you toggle the hidden instances back on; instances without OS Login permission still show but display a 🔑 warning glyph because SSH may still work via a metadata key. When the IAM probe itself fails (network blip, deleted project), the instances stay visible so accessible VMs are never hidden by accident.',
     updateNotifications:
@@ -93,7 +92,9 @@ export const help = {
   layout: {
     summary: 'Layout Mastery',
     flexibleTabs:
-      '<0>Flexible Tabs:</0> Drag and drop tabs not just to reorder them, but to move them between grid panes, sidebars, or top/bottom bars.',
+      '<0>Flexible Tabs:</0> Drag a tab onto a pane or an edge bar to show it there, onto a tab on screen to take its pane, or onto the "Hidden" group to put it away without closing it. Hidden tabs can be dragged to reorder them, and a middle click closes any tab.',
+    dock:
+      "<0>The dock:</0> The icon column and the tab list move together. Put them on any edge of the window with the four buttons above the tabs or by dragging the grip beside them; <1>Settings → Appearance → Dock position</1> does the same. A tab on screen carries its pane's number, and the same number sits in that pane's corner. A hidden tab shows what it is connected to — or, in yellow, the newest line of output that arrived while it was hidden. On the top or bottom edge, hidden tabs that do not fit are gathered under one button.",
     resizing:
       '<0>Resizing:</0> Resize everything by dragging the dividers or the <1>2D intersection point</1> (where 4 panes meet).',
     emptyPaneHints:
@@ -103,7 +104,7 @@ export const help = {
     fixedTerminalSize:
       '<0>Fixed terminal size:</0> Some network devices (e.g. Huawei USG/VRP) lock their terminal width at login and ignore later resizes, so editing a recalled command that wraps goes out of sync. <1>Settings → General → Terminal → Fixed terminal size</1> pins the grid to the width negotiated at connect. <2>Auto</2> pins only devices HoTTY recognises from the SSH identification; you can also force it on or off globally, per connection in the connection form, or for the current tab from its right-click menu. A pinned terminal shows a tinted letterbox when the pane is wider than the grid, and scrolls horizontally when it is narrower.',
     multiWindow:
-      '<0>Multiple windows:</0> Open another window with the <1>New Window</1> button in the sidebar or <2>Ctrl + Shift + N</2> — launching HoTTY again opens a new window in the same process. Each window keeps its own panes and terminal sessions, while your settings, theme, host tree and bookmarks stay shared and in sync across all windows. An AI Chat can even link to a terminal running in another window.',
+      '<0>Multiple windows:</0> Open another window with the <1>New Window</1> button in the dock or <2>Ctrl + Shift + N</2> — launching HoTTY again opens a new window in the same process. Each window keeps its own panes and terminal sessions, while your settings, theme, host tree and bookmarks stay shared and in sync across all windows. An AI Chat can even link to a terminal running in another window.',
   },
 
   copyPaste: {
@@ -135,13 +136,13 @@ export const help = {
     aiChatLogging:
       '<0>AI chat logs:</0> While logging is on, each AI Chat conversation is appended to a Markdown file (<1>...-AICHAT-....md</1>) in the same folder and appears in the Log Viewer. Attached images are noted but not saved. Starting a new chat, closing a tab, or switching AI provider begins a new file. Text you type is saved exactly as written, so avoid typing credentials into the chat.',
     logViewer:
-      '<0>Log Viewer:</0> Click the <1>Log Viewer</1> button in the tab bar to open a dedicated log-browsing pane. It lists all saved log files and lets you open and search them without leaving HoTTY.',
+      '<0>Log Viewer:</0> Open <1>New Session → Log Viewer</1> at the end of the tab list for a dedicated log-browsing pane. Files are listed by day under the device or chat they came from, with a red dot on one still being written. Press the folder name at the top to open another folder. A file still being written opens following its end, so new lines scroll into view; scroll up to stop.',
     fileTypes:
-      '<0>File types:</0> A session log opens as plain text. An AI chat transcript (<1>.md</1>) opens formatted — headings, tables and code blocks, exactly as the reply looked in the AI Chat pane. A Ping Monitor log (<2>.csv</2>) opens as a table. A button in the search bar switches either one back to the raw file, and search works the same in both views.',
+      '<0>File types:</0> A session log opens as plain text. An AI chat transcript (<1>.md</1>) opens formatted — headings, tables and code blocks, exactly as the reply looked in the AI Chat pane. A Ping Monitor log (<2>.csv</2>) opens as a table. The choice next to the file name switches either one back to the raw text, and search works the same in every view.',
     pingCsv:
-      '<0>Ping Monitor CSV:</0> Ping Monitor saves its results into the same logging folder set in <1>Settings → General</1>, so its files appear in the Log Viewer next to your session logs. Its <2>CSV Logging</2> checkbox stays unavailable until that folder is set.',
+      '<0>Ping Monitor CSV:</0> Ping Monitor saves its results into the same logging folder set in <1>Settings → General</1>, so its files appear in the Log Viewer next to your session logs. Press <2>Record CSV</2> to start a file; with no folder set yet, it opens Settings instead.',
     search:
-      '<0>Search:</0> Use the search bar inside Log Viewer to filter lines. Toggle the <1>.*</1> button to switch between plain-text and regular expression search.',
+      '<0>Search:</0> Use the search bar inside Log Viewer to find text, and choose Matching lines to see only the lines that match. Toggle the <1>.*</1> button to switch between plain-text and regular expression search.',
   },
 
 
@@ -149,35 +150,35 @@ export const help = {
     summary:
       'File Server (TFTP / SFTP)',
     intro:
-      'Open the File Server pane via <0><1></1></0> (Features) → <2>"File Server"</2>. Choose a folder to share, then start a TFTP and/or SFTP server so network devices (e.g. Cisco) can pull or push firmware over the LAN.',
+      'Open the File Server pane via <0><1></1> New Session</0> → <2>"File Server"</2>. Choose a folder to share, then turn on TFTP and/or SFTP with their switches so network devices (e.g. Cisco) can pull or push firmware over the LAN. The top of the pane shows the address devices should use, and each running server shows what to type on the device, with a copy button.',
     serve:
-      '<0>Served folder:</0> Pick the folder with Browse. Only files inside it are accessible — path traversal and symlink escapes are blocked.',
+      '<0>Shared folder:</0> Press the folder button at the top to pick it. Only files inside it are accessible — path traversal and symlink escapes are blocked.',
     tftp:
-      '<0>TFTP:</0> UDP (default port 69). The classic method for Cisco IOS <1>copy tftp: flash:</1> firmware loads. Read-only by default; enable <2>Allow uploads</2> for device→PC transfers.',
+      '<0>TFTP:</0> UDP (default port 69). The classic method for Cisco IOS <1>copy tftp: flash:</1> firmware loads. Download only by default; choose <2>Accept uploads</2> for device→PC transfers.',
     sftp:
       '<0>SFTP:</0> SSH-based (default port 2222) with username/password auth. The host key is generated automatically and stored encrypted.',
     firewall:
-      '<0>Windows Firewall:</0> If inbound is blocked, the pane shows it and offers <1>Allow through firewall</1> (one click, requires administrator).',
+      '<0>Windows Firewall:</0> Each server checks the firewall before you start it. If inbound is blocked, it says so and offers <1>Allow through firewall</1> (one click, requires administrator).',
     security:
-      '<0>Security:</0> Starting a server exposes the chosen folder to your local network. Serve only trusted files and keep uploads off unless you need them.',
+      '<0>Security:</0> A running server exposes the chosen folder to your local network. Serve only trusted files and keep uploads off unless you need them — the pane warns you while a running server accepts uploads.',
   },
 
   interfaceTraffic: {
     summary: 'Interface Traffic (SNMP)',
     intro:
-      'Open the Interface Traffic pane via <0><1></1></0> (Features) → <2>"Interface Traffic"</2>. It polls a network device over SNMP and shows live per-interface throughput next to your terminals.',
+      'Open the Interface Traffic pane via <0><1></1> New Session</0> → <2>"Interface Traffic"</2>. It polls a network device over SNMP and shows live per-interface throughput next to your terminals.',
     connect:
-      '<0>Connect:</0> Enter the device host or IP address and pick the SNMP version. <1>v2c</1> takes a community string; <2>v3</2> takes a user name and a security level.',
+      '<0>Connect:</0> Enter the device host or IP address, choose <1>v2c</1> (community string) or <2>v3</2> (user name and security level), and press Connect and monitor. Devices you used before are listed above the form; press one to fill it in.',
     discover:
-      '<0>List interfaces:</0> Tests the connection and lists what the device has. <1>Start</1> then begins polling — rates appear from the second poll, since the first one sets the baseline.',
+      '<0>While monitoring:</0> The form folds into one line naming the device, with the interval and Stop. <1>Change</1> stops and goes back to the form. Rates appear from the second poll, since the first one sets the baseline — the table counts down to it.',
     columns:
-      '<0>Columns:</0> In/Out <1>bps</1> and <2>pps</2>, input and output errors and discards, plus each interface\'s name, description, status and speed. Click a column to sort, filter by name or description, or tick <3>Up only</3> to hide interfaces that are down.',
+      '<0>Columns:</0> Receive and send show a utilisation bar, the rate and a graph of recent polls; hover for <1>%</1> and <2>pps</2>. Errors and discards appear only when they grew since the last poll. Click a row for a larger graph, click a column to sort, and keep <3>In use only</3> on to hide interfaces that are down.',
     v3:
       '<0>SNMP v3 security:</0> <1>noAuthNoPriv</1>, <2>authNoPriv</2> (MD5/SHA authentication) and <3>authPriv</3> (adds DES/AES privacy) are all supported, with an optional context name. noAuthNoPriv sends everything unauthenticated and in the clear.',
     counters:
       '<0>64-bit counters:</0> Used when the device offers <1>ifXTable</1>. Devices with only 32-bit counters still work, but the pane flags it — those wrap in about 34 seconds on a saturated 1 Gbps link.',
     remember:
-      '<0>Saved settings:</0> Each pane keeps its own device settings. Tick <1>Remember these connection settings</1> to store the credentials too — they are encrypted with Windows DPAPI before being saved. Leave it off to re-enter them each time.',
+      '<0>Saved devices:</0> Every device you connect to is kept in the Used before list, shared by all panes; × forgets one. Tick <1>Remember the passwords too</1> to store the credentials as well — they are encrypted with Windows DPAPI before being saved.',
     enable:
       '<0>Enable / disable:</0> The pane can be turned off in <1>Settings → Features</1>.',
   },
@@ -185,11 +186,11 @@ export const help = {
   webBrowser: {
     summary: 'Web Browser & Bookmarks',
     intro:
-      'Open web pages inside HoTTY in an embedded browser — handy for network-device web admin UIs (routers, switches, iLO/iDRAC) right next to your terminals. Open it from the <0>New Session</0> dialog’s <1>🌐 Web</1> tab: click <2>🆕 New Web Browser</2> for a blank tab, or double-click a saved bookmark to open that site.',
+      'Open web pages inside HoTTY in an embedded browser — handy for network-device web admin UIs (routers, switches, iLO/iDRAC) right next to your terminals. Choose <1>🌐 Web</1> in the <0>New Session</0> menu, then click <2>🆕 New Web Browser</2> for a blank tab, or double-click a saved bookmark to open that site.',
     bookmarks:
-      '<0>Bookmarks:</0> Organize sites in a folder tree under the <1>Web</1> tab — add, rename, delete, and drag to reorder. Double-click a bookmark to open it in a new browser pane. While browsing, the bookmarks button in the toolbar lists your saved bookmarks for quick access.',
+      '<0>Bookmarks:</0> Organize sites in a folder tree in the <1>Web</1> dialog — add, rename, delete, and drag to reorder. Double-click a bookmark to open it in a new browser pane. While browsing, the bookmarks button in the toolbar lists your saved bookmarks for quick access.',
     openAll:
-      '<0>Open All bookmarks:</0> Right-click a bookmark folder — in the <1>Web</1> tab or the in-browser bookmarks list — and choose <2>Open All</2> to open every bookmark inside it (including sub-folders), each in its own browser pane. When a folder holds 5 or more bookmarks you are asked to confirm first.',
+      '<0>Open All bookmarks:</0> Right-click a bookmark folder — in the <1>Web</1> dialog or the in-browser bookmarks list — and choose <2>Open All</2> to open every bookmark inside it (including sub-folders), each in its own browser pane. When a folder holds 5 or more bookmarks you are asked to confirm first.',
     star:
       '<0>★ Bookmark this page:</0> While browsing, click the <1>★</1> button in the toolbar to save the current page into a folder you choose.',
     toolbar:
@@ -199,7 +200,7 @@ export const help = {
     clearData:
       '<0>Clear browsing data:</0> Open the ⋯ More menu in the toolbar and choose Clear browsing data to remove cookies and site data, cache, history, saved passwords, and autofill — you choose what to remove. Your bookmarks and HoTTY settings are always kept.',
     enable:
-      '<0>Enable / disable:</0> The Web tab can be turned off in <1>Settings → Features</1>.',
+      '<0>Enable / disable:</0> The Web entry in the New Session menu can be turned off in <1>Settings → Features</1>.',
   },
 
 
@@ -221,7 +222,7 @@ export const help = {
     summary: 'AI Features Overview',
     aiChatHeading: 'AI Chat',
     aiChatIntro:
-      'Click <0><1></1></0> (Features) in the tab bar → <2>"AI Chat"</2> to open the AI Chat pane. Inside it, the tab strip at the top lets you keep multiple parallel conversations — use <3>+</3> to start a fresh tab. Type your question and press <4>Ctrl + Enter</4> to send.',
+      'Click <0><1></1> New Session</0> → <2>"AI Chat"</2> to open the AI Chat pane. Inside it, the tab strip at the top lets you keep multiple parallel conversations — use <3>+</3> to start a fresh tab. Type your question and press <4>Ctrl + Enter</4> to send.',
     linkedTerminal:
       '<0>Watched terminals:</0> Starting AI Watch on a terminal adds it to your active AI Chat conversation — toggle it on several terminals and one conversation watches them all at once. When more than one conversation is open, AI Watch opens a picker so you choose which one watches the terminal (a terminal belongs to a single conversation; picking another moves it there). Each conversation has its own color, shared by its watched terminal tabs, its conversation tab and its header chips, so you can see which conversation watches which terminals. Each watched terminal appears as a chip next to the input; click a chip to jump to that terminal, its × to stop watching it, or the + beside the chips to add another (a disconnected terminal greys out and re-links automatically when it reconnects). When several terminals are watched, the AI routes each command to the right one; otherwise it runs on the terminal you used most recently. Use + in the tab strip for a separate conversation with its own set of terminals.',
     streamWatchdog:

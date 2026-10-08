@@ -1,0 +1,187 @@
+/* The dock: icon column + tab list on one edge of the window.
+   No z-index here on purpose: a z-index would make the dock a stacking
+   context, and its menus would then sit under pane effects (the pane flash is
+   z 100). The menus are position: fixed with their own tier instead. */
+.dock {
+  display: flex;
+  flex-shrink: 0;
+  min-width: 0;
+  min-height: 0;
+  background-color: var(--sidebar-bg);
+  border: 0 solid var(--border-color);
+}
+
+.dock-left { flex-direction: row; border-right-width: 1px; }
+.dock-right { flex-direction: row-reverse; border-left-width: 1px; }
+.dock-top { flex-direction: row; border-bottom-width: 1px; }
+.dock-bottom { flex-direction: row; border-top-width: 1px; }
+
+/* ── The icon column ── */
+.dock-vertical .dock-rail {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+  width: 40px;
+  min-height: 0;
+  padding: 5px 0;
+  box-sizing: border-box;
+  border: 0 solid var(--border-color);
+  /* A short window must not push the whole app taller than itself: the
+     column scrolls instead (no visible bar — it is 40px wide). */
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.dock-left .dock-rail { border-right-width: 1px; }
+.dock-right .dock-rail { border-left-width: 1px; }
+
+/* Along the top/bottom the column dissolves: its two groups become the two
+   ends of the row, with the tabs between them. */
+.dock-horizontal .dock-rail {
+  display: contents;
+}
+
+.dock-horizontal .app-sidebar-top {
+  order: 0;
+  padding: 0 4px;
+  border-right: 1px solid var(--border-color);
+}
+
+.dock-horizontal .tab-bar {
+  order: 1;
+}
+
+.dock-horizontal .app-sidebar-bottom {
+  order: 2;
+  padding: 0 4px;
+  border-left: 1px solid var(--border-color);
+}
+
+/* ── Header: grip, position buttons, shrink/expand ── */
+.dock-header {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.tab-bar-vertical .dock-header {
+  height: 30px;
+  padding: 0 4px 0 6px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.tab-bar-vertical.compact .dock-header {
+  flex-direction: column;
+  height: auto;
+  padding: 4px 0;
+  gap: 3px;
+}
+
+.tab-bar-horizontal .dock-header {
+  height: 100%;
+  padding: 0 4px;
+  border-left: 1px solid var(--border-color);
+}
+
+.dock-grip {
+  display: flex;
+  padding: 0 2px;
+  color: var(--text-secondary);
+  opacity: 0.6;
+  cursor: grab;
+}
+
+.dock-grip:active {
+  cursor: grabbing;
+}
+
+.dock-title {
+  flex: 1;
+  color: var(--text-primary);
+  font-family: var(--ui-font-family);
+  font-size: calc(var(--font-size-base) - 2px);
+  font-weight: 500;
+}
+
+.tab-bar-horizontal .dock-title,
+.tab-bar-vertical.compact .dock-title {
+  display: none;
+}
+
+.dock-positions {
+  display: flex;
+  gap: 1px;
+  padding: 1px;
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+}
+
+/* Two by two in the narrow dock. */
+.tab-bar-vertical.compact .dock-positions {
+  flex-wrap: wrap;
+  width: 37px;
+  box-sizing: border-box;
+}
+
+.dock-position-btn,
+.dock-compact-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.dock-position-btn {
+  width: 20px;
+  height: 18px;
+  opacity: 0.7;
+}
+
+.tab-bar-vertical.compact .dock-position-btn {
+  width: 16px;
+}
+
+.dock-position-btn:hover,
+.dock-compact-btn:hover {
+  color: var(--text-primary);
+  opacity: 1;
+}
+
+.dock-position-btn.active {
+  background-color: var(--sidebar-btn-active-bg);
+  color: var(--accent-color);
+  opacity: 1;
+}
+
+.dock-compact-btn {
+  width: 24px;
+  height: 24px;
+}
+
+/* ── Where the dock can be dropped while its grip is dragged ── */
+.dock-drop-zone {
+  position: fixed;
+  z-index: 30000;
+  box-sizing: border-box;
+  border: 2px dashed var(--border-color);
+  border-radius: 6px;
+  background-color: color-mix(in srgb, var(--accent-color) 6%, transparent);
+}
+
+.dock-drop-zone.hot {
+  border-color: var(--accent-color);
+  background-color: color-mix(in srgb, var(--accent-color) 22%, transparent);
+}
+
+.dock-drop-zone-top { top: 6px; left: 6px; right: 6px; height: 22%; }
+.dock-drop-zone-bottom { bottom: 6px; left: 6px; right: 6px; height: 22%; }
+.dock-drop-zone-left { top: 25%; bottom: 25%; left: 6px; width: 20%; }
+.dock-drop-zone-right { top: 25%; bottom: 25%; right: 6px; width: 20%; }

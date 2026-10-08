@@ -1,13 +1,9 @@
-// Диалог «Новая сессия» (процесс подключения). Охватывает каркас диалога,
-// вкладки хостов/GCP, баннер статуса, поля/подписи/подсказки формы подключения,
-// специфичные для протоколов группы полей (SSH / Serial / WSL / Git Bash),
-// сообщения проверки и подтверждение отмены изменений.
+// Connection dialogs (SSH / Telnet, Serial, GCP, Web): dialog chrome, the
+// status banner, connection form fields/labels/placeholders, SSH and Serial
+// field groups, validation messages, and the discard-changes confirmation.
 export const sessionDialog = {
   defaultSessionName: 'Сеанс {{protocol}}',
-  title: 'Новая сессия',
   tabs: {
-    sourceAriaLabel: 'Источник подключения',
-    hosts: 'Хосты',
     gcp: 'GCP',
     web: 'Веб',
   },
@@ -77,9 +73,6 @@ export const sessionDialog = {
   flowControl: {
     none: 'Нет',
   },
-  distributionLabel: 'Дистрибутив',
-  noWslDistros: 'Дистрибутивы WSL не найдены.',
-  gitBashNotInstalled: 'Git Bash не установлен.',
   encodingLabel: 'Кодировка',
   fixedTerminalSizeLabel: 'Фиксированный размер терминала',
   fixedTerminalSizeDefault: 'Использовать общую настройку',

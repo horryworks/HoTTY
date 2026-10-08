@@ -51,6 +51,7 @@ import type {
   FileServerEvent,
   FileServerProtocol,
   FirewallReport,
+  LocalAddress,
   WebBrowserRect,
   WebBrowserClearDataOptions,
   WebBrowserNavState,
@@ -656,6 +657,11 @@ export const tauriService = {
 
   async fileServerFirewallAllow(protocol: FileServerProtocol, port: number): Promise<void> {
     await invoke('file_server_firewall_allow', { protocol, port });
+  },
+
+  /** This PC's IPv4 addresses, the one on the default route first. */
+  async fileServerLocalAddresses(): Promise<LocalAddress[]> {
+    return invoke<LocalAddress[]>('file_server_local_addresses');
   },
 
   onFileServerEvent(cb: (p: FileServerEvent) => void): Promise<UnlistenFn> {

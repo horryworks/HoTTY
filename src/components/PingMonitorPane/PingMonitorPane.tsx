@@ -1,9 +1,12 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { tauriService } from '../../services/tauriService';
-import { usePingMonitorEvents } from '../../hooks/usePingMonitorEvents';
-import { useResize } from '../../hooks/useResize';
+import { usePingMonitorEvents, MAX_HISTORY } from '../../hooks/usePingMonitorEvents';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { recallPaneMemory, useRememberPane } from '../../hooks/usePaneMemory';
+import { BarSparkline, RunButton, RunStatus, Segmented } from '../PaneTools/PaneTools';
+import { addTargets, parseTargets, summarize, timeOfDay } from './pingStats';
+import type { PingResult } from '../../types/appTypes';
 import './PingMonitorPane.css';
 
 interface PingMonitorPaneProps {
@@ -13,110 +16,79 @@ interface PingMonitorPaneProps {
   onOpenLogSettings?: () => void;
 }
 
-const INTERVAL_OPTIONS = [
-  { label: '1s', value: 1000 },
-  { label: '2s', value: 2000 },
-  { label: '5s', value: 5000 },
-  { label: '10s', value: 10000 },
-  { label: '30s', value: 30000 },
-  { label: '60s', value: 60000 },
-];
+const INTERVAL_OPTIONS = [1000, 2000, 5000, 10000, 30000, 60000].map((value) => ({
+  value,
+  label: `${value / 1000}s`,
+}));
 
-const MIN_PANEL_RATIO = 0.15;
-const MAX_PANEL_RATIO = 0.6;
-const DEFAULT_PANEL_RATIO = 0.3;
+type RowState = 'ok' | 'fail' | 'dns' | 'waiting' | 'idle';
 
-function parseTargets(input: string): string[] {
-  return input
-    .split(/[,\n]/)
-    .map((t) => t.trim())
-    .filter(Boolean);
-}
-
-function formatIntervalLabel(ms: number): string {
-  const opt = INTERVAL_OPTIONS.find((o) => o.value === ms);
-  return opt ? opt.label : `${ms / 1000}s`;
+function rowState(result: PingResult | undefined, running: boolean): RowState {
+  if (!result) return running ? 'waiting' : 'idle';
+  if (result.status === 'ok' || result.status === 'dns') return result.status;
+  return 'fail';
 }
 
 export function PingMonitorPane({ paneId, active, onOpenLogSettings }: PingMonitorPaneProps) {
   const { t } = useTranslation();
-  const [targetInput, setTargetInput] = useState('');
-  const [intervalMs, setIntervalMs] = useState(5000);
-  const [running, setRunning] = useState(false);
-  const [loggingEnabled, setLoggingEnabled] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [panelRatio, setPanelRatio] = useState(DEFAULT_PANEL_RATIO);
-  const [panelCollapsed, setPanelCollapsed] = useState(false);
-  const bodyRef = useRef<HTMLDivElement>(null);
-  const ratioBeforeCollapse = useRef(DEFAULT_PANEL_RATIO);
-
-  // CSV logs land in the same folder as every other log (Settings → General)
-  // rather than a pane-local path. A typed path could never work here anyway:
-  // the backend only writes to folders the user attested through a native
-  // dialog, and this pane has no Browse button to produce that attestation.
+  const saved = useSettingsStore((s) => s.pingMonitorConfig);
+  const updateSettings = useSettingsStore((s) => s.update);
+  // CSV logs land in the same folder as every other log (Settings → General).
+  // The backend only writes to folders the user approved through a native
+  // dialog, so the pane never takes a path of its own.
   const loggingPath = useSettingsStore((s) => s.loggingPath);
 
-  const { latestResults, logFileName } = usePingMonitorEvents(paneId);
+  // Kept across remounts: hiding the tab does not stop the monitor.
+  const [targets, setTargets] = useState<string[]>(() => recallPaneMemory(paneId, 'targets', saved.targets));
+  const [intervalMs, setIntervalMs] = useState(() => recallPaneMemory(paneId, 'interval', saved.intervalMs));
+  const [running, setRunning] = useState(() => recallPaneMemory(paneId, 'running', false));
+  const [logging, setLogging] = useState(() => recallPaneMemory(paneId, 'logging', false));
+  useRememberPane(paneId, { 'targets': targets, 'interval': intervalMs, 'running': running, 'logging': logging });
+  const [draft, setDraft] = useState('');
+  const [error, setError] = useState<string | null>(null);
 
-  const { startResize } = useResize({
-    orientation: 'horizontal',
-    onMove: (dx) => {
-      setPanelRatio((prev) => {
-        const bodyW = bodyRef.current?.clientWidth ?? 600;
-        const delta = dx / bodyW;
-        return Math.max(MIN_PANEL_RATIO, Math.min(MAX_PANEL_RATIO, prev + delta));
-      });
-    },
-  });
+  const { latestResults, history, logFileName, clearLogFileName } = usePingMonitorEvents(paneId);
 
-  const toggleCollapse = useCallback(() => {
-    setPanelCollapsed((prev) => {
-      if (!prev) {
-        ratioBeforeCollapse.current = panelRatio;
-      } else {
-        setPanelRatio(ratioBeforeCollapse.current);
-      }
-      return !prev;
-    });
-  }, [panelRatio]);
+  // A new pane starts with the targets and interval the last one used.
+  useEffect(() => {
+    updateSettings('pingMonitorConfig', { targets, intervalMs });
+  }, [targets, intervalMs, updateSettings]);
 
-  const handleStart = useCallback(async () => {
-    const targets = parseTargets(targetInput);
-    if (targets.length === 0) {
-      setError(t('panes.pingMonitor.errorNoTargets'));
-      return;
-    }
-    setError(null);
-
+  /** Start the backend monitor. Returns false when it did not start. */
+  const startMonitor = useCallback(async (list: string[], withLog: boolean): Promise<boolean> => {
     // The backend refuses to write CSV into a folder that was never approved
-    // through a native dialog, so confirm it before starting — otherwise
-    // logging would silently do nothing. An already-approved folder (the usual
-    // case, since approvals persist) returns true without showing a prompt.
+    // through a native dialog, so confirm it first — otherwise logging would
+    // silently do nothing. An approved folder returns true without a prompt.
     let approved = false;
-    if (loggingEnabled && loggingPath) {
+    if (withLog && loggingPath) {
       try {
         approved = await tauriService.confirmLogDir(loggingPath);
       } catch {
         approved = false;
       }
-      // Monitoring still starts — only the CSV side is suppressed — but say so
-      // rather than leaving the user to wonder where the file went.
-      if (!approved) setError(t('panes.pingMonitor.loggingDirDenied'));
+      if (!approved) {
+        setLogging(false);
+        setError(t('panes.pingMonitor.loggingDirDenied'));
+      }
     }
-
     try {
-      await tauriService.pingMonitorStart(
-        paneId,
-        targets,
-        intervalMs,
-        approved,
-        approved ? loggingPath : '',
-      );
+      await tauriService.pingMonitorStart(paneId, list, intervalMs, approved, approved ? loggingPath : '');
       setRunning(true);
+      return true;
     } catch (e) {
       setError(String(e));
+      return false;
     }
-  }, [paneId, targetInput, intervalMs, loggingEnabled, loggingPath, t]);
+  }, [paneId, intervalMs, loggingPath, t]);
+
+  const handleStart = useCallback(async () => {
+    if (targets.length === 0) {
+      setError(t('panes.pingMonitor.errorNoTargets'));
+      return;
+    }
+    setError(null);
+    await startMonitor(targets, logging);
+  }, [targets, logging, startMonitor, t]);
 
   const handleStop = useCallback(async () => {
     try {
@@ -127,164 +99,203 @@ export function PingMonitorPane({ paneId, active, onOpenLogSettings }: PingMonit
     }
   }, [paneId]);
 
-  const handleUpdateTargets = useCallback(async () => {
-    const targets = parseTargets(targetInput);
-    if (targets.length === 0) return;
+  /** Apply a new target list at once — while running the backend picks it up on the next round. */
+  const applyTargets = useCallback(async (next: string[]) => {
+    setTargets(next);
+    if (!running) return;
     try {
-      await tauriService.pingMonitorUpdateTargets(paneId, targets);
+      if (next.length === 0) {
+        await tauriService.pingMonitorStop(paneId);
+        setRunning(false);
+      } else {
+        await tauriService.pingMonitorUpdateTargets(paneId, next);
+      }
     } catch (e) {
       setError(String(e));
     }
-  }, [paneId, targetInput]);
+  }, [paneId, running]);
 
-  const handleUpdateInterval = useCallback(async (newMs: number) => {
-    setIntervalMs(newMs);
-    if (running) {
-      try {
-        await tauriService.pingMonitorUpdateInterval(paneId, newMs);
-      } catch (e) {
-        setError(String(e));
-      }
+  const addFromText = useCallback((text: string) => {
+    const added = parseTargets(text);
+    if (added.length === 0) return;
+    setError(null);
+    void applyTargets(addTargets(targets, added));
+  }, [targets, applyTargets]);
+
+  const handleDraftKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    addFromText(draft);
+    setDraft('');
+  };
+
+  // A one-line input would flatten a pasted list into one long word, so take
+  // several targets straight from the clipboard.
+  const handleDraftPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    const text = e.clipboardData.getData('text');
+    if (!/[\s,]/.test(text.trim())) return;
+    e.preventDefault();
+    addFromText(draft + ' ' + text);
+    setDraft('');
+  };
+
+  const handleInterval = useCallback(async (ms: number) => {
+    setIntervalMs(ms);
+    if (!running) return;
+    try {
+      await tauriService.pingMonitorUpdateInterval(paneId, ms);
+    } catch (e) {
+      setError(String(e));
     }
   }, [paneId, running]);
 
-  const resultsArray = Array.from(latestResults.values());
-  const targetCount = running ? resultsArray.length : parseTargets(targetInput).length;
+  // The backend decides about the CSV file when monitoring starts, so turning
+  // it on or off while running restarts the monitor (a new file each time).
+  const handleToggleLog = useCallback(async () => {
+    if (!loggingPath) {
+      onOpenLogSettings?.();
+      return;
+    }
+    const next = !logging;
+    setLogging(next);
+    clearLogFileName();
+    setError(null);
+    if (!running) return;
+    try {
+      await tauriService.pingMonitorStop(paneId);
+    } catch (e) {
+      setError(String(e));
+      return;
+    }
+    setRunning(false);
+    await startMonitor(targets, next);
+  }, [loggingPath, onOpenLogSettings, logging, running, paneId, startMonitor, targets, clearLogFileName]);
+
+  const statusLabel = (state: RowState) => {
+    switch (state) {
+      case 'ok': return t('panes.pingMonitor.statusOk');
+      case 'fail': return t('panes.pingMonitor.statusFail');
+      case 'dns': return t('panes.pingMonitor.statusDns');
+      case 'waiting': return t('panes.pingMonitor.statusWaiting');
+      default: return '—';
+    }
+  };
+
+  const recordLabel = logging && running
+    ? (logFileName ? t('panes.pingMonitor.recordingFile', { file: logFileName }) : t('panes.pingMonitor.recording'))
+    : t('panes.pingMonitor.recordCsv');
 
   return (
     <div className={`ping-monitor-pane${active ? ' active' : ''}`} data-pane-id={paneId}>
       <div className="ping-monitor-toolbar">
         <span className="ping-monitor-toolbar-title">{t('panes.pingMonitor.title')}</span>
-        {logFileName && (
-          <span className="ping-monitor-log-indicator" title={logFileName}>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-              <polyline points="14 2 14 8 20 8" />
-            </svg>
-            {t('panes.pingMonitor.logging')}
-          </span>
-        )}
+        <span className="pt-label">{t('panes.pingMonitor.interval')}</span>
+        <Segmented
+          options={INTERVAL_OPTIONS}
+          value={intervalMs}
+          onChange={handleInterval}
+          ariaLabel={t('panes.pingMonitor.interval')}
+        />
+        <button
+          type="button"
+          className={`ping-monitor-record${logging ? ' on' : ''}`}
+          aria-pressed={logging}
+          onClick={handleToggleLog}
+          title={loggingPath ? (logFileName && logging ? logFileName : loggingPath) : t('panes.pingMonitor.setLogFolder')}
+        >
+          <span className="ping-monitor-record-dot" />
+          {recordLabel}
+        </button>
         <span className="ping-monitor-toolbar-spacer" />
-        <label className="ping-monitor-interval-label">
-          {t('panes.pingMonitor.intervalLabel')}
-          <select
-            className="ping-monitor-interval-select"
-            value={intervalMs}
-            onChange={(e) => handleUpdateInterval(Number(e.target.value))}
-          >
-            {INTERVAL_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
-            ))}
-          </select>
-        </label>
-        {running ? (
-          <button type="button" className="ping-monitor-toolbar-btn ping-monitor-btn-stop" onClick={handleStop}>
-            <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor"><rect width="10" height="10" rx="1" /></svg>
-            {t('panes.pingMonitor.stop')}
-          </button>
-        ) : (
-          <button type="button" className="ping-monitor-toolbar-btn ping-monitor-btn-start" onClick={handleStart}>
-            <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor"><polygon points="0,0 10,5 0,10" /></svg>
-            {t('panes.pingMonitor.start')}
-          </button>
-        )}
+        <RunStatus
+          tone={running ? 'running' : 'stopped'}
+          label={running ? t('panes.pingMonitor.running') : t('panes.pingMonitor.stopped')}
+        />
+        <RunButton
+          running={running}
+          startLabel={t('panes.pingMonitor.start')}
+          stopLabel={t('panes.pingMonitor.stop')}
+          onStart={handleStart}
+          onStop={handleStop}
+        />
       </div>
 
-      {error && <div className="ping-monitor-error">{error}</div>}
+      {error && (
+        <div className="ping-monitor-error" role="alert">
+          <span>{error}</span>
+          <button type="button" className="ping-monitor-error-close" onClick={() => setError(null)} aria-label={t('common.close')}>&times;</button>
+        </div>
+      )}
 
-      <div className="ping-monitor-body" ref={bodyRef}>
-        {!panelCollapsed && (
-          <div className="ping-monitor-targets-panel" style={{ width: `${panelRatio * 100}%` }}>
-            <div className="ping-monitor-targets-header">
-              <span className="ping-monitor-targets-title">{t('panes.pingMonitor.targets')}</span>
-              <span className="ping-monitor-targets-count">{t('panes.pingMonitor.targetCount', { count: targetCount })}</span>
-            </div>
-            <textarea
-              className="ping-monitor-target-input"
-              value={targetInput}
-              onChange={(e) => setTargetInput(e.target.value)}
-              onBlur={() => { if (running) handleUpdateTargets(); }}
-              placeholder="8.8.8.8&#10;1.1.1.1&#10;example.com"
-            />
-            <div className="ping-monitor-logging-section">
-              <label className={`ping-monitor-logging-toggle${loggingPath ? '' : ' disabled'}`}>
+      <div className="ping-monitor-results">
+        <table className="ping-monitor-table">
+          <thead>
+            <tr>
+              <th>{t('panes.pingMonitor.thTarget')}</th>
+              <th>{t('panes.pingMonitor.thStatus')}</th>
+              <th>{t('panes.pingMonitor.thHistory', { count: MAX_HISTORY })}</th>
+              <th className="num">{t('panes.pingMonitor.thRtt')}</th>
+              <th className="num">{t('panes.pingMonitor.thLoss')}</th>
+              <th className="num">{t('panes.pingMonitor.thAvg')}</th>
+              <th className="num">{t('panes.pingMonitor.thTtl')}</th>
+              <th>{t('panes.pingMonitor.thLastCheck')}</th>
+              <th aria-hidden="true" />
+            </tr>
+          </thead>
+          <tbody>
+            {targets.map((target) => {
+              const result = latestResults.get(target);
+              const state = rowState(result, running);
+              // A name that does not resolve was never pinged: no loss to report.
+              const sum = state === 'dns' ? summarize(undefined) : summarize(history.get(target));
+              return (
+                <tr key={target} className={`ping-monitor-row ${state}`}>
+                  <td className="ping-monitor-target">{target}</td>
+                  <td>
+                    <span className={`ping-monitor-state ${state}`}>
+                      <span className="ping-monitor-state-dot" />
+                      {statusLabel(state)}
+                    </span>
+                  </td>
+                  <td>{result?.status === 'dns' ? '—' : <BarSparkline values={sum.bars} slots={MAX_HISTORY} />}</td>
+                  <td className="num">{result?.rtt != null ? `${result.rtt} ms` : '—'}</td>
+                  <td className={`num${sum.lossPct ? ' ping-monitor-loss' : ''}`}>{sum.lossPct === null ? '—' : `${sum.lossPct}%`}</td>
+                  <td className="num">{sum.avgRtt === null ? '—' : `${sum.avgRtt} ms`}</td>
+                  <td className="num">{result?.ttl ?? '—'}</td>
+                  <td className="ping-monitor-time">{result ? timeOfDay(result.timestamp) : '—'}</td>
+                  <td>
+                    <button
+                      type="button"
+                      className="ping-monitor-remove"
+                      onClick={() => void applyTargets(targets.filter((x) => x !== target))}
+                      title={t('panes.pingMonitor.remove')}
+                      aria-label={t('panes.pingMonitor.removeTarget', { target })}
+                    >
+                      &times;
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colSpan={9}>
                 <input
-                  type="checkbox"
-                  checked={loggingEnabled}
-                  onChange={(e) => setLoggingEnabled(e.target.checked)}
-                  disabled={running || !loggingPath}
+                  type="text"
+                  className="ping-monitor-add"
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  onKeyDown={handleDraftKeyDown}
+                  onPaste={handleDraftPaste}
+                  placeholder={t('panes.pingMonitor.addPlaceholder')}
+                  aria-label={t('panes.pingMonitor.addAria')}
+                  spellCheck={false}
                 />
-                {t('panes.pingMonitor.csvLogging')}
-              </label>
-              {loggingPath ? (
-                <span className="ping-monitor-logging-hint" title={loggingPath}>
-                  {t('panes.pingMonitor.loggingFolder', { path: loggingPath })}
-                </span>
-              ) : onOpenLogSettings && (
-                <button type="button" className="ping-monitor-logging-link" onClick={onOpenLogSettings}>
-                  {t('panes.pingMonitor.setLogFolder')}
-                </button>
-              )}
-            </div>
-          </div>
-        )}
-
-        <div className="ping-monitor-divider">
-          <div className="ping-monitor-divider-handle" onMouseDown={startResize} />
-          <button
-            type="button"
-            className={`ping-monitor-divider-toggle${panelCollapsed ? ' collapsed' : ''}`}
-            onClick={toggleCollapse}
-            title={panelCollapsed ? t('panes.pingMonitor.showTargetsPanel') : t('panes.pingMonitor.hideTargetsPanel')}
-          >
-            <svg width="8" height="12" viewBox="0 0 8 12" fill="currentColor">
-              <path d={panelCollapsed ? 'M2 0l6 6-6 6z' : 'M6 0L0 6l6 6z'} />
-            </svg>
-          </button>
-        </div>
-
-        <div className="ping-monitor-results-panel">
-          {resultsArray.length > 0 ? (
-            <div className="ping-monitor-results-wrapper">
-              <table className="ping-monitor-table">
-                <thead>
-                  <tr>
-                    <th className="ping-monitor-th-num">#</th>
-                    <th>{t('panes.pingMonitor.thTarget')}</th>
-                    <th>{t('panes.pingMonitor.thStatus')}</th>
-                    <th>{t('panes.pingMonitor.thRtt')}</th>
-                    <th>{t('panes.pingMonitor.thTtl')}</th>
-                    <th>{t('panes.pingMonitor.thLastCheck')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {resultsArray.map((r, idx) => (
-                    <tr key={r.target} className={`ping-monitor-row ping-monitor-status-${r.status}`}>
-                      <td className="ping-monitor-td-num">{idx + 1}</td>
-                      <td>{r.target}</td>
-                      <td className="ping-monitor-td-status">{r.status}</td>
-                      <td className="ping-monitor-td-rtt">{r.rtt !== null ? `${r.rtt}ms` : '\u2014'}</td>
-                      <td className="ping-monitor-td-ttl">{r.ttl !== null ? r.ttl : '\u2014'}</td>
-                      <td className="ping-monitor-td-time">{r.timestamp ? r.timestamp.split(' ').pop()?.split('.')[0] ?? r.timestamp : '\u2014'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="ping-monitor-placeholder">
-              {running ? t('panes.pingMonitor.waitingResults') : t('panes.pingMonitor.enterTargets')}
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="ping-monitor-statusbar">
-        <span className={`ping-monitor-status-dot ${running ? 'running' : 'stopped'}`} />
-        <span className="ping-monitor-status-label">{running ? t('panes.pingMonitor.statusRunning') : t('panes.pingMonitor.statusStopped')}</span>
-        <span className="ping-monitor-status-info">{t('panes.pingMonitor.targetCount', { count: targetCount })}</span>
-        <span className="ping-monitor-status-info">{t('panes.pingMonitor.statusInterval', { interval: formatIntervalLabel(intervalMs) })}</span>
-        {logFileName && <span className="ping-monitor-status-info">{t('panes.pingMonitor.statusLog', { filename: logFileName })}</span>}
+              </td>
+            </tr>
+          </tfoot>
+        </table>
       </div>
     </div>
   );

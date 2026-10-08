@@ -5,6 +5,7 @@
 use tauri::{AppHandle, State, Window};
 
 use crate::services::file_server::{self, validate_root_dir, FileServerState, FirewallReport};
+use crate::services::local_addresses::{local_ipv4_addresses, LocalAddress};
 use crate::services::{sftp_server, tftp_server};
 
 fn validate_port(port: u16) -> Result<(), String> {
@@ -116,6 +117,15 @@ pub async fn file_server_firewall_status(
 pub async fn file_server_firewall_allow(protocol: String, port: u16) -> Result<(), String> {
     validate_port(port)?;
     file_server::firewall_allow(&protocol, port).await
+}
+
+/// This PC's IPv4 addresses, the one on the default route first, so the pane can
+/// show what a device should type to reach the server.
+#[tauri::command]
+pub async fn file_server_local_addresses() -> Result<Vec<LocalAddress>, String> {
+    tokio::task::spawn_blocking(local_ipv4_addresses)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[cfg(test)]

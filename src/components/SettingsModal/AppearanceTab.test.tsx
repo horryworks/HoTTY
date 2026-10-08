@@ -67,10 +67,12 @@ describe('AppearanceTab', () => {
     expect(useSettingsStore.getState().fontSize).toBe(14);
   });
 
-  it('switching sidebar position via radio updates the store', () => {
+  it('switching the dock position via radio updates the store', () => {
     renderTab();
     fireEvent.click(screen.getByLabelText('right'));
-    expect(useSettingsStore.getState().sidebarPosition).toBe('right');
+    expect(useSettingsStore.getState().dockPosition).toBe('right');
+    fireEvent.click(screen.getByLabelText('bottom'));
+    expect(useSettingsStore.getState().dockPosition).toBe('bottom');
   });
 
   it('renders the prompt highlight checkbox', () => {

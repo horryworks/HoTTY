@@ -9,7 +9,6 @@ export const help = {
 
   shortcuts: {
     summary: 'Atajos',
-    newSession: 'Diálogo de nueva sesión',
     newWindow: 'Nueva ventana',
     focusNext: 'Enfocar el panel siguiente',
     focusPrev: 'Enfocar el panel anterior',
@@ -25,7 +24,7 @@ export const help = {
   gettingStarted: {
     summary: 'Primeros pasos',
     openDialog:
-      'Abra el diálogo de conexión mediante <0>Ctrl + N</0> o el botón <1>"Nueva"</1> de la barra lateral. Puede gestionar sus hosts y carpetas en el árbol de hosts.',
+      'Haga clic en <1>+ Nueva sesión</1> al final de la lista de pestañas y elija SSH o Telnet para abrir el diálogo de conexión. Puede gestionar sus hosts y carpetas en el árbol de hosts.',
     doubleClick:
       '<0>Doble clic:</0> haga doble clic en un host del árbol para conectarse inmediatamente. Haga doble clic en una carpeta —o clic en la flecha de su izquierda— para abrirla y cerrarla; un solo clic solo la selecciona.',
     hostFilter:
@@ -44,9 +43,9 @@ export const help = {
     jumpbox:
       '<0>Jumpbox (host de bastión):</0> las conexiones SSH y Telnet se pueden enrutar a través de un jumpbox. Marque cualquier host SSH como jumpbox en el árbol de hosts y luego selecciónelo como host "vía" al editar un host de destino.',
     gcpIap:
-      '<0>Google Cloud IAP:</0> conéctese a VMs de Google Compute Engine mediante Identity-Aware Proxy sin exponer las VMs a la red pública. Abra la pestaña <1>GCP</1> en el diálogo de nueva sesión para examinar todas sus instancias de GCE en cada proyecto al que tenga acceso — agrupadas por proyecto, con estado en vivo (🟢 RUNNING / 🔴 detenida / 🟡 en transición) — y luego haga doble clic en una instancia para conectarse. El panel también tiene botones para <2>iniciar</2> o <3>detener</3> una instancia directamente, y una acción de <4>Actualizar</4> para volver a consultar sus proyectos e instancias. Un <5>cuadro de búsqueda</5> filtra la lista por nombre de proyecto o instancia mientras escribe. La última lista conocida se muestra <6>al instante al iniciar</6> y se revalida en segundo plano, para que no tenga que esperar a una consulta completa cada vez que se abre el panel. Si hace doble clic en una VM detenida, HoTTY pregunta antes de iniciarla (o la inicia automáticamente cuando está configurado en un host IAP guardado). <7>No se requiere nombre de usuario, contraseña ni clave privada de SSH</7> — HoTTY delega la conexión en <8>gcloud compute ssh --tunnel-through-iap</8>, que gestiona el túnel IAP, el mapeo de OS Login, la generación automática de claves SSH (<9>~/.ssh/google_compute_engine</9>), el registro de claves y la autenticación en su nombre. Requiere el Google Cloud SDK y un <10>gcloud auth login</10> completado.',
+      '<0>Google Cloud IAP:</0> conéctese a VMs de Google Compute Engine mediante Identity-Aware Proxy sin exponer las VMs a la red pública. Elija <1>GCP</1> en el menú Nueva sesión para examinar todas sus instancias de GCE en cada proyecto al que tenga acceso — agrupadas por proyecto, con estado en vivo (🟢 RUNNING / 🔴 detenida / 🟡 en transición) — y luego haga doble clic en una instancia para conectarse. El panel también tiene botones para <2>iniciar</2> o <3>detener</3> una instancia directamente, y una acción de <4>Actualizar</4> para volver a consultar sus proyectos e instancias. Un <5>cuadro de búsqueda</5> filtra la lista por nombre de proyecto o instancia mientras escribe. La última lista conocida se muestra <6>al instante al iniciar</6> y se revalida en segundo plano, para que no tenga que esperar a una consulta completa cada vez que se abre el panel. Si hace doble clic en una VM detenida, HoTTY pregunta antes de iniciarla (o la inicia automáticamente cuando está configurado en un host IAP guardado). <7>No se requiere nombre de usuario, contraseña ni clave privada de SSH</7> — HoTTY delega la conexión en <8>gcloud compute ssh --tunnel-through-iap</8>, que gestiona el túnel IAP, el mapeo de OS Login, la generación automática de claves SSH (<9>~/.ssh/google_compute_engine</9>), el registro de claves y la autenticación en su nombre. Requiere el Google Cloud SDK y un <10>gcloud auth login</10> completado.',
     gcpSshUser:
-      '<0>Usuario SSH (normalmente en blanco):</0> HoTTY determina con qué cuenta de Linux iniciar sesión consultando a gcloud, así que el campo <1>SSH user</1> de la pestaña GCP normalmente se deja vacío. Rellénalo solo si una VM acepta una cuenta distinta de la detectada: la conexión falla entonces con <2>Permission denied (publickey)</2> y el error indica la cuenta que se intentó. En un equipo cuya clave SSH nunca se registró, HoTTY ahora la inscribe automáticamente en los metadatos de la instancia (o del proyecto) en la primera conexión, por lo que ya no necesitas ejecutar <3>gcloud compute ssh &lt;instance&gt; --tunnel-through-iap</3> a mano.',
+      '<0>Usuario SSH (normalmente en blanco):</0> HoTTY determina con qué cuenta de Linux iniciar sesión consultando a gcloud, así que el campo <1>SSH user</1> del diálogo GCP normalmente se deja vacío. Rellénalo solo si una VM acepta una cuenta distinta de la detectada: la conexión falla entonces con <2>Permission denied (publickey)</2> y el error indica la cuenta que se intentó. En un equipo cuya clave SSH nunca se registró, HoTTY ahora la inscribe automáticamente en los metadatos de la instancia (o del proyecto) en la primera conexión, por lo que ya no necesitas ejecutar <3>gcloud compute ssh &lt;instance&gt; --tunnel-through-iap</3> a mano.',
     gcpFiltering:
       '<0>Filtrado consciente del acceso de GCP:</0> el panel de GCP comprueba <1>iap.tunnelInstances.accessViaIAP</1> a nivel de proyecto e instancia (mediante <2>gcloud projects test-iam-permissions</2>) y oculta las VMs para las que no tiene permiso de túnel IAP. Un botón contador 🔒 en el encabezado del panel le permite volver a mostrar las instancias ocultas; las instancias sin permiso de OS Login siguen mostrándose pero muestran un glifo de advertencia 🔑 porque SSH puede funcionar igualmente mediante una clave de metadatos. Cuando la propia comprobación de IAM falla (corte de red, proyecto eliminado), las instancias permanecen visibles para que las VMs accesibles nunca se oculten por accidente.',
     updateNotifications:
@@ -93,7 +92,9 @@ export const help = {
   layout: {
     summary: 'Dominar el diseño',
     flexibleTabs:
-      '<0>Pestañas flexibles:</0> arrastre y suelte las pestañas no solo para reordenarlas, sino para moverlas entre paneles de cuadrícula, barras laterales o barras superior/inferior.',
+      '<0>Pestañas flexibles:</0> arrastre una pestaña a un panel o a una barra lateral para mostrarla allí, sobre una pestaña en pantalla para ocupar su panel, o al grupo «Ocultas» para apartarla sin cerrarla. Las pestañas ocultas se reordenan arrastrándolas, y un clic central cierra cualquier pestaña.',
+    dock:
+      '<0>El dock:</0> la columna de iconos y la lista de pestañas se mueven juntas. Colóquelas en cualquier borde de la ventana con los cuatro botones sobre las pestañas o arrastrando el asa que tienen al lado; <1>Ajustes → Apariencia → Posición del dock</1> hace lo mismo. Una pestaña en pantalla lleva el número de su panel, y el mismo número aparece en la esquina de ese panel. Una pestaña oculta muestra a qué está conectada o, en amarillo, la última línea de salida que llegó mientras estaba oculta. En el borde superior o inferior, las pestañas ocultas que no caben se agrupan en un botón.',
     resizing:
       '<0>Redimensionar:</0> redimensione todo arrastrando los divisores o el <1>punto de intersección 2D</1> (donde se encuentran 4 paneles).',
     emptyPaneHints:
@@ -103,7 +104,7 @@ export const help = {
     fixedTerminalSize:
       '<0>Tamaño de terminal fijo:</0> algunos dispositivos de red (p. ej. Huawei USG/VRP) fijan el ancho de su terminal al iniciar sesión e ignoran los cambios de tamaño posteriores, por lo que editar un comando recuperado que se ajusta a varias líneas se desincroniza. <1>Configuración → General → Terminal → Tamaño de terminal fijo</1> ancla la cuadrícula al ancho negociado en la conexión. <2>Automático</2> solo lo aplica a los dispositivos que HoTTY reconoce por la identificación SSH; también puede forzarlo globalmente, por conexión en el formulario de conexión, o solo para la pestaña actual desde su menú contextual. Un terminal anclado muestra una banda tintada cuando el panel es más ancho que la cuadrícula, y se desplaza horizontalmente cuando es más estrecho.',
     multiWindow:
-      '<0>Múltiples ventanas:</0> abra otra ventana con el botón <1>Nueva ventana</1> de la barra lateral o con <2>Ctrl + Shift + N</2>: al iniciar HoTTY de nuevo también se abre una ventana nueva en el mismo proceso. Cada ventana mantiene sus propios paneles y sesiones de terminal, mientras que sus ajustes, tema, árbol de hosts y marcadores se comparten y sincronizan entre todas las ventanas. Un chat de IA puede incluso enlazarse a un terminal que se ejecuta en otra ventana.',
+      '<0>Múltiples ventanas:</0> abra otra ventana con el botón <1>Nueva ventana</1> del dock o con <2>Ctrl + Shift + N</2>: al iniciar HoTTY de nuevo también se abre una ventana nueva en el mismo proceso. Cada ventana mantiene sus propios paneles y sesiones de terminal, mientras que sus ajustes, tema, árbol de hosts y marcadores se comparten y sincronizan entre todas las ventanas. Un chat de IA puede incluso enlazarse a un terminal que se ejecuta en otra ventana.',
   },
 
   copyPaste: {
@@ -135,13 +136,13 @@ export const help = {
     aiChatLogging:
       '<0>Registros del chat de IA:</0> Mientras el registro está activo, cada conversación del chat de IA se añade a un archivo Markdown (<1>...-AICHAT-....md</1>) en la misma carpeta y aparece en el Visor de registros. Las imágenes adjuntas se anotan pero no se guardan. Iniciar un chat nuevo, cerrar una pestaña o cambiar de proveedor de IA comienza un archivo nuevo. El texto que escribes se guarda tal cual, así que evita escribir credenciales en el chat.',
     logViewer:
-      '<0>Visor de registros:</0> haga clic en el botón <1>Visor de registros</1> de la barra de pestañas para abrir un panel dedicado a la exploración de registros. Enumera todos los archivos de registro guardados y le permite abrirlos y buscar en ellos sin salir de HoTTY.',
+      '<0>Visor de registros:</0> abra <1>Nueva sesión → Visor de registros</1> al final de la lista de pestañas para un panel dedicado a explorar registros. Los archivos se agrupan por día bajo el dispositivo o chat del que proceden, con un punto rojo en el que aún se está escribiendo. Pulse el nombre de la carpeta arriba para abrir otra carpeta. Un archivo que aún se está escribiendo se abre siguiendo el final, de modo que las líneas nuevas aparecen a la vista; desplácese hacia arriba para detenerlo.',
     fileTypes:
-      '<0>Tipos de archivo:</0> un registro de sesión se abre como texto plano. Una transcripción de chat de IA (<1>.md</1>) se abre con formato — títulos, tablas y bloques de código, tal como se veía la respuesta en el panel de Chat IA. Un registro del Monitor de ping (<2>.csv</2>) se abre como tabla. Un botón de la barra de búsqueda devuelve cualquiera de las dos vistas al archivo original, y la búsqueda funciona igual en todas ellas.',
+      '<0>Tipos de archivo:</0> un registro de sesión se abre como texto plano. Una transcripción de chat de IA (<1>.md</1>) se abre con formato — títulos, tablas y bloques de código, tal como se veía la respuesta en el panel de chat de IA. Un registro del Monitor de ping (<2>.csv</2>) se abre como tabla. El selector junto al nombre del archivo devuelve cualquiera de los dos al texto sin formato, y la búsqueda funciona igual en todas las vistas.',
     pingCsv:
-      '<0>CSV del Monitor de ping:</0> el Monitor de ping guarda sus resultados en la misma carpeta de registro configurada en <1>Configuración → General</1>, por lo que sus archivos aparecen en el Visor de registros junto a los registros de sesión. Su casilla <2>Registro CSV</2> no está disponible hasta que se configure esa carpeta.',
+      '<0>CSV del Monitor de ping:</0> el Monitor de ping guarda sus resultados en la misma carpeta de registro configurada en <1>Configuración → General</1>, así que sus archivos aparecen en el Visor de registros junto a sus registros de sesión. Pulse <2>Grabar CSV</2> para empezar un archivo; si aún no hay carpeta configurada, se abre Configuración.',
     search:
-      '<0>Búsqueda:</0> use la barra de búsqueda dentro del Visor de registros para filtrar líneas. Active el botón <1>.*</1> para alternar entre la búsqueda de texto plano y la de expresiones regulares.',
+      '<0>Búsqueda:</0> use la barra de búsqueda dentro del Visor de registros para encontrar texto, y elija Líneas coincidentes para ver solo las líneas que coinciden. Active el botón <1>.*</1> para alternar entre búsqueda de texto plano y de expresiones regulares.',
   },
 
 
@@ -149,35 +150,35 @@ export const help = {
     summary:
       'Servidor de archivos (TFTP / SFTP)',
     intro:
-      'Abre el panel Servidor de archivos con <0><1></1></0> (Features) → <2>"File Server"</2>. Elige una carpeta para compartir e inicia un servidor TFTP o SFTP para que los dispositivos de red (p. ej. Cisco) descarguen o suban firmware por la LAN.',
+      'Abre el panel Servidor de archivos con <0><1></1> Nueva sesión</0> → <2>"File Server"</2>. Elige una carpeta para compartir y activa TFTP y/o SFTP con sus interruptores para que los dispositivos de red (p. ej. Cisco) puedan descargar o subir firmware por la LAN. La parte superior del panel muestra la dirección que deben usar los dispositivos, y cada servidor en marcha muestra qué escribir en el dispositivo, con un botón para copiar.',
     serve:
-      '<0>Carpeta compartida:</0> Elige la carpeta con Examinar. Solo se puede acceder a los archivos que contiene; se bloquean el path traversal y los enlaces simbólicos.',
+      '<0>Carpeta compartida:</0> Pulsa el botón de carpeta de arriba para elegirla. Solo se puede acceder a los archivos que contiene; se bloquean el path traversal y las salidas mediante enlaces simbólicos.',
     tftp:
-      '<0>TFTP:</0> UDP (puerto 69 por defecto). El método clásico para cargar firmware en Cisco IOS con <1>copy tftp: flash:</1>. Solo lectura por defecto; activa <2>Allow uploads</2> para transferencias dispositivo→PC.',
+      '<0>TFTP:</0> UDP (puerto 69 por defecto). El método clásico para cargar firmware en Cisco IOS con <1>copy tftp: flash:</1>. Solo descarga por defecto; elige <2>Aceptar subidas</2> para transferencias dispositivo→PC.',
     sftp:
       '<0>SFTP:</0> Basado en SSH (puerto 2222 por defecto) con autenticación por usuario/contraseña. La clave de host se genera automáticamente y se guarda cifrada.',
     firewall:
-      '<0>Firewall de Windows:</0> Si el tráfico entrante está bloqueado, el panel lo indica y ofrece <1>Allow through firewall</1> (un clic, requiere administrador).',
+      '<0>Firewall de Windows:</0> Cada servidor comprueba el firewall antes de iniciarlo. Si el tráfico entrante está bloqueado, lo indica y ofrece <1>Permitir a través del firewall</1> (un clic, requiere administrador).',
     security:
-      '<0>Seguridad:</0> Iniciar un servidor expone la carpeta elegida a tu red local. Comparte solo archivos de confianza y mantén las subidas desactivadas salvo que las necesites.',
+      '<0>Seguridad:</0> Un servidor en marcha expone la carpeta elegida a tu red local. Comparte solo archivos de confianza y mantén las subidas desactivadas salvo que las necesites; el panel te avisa mientras un servidor en marcha acepta subidas.',
   },
 
   interfaceTraffic: {
     summary: 'Tráfico de interfaces (SNMP)',
     intro:
-      'Abre el panel Tráfico de interfaces con <0><1></1></0> (Funciones) → <2>«Interface Traffic»</2>. Consulta un dispositivo de red por SNMP y muestra el rendimiento por interfaz en tiempo real junto a tus terminales.',
+      'Abre el panel Tráfico de interfaces con <0><1></1> Nueva sesión</0> → <2>«Interface Traffic»</2>. Consulta un dispositivo de red por SNMP y muestra el rendimiento por interfaz en tiempo real junto a tus terminales.',
     connect:
-      '<0>Conexión:</0> Introduce el host o la dirección IP del dispositivo y elige la versión de SNMP. <1>v2c</1> usa una cadena de comunidad; <2>v3</2> requiere un nombre de usuario y un nivel de seguridad.',
+      '<0>Conexión:</0> Introduce el host o la dirección IP del dispositivo, elige <1>v2c</1> (cadena de comunidad) o <2>v3</2> (nombre de usuario y nivel de seguridad) y pulsa Conectar y monitorizar. Los dispositivos usados antes aparecen sobre el formulario; pulsa uno para rellenarlo.',
     discover:
-      '<0>Listar interfaces:</0> Prueba la conexión y muestra las interfaces del dispositivo. Después, <1>Iniciar</1> comienza el sondeo: las tasas aparecen a partir del segundo sondeo, ya que el primero establece la referencia.',
+      '<0>Durante la monitorización:</0> El formulario se pliega en una línea con el nombre del dispositivo, el intervalo y Detener. <1>Cambiar</1> detiene y vuelve al formulario. Las tasas aparecen desde el segundo sondeo, ya que el primero fija la referencia; la tabla muestra la cuenta atrás hasta entonces.',
     columns:
-      '<0>Columnas:</0> <1>bps</1> y <2>pps</2> de entrada y salida, errores y descartes de entrada y salida, además del nombre, la descripción, el estado y la velocidad de cada interfaz. Haz clic en una columna para ordenar, filtra por nombre o descripción, o marca <3>Solo activas</3> para ocultar las interfaces caídas.',
+      '<0>Columnas:</0> Recepción y envío muestran una barra de uso, la tasa y un gráfico de los sondeos recientes; pasa el ratón por encima para ver <1>%</1> y <2>pps</2>. Los errores y descartes solo aparecen cuando aumentaron desde el último sondeo. Haz clic en una fila para ver un gráfico más grande, en una columna para ordenar, y deja <3>Solo en uso</3> activado para ocultar las interfaces caídas.',
     v3:
       '<0>Seguridad SNMP v3:</0> Se admiten <1>noAuthNoPriv</1>, <2>authNoPriv</2> (autenticación MD5/SHA) y <3>authPriv</3> (añade privacidad DES/AES), con un nombre de contexto opcional. noAuthNoPriv envía todo sin autenticar y en claro.',
     counters:
       '<0>Contadores de 64 bits:</0> Se usan cuando el dispositivo ofrece <1>ifXTable</1>. Los dispositivos que solo tienen contadores de 32 bits siguen funcionando, pero el panel lo indica: esos contadores se desbordan en unos 34 segundos en un enlace de 1 Gbps saturado.',
     remember:
-      '<0>Ajustes guardados:</0> Cada panel conserva sus propios ajustes del dispositivo. Marca <1>Recordar estos ajustes de conexión</1> para guardar también las credenciales: se cifran con Windows DPAPI antes de almacenarse. Déjalo desmarcado para introducirlas cada vez.',
+      '<0>Dispositivos guardados:</0> Cada dispositivo al que te conectas se guarda en la lista Usados antes, compartida por todos los paneles; × olvida uno. Marca <1>Recordar también las contraseñas</1> para guardar también las credenciales; se cifran con Windows DPAPI antes de guardarse.',
     enable:
       '<0>Activar / desactivar:</0> El panel se puede desactivar en <1>Ajustes → Funciones</1>.',
   },
@@ -185,11 +186,11 @@ export const help = {
   webBrowser: {
     summary: 'Navegador web y marcadores',
     intro:
-      'Abre páginas web dentro de HoTTY en un navegador integrado, práctico para las interfaces web de administración de dispositivos de red (routers, switches, iLO/iDRAC) junto a tus terminales. Ábrelo desde la pestaña <1>🌐 Web</1> del diálogo <0>Nueva sesión</0>: haz clic en <2>🆕 Nuevo navegador web</2> para una pestaña en blanco, o haz doble clic en un marcador guardado para abrir ese sitio.',
+      'Abre páginas web dentro de HoTTY en un navegador integrado, práctico para las interfaces web de administración de dispositivos de red (routers, switches, iLO/iDRAC) junto a tus terminales. Elige <1>🌐 Web</1> en el menú <0>Nueva sesión</0> y haz clic en <2>🆕 Nuevo navegador web</2> para una pestaña en blanco, o haz doble clic en un marcador guardado para abrir ese sitio.',
     bookmarks:
-      '<0>Marcadores:</0> Organiza los sitios en un árbol de carpetas bajo la pestaña <1>Web</1>: añade, renombra, elimina y arrastra para reordenar. Haz doble clic en un marcador para abrirlo en un nuevo panel de navegador. Mientras navegas, el botón de marcadores de la barra de herramientas muestra tus marcadores guardados para un acceso rápido.',
+      '<0>Marcadores:</0> Organiza los sitios en un árbol de carpetas en el diálogo <1>Web</1>: añade, renombra, elimina y arrastra para reordenar. Haz doble clic en un marcador para abrirlo en un nuevo panel de navegador. Mientras navegas, el botón de marcadores de la barra de herramientas muestra tus marcadores guardados para un acceso rápido.',
     openAll:
-      '<0>Abrir todos los marcadores:</0> Haz clic derecho en una carpeta de marcadores —en la pestaña <1>Web</1> o en la lista de marcadores del navegador— y elige <2>Abrir todo</2> para abrir cada marcador que contiene (incluidas las subcarpetas), cada uno en su propio panel de navegador. Si la carpeta tiene 5 o más marcadores, se te pide confirmación primero.',
+      '<0>Abrir todos los marcadores:</0> Haz clic derecho en una carpeta de marcadores —en el diálogo <1>Web</1> o en la lista de marcadores del navegador— y elige <2>Abrir todo</2> para abrir cada marcador que contiene (incluidas las subcarpetas), cada uno en su propio panel de navegador. Si la carpeta tiene 5 o más marcadores, se te pide confirmación primero.',
     star:
       '<0>★ Añadir esta página:</0> Mientras navegas, haz clic en el botón <1>★</1> de la barra de herramientas para guardar la página actual en la carpeta que elijas.',
     toolbar:
@@ -199,7 +200,7 @@ export const help = {
     clearData:
       '<0>Borrar datos de navegación:</0> Abre el menú ⋯ Más de la barra de herramientas y elige Borrar datos de navegación para borrar cookies y datos de sitios, caché, historial, contraseñas guardadas y autocompletado — eliges qué eliminar. Tus marcadores y la configuración de HoTTY se conservan siempre.',
     enable:
-      '<0>Activar / desactivar:</0> La pestaña Web se puede desactivar en <1>Ajustes → Funciones</1>.',
+      '<0>Activar / desactivar:</0> La entrada Web del menú Nueva sesión se puede desactivar en <1>Ajustes → Funciones</1>.',
   },
 
 
@@ -221,7 +222,7 @@ export const help = {
     summary: 'Resumen de las funciones de IA',
     aiChatHeading: 'Chat de IA',
     aiChatIntro:
-      'Haga clic en <0><1></1></0> (Funciones) en la barra de pestañas → <2>"Chat de IA"</2> para abrir el panel de chat de IA. Dentro, la tira de pestañas de la parte superior le permite mantener varias conversaciones en paralelo — use <3>+</3> para iniciar una pestaña nueva. Escriba su pregunta y pulse <4>Ctrl + Enter</4> para enviarla.',
+      'Haga clic en <0><1></1> Nueva sesión</0> → <2>"Chat de IA"</2> para abrir el panel de chat de IA. Dentro, la tira de pestañas de la parte superior le permite mantener varias conversaciones en paralelo — use <3>+</3> para iniciar una pestaña nueva. Escriba su pregunta y pulse <4>Ctrl + Enter</4> para enviarla.',
     linkedTerminal:
       '<0>Terminales vigilados:</0> al iniciar Vigilancia de IA en un terminal, este se añade a tu pestaña de chat de IA activa — actívalo en varios terminales y una sola conversación los vigila todos a la vez. Cada terminal vigilado aparece como una etiqueta junto a la entrada; haz clic en una etiqueta para saltar a ese terminal, en su × para dejar de vigilarlo, o en el + junto a las etiquetas para añadir otro (un terminal desconectado se atenúa y se vuelve a enlazar automáticamente al reconectarse). Cuando se vigilan varios terminales, la IA dirige cada comando al terminal correcto; de lo contrario se ejecuta en el terminal que usaste más recientemente. Usa + en la tira de pestañas para una conversación aparte con su propio conjunto de terminales.',
     streamWatchdog:

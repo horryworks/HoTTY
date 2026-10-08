@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { tauriService } from '../../services/tauriService';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { useResize } from '../../hooks/useResize';
 import { usePaneFindShortcut } from '../../hooks/usePaneFindShortcut';
+import { recallPaneMemory, useRememberPane } from '../../hooks/usePaneMemory';
 import {
   MAX_MATCHES,
   buildSearchRegex,
@@ -21,6 +21,8 @@ import {
 import { MAX_MARKDOWN_BYTES, highlightHtml, isMarkdownFile } from './logMarkdown';
 import { MarkdownContent } from '../MarkdownContent/MarkdownContent';
 import { renderMarkdown } from '../../utils/markdown';
+import { Segmented } from '../PaneTools/PaneTools';
+import { describeLogFile, followInterval, groupByDay, isLive } from './logFileInfo';
 import type { LogFile } from '../../types/appTypes';
 import './LogViewerPane.css';
 
@@ -29,9 +31,10 @@ interface LogViewerPaneProps {
   active: boolean;
 }
 
-const MIN_PANEL_RATIO = 0.15;
-const MAX_PANEL_RATIO = 0.6;
-const DEFAULT_PANEL_RATIO = 0.3;
+/** How often the file list is read again. */
+const LIST_REFRESH_MS = 5000;
+/** Scrolled this far above the end, the reader is reading — stop following. */
+const FOLLOW_SLACK_PX = 40;
 /** Re-scan the log at most this often while the user is still typing. */
 const SEARCH_DEBOUNCE_MS = 150;
 
@@ -46,20 +49,28 @@ function formatDate(mtime: number): string {
   return new Date(mtime).toLocaleString();
 }
 
+function formatTime(mtime: number): string {
+  if (!mtime) return '';
+  return new Date(mtime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
 export function LogViewerPane({ paneId, active }: LogViewerPaneProps) {
   const { t } = useTranslation();
   const loggingPath = useSettingsStore((s) => s.loggingPath);
-  const [folderPath, setFolderPath] = useState(loggingPath);
-  const [folderInput, setFolderInput] = useState(loggingPath);
+  // Where the reader was, kept when the tab is hidden and shown again.
+  const [folderPath, setFolderPath] = useState(() => recallPaneMemory(paneId, 'folder', loggingPath));
   const [files, setFiles] = useState<LogFile[]>([]);
-  const [selectedFile, setSelectedFile] = useState<LogFile | null>(null);
+  const [selectedFile, setSelectedFile] = useState<LogFile | null>(() => recallPaneMemory(paneId, 'file', null));
   const [content, setContent] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [autoRefresh, setAutoRefresh] = useState(false);
   const [filterText, setFilterText] = useState('');
-  const [panelRatio, setPanelRatio] = useState(DEFAULT_PANEL_RATIO);
-  const [panelCollapsed, setPanelCollapsed] = useState(false);
+  // Keep showing the end of the open file as it grows.
+  const [follow, setFollow] = useState(() => recallPaneMemory(paneId, 'follow', false));
+  useRememberPane(paneId, { 'folder': folderPath, 'file': selectedFile, 'follow': follow });
+  // When the file list was last read: drives "Today", "Yesterday" and the
+  // "being written" dot without a clock re-rendering the pane every second.
+  const [listedAt, setListedAt] = useState(() => Date.now());
   // In-log search
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
@@ -73,141 +84,148 @@ export function LogViewerPane({ paneId, active }: LogViewerPaneProps) {
   // pane-level preference, not per-file — flipping to the source stays flipped
   // while the user walks the file list.
   const [mdRendered, setMdRendered] = useState(true);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const contentRef = useRef<HTMLDivElement>(null);
-  const ratioBeforeCollapse = useRef(DEFAULT_PANEL_RATIO);
+  const scrollerRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const currentMatchRef = useRef<HTMLElement | null>(null);
   const mdRef = useRef<HTMLDivElement>(null);
 
-  const { startResize } = useResize({
-    orientation: 'horizontal',
-    onMove: (dx) => {
-      setPanelRatio((prev) => {
-        const containerW = contentRef.current?.clientWidth ?? 600;
-        const delta = dx / containerW;
-        return Math.max(MIN_PANEL_RATIO, Math.min(MAX_PANEL_RATIO, prev + delta));
-      });
-    },
-  });
-
-  const toggleCollapse = useCallback(() => {
-    setPanelCollapsed((prev) => {
-      if (!prev) {
-        ratioBeforeCollapse.current = panelRatio;
-      } else {
-        setPanelRatio(ratioBeforeCollapse.current);
-      }
-      return !prev;
-    });
-  }, [panelRatio]);
-
-  const loadFiles = useCallback(async (path: string) => {
-    if (!path) return;
-    setLoading(true);
-    setError(null);
+  /**
+   * Read the folder's file list. A quiet read (the periodic refresh) leaves the
+   * loading state, the error and the approval prompt alone, so it never
+   * flickers the pane or pops a dialog on its own.
+   */
+  const loadFiles = useCallback(async (path: string, quiet = false): Promise<LogFile[] | null> => {
+    if (!path) return null;
+    if (!quiet) {
+      setLoading(true);
+      setError(null);
+    }
     try {
       let result = await tauriService.listLogFiles(path);
       // If the backend rejected because the folder isn't user-approved yet,
       // ask via a native confirm dialog and retry once. The dialog is what
       // gates this — a compromised renderer can call `confirmLogDir` but
       // cannot fake the OS-level click.
-      if (result.error?.includes('not approved')) {
+      if (!quiet && result.error?.includes('not approved')) {
         const ok = await tauriService.confirmLogDir(path);
         if (ok) {
           result = await tauriService.listLogFiles(path);
         }
       }
       if (result.error) {
-        setError(result.error);
-        setFiles([]);
-      } else {
-        setFiles(result.files ?? []);
+        if (!quiet) {
+          setError(result.error);
+          setFiles([]);
+        }
+        return null;
       }
+      const list = result.files ?? [];
+      // Keep the old array when nothing changed, so a refresh re-renders nothing.
+      setFiles((prev) =>
+        prev.length === list.length && prev.every((f, i) => f.path === list[i].path && f.size === list[i].size && f.mtime === list[i].mtime)
+          ? prev
+          : list,
+      );
+      setListedAt(Date.now());
+      return list;
     } catch (e) {
-      setError(String(e));
-      setFiles([]);
+      if (!quiet) {
+        setError(String(e));
+        setFiles([]);
+      }
+      return null;
     } finally {
-      setLoading(false);
+      if (!quiet) setLoading(false);
     }
   }, []);
 
-  const loadContent = useCallback(async (file: LogFile) => {
-    setLoading(true);
-    setError(null);
+  const loadContent = useCallback(async (file: LogFile, quiet = false) => {
+    if (!quiet) {
+      setLoading(true);
+      setError(null);
+    }
     try {
       const result = await tauriService.readLogFile(file.path);
       if (result.error) {
-        setError(result.error);
-        setContent('');
+        if (!quiet) {
+          setError(result.error);
+          setContent('');
+        }
       } else {
         setContent(result.content ?? '');
       }
     } catch (e) {
-      setError(String(e));
-      setContent('');
+      if (!quiet) {
+        setError(String(e));
+        setContent('');
+      }
     } finally {
-      setLoading(false);
+      if (!quiet) setLoading(false);
     }
   }, []);
 
-  const handleOpenFolder = useCallback(() => {
-    const path = folderInput.trim();
-    if (path) {
-      setFolderPath(path);
-      setSelectedFile(null);
-      setContent('');
-      loadFiles(path);
-    }
-  }, [folderInput, loadFiles]);
+  const openFolder = useCallback((path: string) => {
+    setFolderPath(path);
+    setSelectedFile(null);
+    setContent('');
+    setFollow(false);
+    void loadFiles(path);
+  }, [loadFiles]);
 
-  const handleRefresh = useCallback(() => {
-    if (folderPath) loadFiles(folderPath);
-  }, [folderPath, loadFiles]);
+  const handleChooseFolder = useCallback(async () => {
+    try {
+      const dir = await tauriService.selectFolder();
+      if (dir) openFolder(dir);
+    } catch (e) {
+      setError(String(e));
+    }
+  }, [openFolder]);
 
   const handleSelectFile = useCallback((file: LogFile) => {
     setSelectedFile(file);
-    loadContent(file);
+    // A file still being written opens following its end; an old one opens at the top.
+    setFollow(isLive(file, Date.now()));
+    void loadContent(file);
   }, [loadContent]);
 
   // Sync folder path from settings when loggingPath changes
   useEffect(() => {
-    if (loggingPath && loggingPath !== folderPath) {
-      setFolderPath(loggingPath);
-      setFolderInput(loggingPath);
-      setSelectedFile(null);
-      setContent('');
-      loadFiles(loggingPath);
-    }
+    if (loggingPath && loggingPath !== folderPath) openFolder(loggingPath);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loggingPath]);
 
-  // Load files on mount if loggingPath is set
+  // Load files on mount if a folder is set, and the open file when the tab
+  // comes back from being hidden.
   useEffect(() => {
-    if (folderPath) loadFiles(folderPath);
+    if (folderPath) void loadFiles(folderPath);
+    if (selectedFile) void loadContent(selectedFile);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Auto-refresh
+  // Keep the list current, and while following, reload the open file when it
+  // grew. The size and time come from the list, so an unchanged file is never
+  // read again.
   useEffect(() => {
-    if (autoRefresh && folderPath) {
-      intervalRef.current = setInterval(() => loadFiles(folderPath), 5000);
-    }
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
-  }, [autoRefresh, folderPath, loadFiles]);
-
-  // Enter key in folder input
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') handleOpenFolder();
-  };
+    if (!folderPath) return;
+    const id = setInterval(async () => {
+      const list = await loadFiles(folderPath, true);
+      if (!follow || !selectedFile || !list) return;
+      const fresh = list.find((f) => f.path === selectedFile.path);
+      if (fresh && (fresh.size !== selectedFile.size || fresh.mtime !== selectedFile.mtime)) {
+        setSelectedFile(fresh);
+        void loadContent(fresh, true);
+      }
+    }, follow && selectedFile ? followInterval(selectedFile.size) : LIST_REFRESH_MS);
+    return () => clearInterval(id);
+  }, [folderPath, follow, selectedFile, loadFiles, loadContent]);
 
   const filteredFiles = useMemo(() => {
     if (!filterText) return files;
     const lower = filterText.toLowerCase();
-    return files.filter((f) => f.name.toLowerCase().includes(lower));
+    return files.filter((f) => f.name.toLowerCase().includes(lower) || describeLogFile(f.name).title.toLowerCase().includes(lower));
   }, [files, filterText]);
+
+  const groups = useMemo(() => groupByDay(filteredFiles, listedAt), [filteredFiles, listedAt]);
 
   // ---- In-log search -------------------------------------------------------
 
@@ -401,179 +419,183 @@ export function LogViewerPane({ paneId, active }: LogViewerPaneProps) {
     return renderSegments(cell.segments, cell.matchStart);
   };
 
-  const hasFolderSet = !!folderPath;
+  const selectedInfo = selectedFile ? describeLogFile(selectedFile.name) : null;
+
+  // While following, keep the end in view as the file grows — unless a search
+  // is open, which scrolls to its own match.
+  useEffect(() => {
+    if (!follow || debouncedQuery || loading) return;
+    const el = scrollerRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [follow, content, debouncedQuery, loading]);
+
+  // Scrolling up to read stops following, as in a terminal.
+  const handleContentScroll = useCallback(() => {
+    const el = scrollerRef.current;
+    if (!follow || !el) return;
+    if (el.scrollHeight - el.scrollTop - el.clientHeight > FOLLOW_SLACK_PX) setFollow(false);
+  }, [follow]);
+
+  const groupLabel = (key: string) =>
+    key === 'today' ? t('panes.logViewer.today') : key === 'yesterday' ? t('panes.logViewer.yesterday') : key;
 
   return (
     <div className={`log-viewer-pane${active ? ' active' : ''}`} data-pane-id={paneId}>
-      {hasFolderSet ? (
-        <div className="log-viewer-toolbar">
-          <span className="log-viewer-toolbar-title">{t('panes.logViewer.title')}</span>
-          <span className="log-viewer-toolbar-path" title={folderPath}>{folderPath}</span>
-          <span className="log-viewer-toolbar-spacer" />
-          <label className="log-viewer-auto-refresh">
-            <input
-              type="checkbox"
-              checked={autoRefresh}
-              onChange={(e) => setAutoRefresh(e.target.checked)}
-            />
-            {t('panes.logViewer.auto')}
-          </label>
-        </div>
-      ) : (
-        <div className="log-viewer-toolbar">
-          <input
-            type="text"
-            className="log-viewer-folder-input"
-            placeholder={t('panes.logViewer.folderPlaceholder')}
-            value={folderInput}
-            onChange={(e) => setFolderInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-          />
-          <button
-            type="button"
-            className="log-viewer-toolbar-btn"
-            onClick={handleOpenFolder}
-            disabled={!folderInput.trim()}
-            title={t('panes.logViewer.openTitle')}
-          >
-            {t('panes.logViewer.open')}
-          </button>
-        </div>
-      )}
+      <div className="log-viewer-toolbar">
+        <span className="log-viewer-toolbar-title">{t('panes.logViewer.title')}</span>
+        <button
+          type="button"
+          className={`log-viewer-folder-btn${folderPath ? '' : ' empty'}`}
+          onClick={() => void handleChooseFolder()}
+          title={folderPath ? t('panes.logViewer.changeFolder') : undefined}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" aria-hidden="true">
+            <path d="M3 6.5A1.5 1.5 0 0 1 4.5 5H9l2 2h8.5A1.5 1.5 0 0 1 21 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5z" />
+          </svg>
+          <span className="log-viewer-folder-path">{folderPath || t('panes.logViewer.chooseFolder')}</span>
+        </button>
+        <span className="log-viewer-toolbar-spacer" />
+        <input
+          type="text"
+          className="log-viewer-filter-input"
+          placeholder={t('panes.logViewer.filterPlaceholder')}
+          aria-label={t('panes.logViewer.filterPlaceholder')}
+          value={filterText}
+          onChange={(e) => setFilterText(e.target.value)}
+        />
+      </div>
 
-      <div className="log-viewer-content" ref={contentRef}>
-        {!panelCollapsed && (
-          <div className="log-viewer-file-list" style={{ width: `${panelRatio * 100}%` }}>
-            <div className="log-viewer-filter-bar">
-              <input
-                type="text"
-                className="log-viewer-filter-input"
-                placeholder={t('panes.logViewer.filterPlaceholder')}
-                value={filterText}
-                onChange={(e) => setFilterText(e.target.value)}
-              />
-            </div>
-            <button
-              type="button"
-              className="log-viewer-refresh-btn"
-              onClick={handleRefresh}
-              disabled={!folderPath}
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="23 4 23 10 17 10" />
-                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
-              </svg>
-              {t('panes.logViewer.refresh')}
-            </button>
-            {error && <div className="log-viewer-error">{error}</div>}
-            <div className="log-viewer-file-items">
-              {filteredFiles.length === 0 && folderPath && !loading && !error && (
-                <div className="log-viewer-empty">{t('panes.logViewer.noFiles')}</div>
-              )}
-              {filteredFiles.map((file) => (
-                <div
-                  key={file.path}
-                  className={`log-viewer-file-item${selectedFile?.path === file.path ? ' selected' : ''}`}
-                  onClick={() => handleSelectFile(file)}
-                  title={file.path}
-                >
-                  <span className="log-viewer-file-name">{file.name}</span>
-                  <span className="log-viewer-file-meta">
-                    {formatSize(file.size)} &middot; {formatDate(file.mtime)}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+      {error && <div className="log-viewer-error" role="alert">{error}</div>}
 
-        <div className="log-viewer-divider">
-          <div className="log-viewer-divider-handle" onMouseDown={startResize} />
-          <button
-            type="button"
-            className={`log-viewer-divider-toggle${panelCollapsed ? ' collapsed' : ''}`}
-            onClick={toggleCollapse}
-            title={panelCollapsed ? t('panes.logViewer.showFileList') : t('panes.logViewer.hideFileList')}
-          >
-            <svg width="8" height="12" viewBox="0 0 8 12" fill="currentColor">
-              <path d={panelCollapsed ? 'M2 0l6 6-6 6z' : 'M6 0L0 6l6 6z'} />
-            </svg>
-          </button>
+      <div className="log-viewer-content">
+        <div className="log-viewer-file-list">
+          {filteredFiles.length === 0 && folderPath && !loading && !error && (
+            <div className="log-viewer-empty">{t('panes.logViewer.noFiles')}</div>
+          )}
+          {groups.map((group) => (
+            <div key={group.key} className="log-viewer-file-group">
+              <div className="log-viewer-group-label">{groupLabel(group.key)}</div>
+              {group.files.map((file) => {
+                const info = describeLogFile(file.name);
+                const live = isLive(file, listedAt);
+                return (
+                  <button
+                    type="button"
+                    key={file.path}
+                    className={`log-viewer-file-item${selectedFile?.path === file.path ? ' selected' : ''}`}
+                    onClick={() => handleSelectFile(file)}
+                    title={file.name}
+                  >
+                    <span className={`log-viewer-badge ${info.kind}`}>{info.badge}</span>
+                    <span className="log-viewer-file-text">
+                      <span className="log-viewer-file-name">
+                        {info.title}
+                        {live && <span className="log-viewer-live" title={t('panes.logViewer.writing')} />}
+                      </span>
+                      <span className="log-viewer-file-meta">
+                        {formatTime(file.mtime)} &middot; {formatSize(file.size)}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          ))}
         </div>
 
         <div className="log-viewer-main">
-          {selectedFile && (
-            <div className="log-viewer-search-bar">
-              <input
-                ref={searchInputRef}
-                type="text"
-                className={`log-viewer-search-input${regexInvalid ? ' invalid' : ''}`}
-                placeholder={t('panes.logViewer.searchPlaceholder')}
-                aria-label={t('panes.logViewer.searchAria')}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={handleSearchKeyDown}
-              />
-              {searchQuery && (
-                <button
-                  type="button"
-                  className="log-viewer-search-clear"
-                  onClick={() => { setSearchQuery(''); focusSearch(); }}
-                  title={t('panes.logViewer.clearSearch')}
-                  aria-label={t('panes.logViewer.clearSearch')}
-                >
-                  &times;
-                </button>
-              )}
-              <button
-                type="button"
-                className={`log-viewer-search-toggle${caseSensitive ? ' active' : ''}`}
-                onClick={() => setCaseSensitive((v) => !v)}
-                title={t('panes.logViewer.caseSensitive')}
-                aria-label={t('panes.logViewer.caseSensitive')}
-                aria-pressed={caseSensitive}
-              >
-                Aa
-              </button>
-              <button
-                type="button"
-                className={`log-viewer-search-toggle${useRegex ? ' active' : ''}`}
-                onClick={() => setUseRegex((v) => !v)}
-                title={t('panes.logViewer.useRegex')}
-                aria-label={t('panes.logViewer.useRegex')}
-                aria-pressed={useRegex}
-              >
-                .*
-              </button>
+          {selectedFile && selectedInfo && (
+            <div className="log-viewer-file-head">
+              <span className={`log-viewer-badge ${selectedInfo.kind}`}>{selectedInfo.badge}</span>
+              <span className="log-viewer-file-head-title" title={selectedFile.path}>{selectedInfo.title}</span>
+              <span className="log-viewer-file-head-meta">
+                {formatDate(selectedFile.mtime)} &middot; {formatSize(selectedFile.size)}
+              </span>
+              <span className="log-viewer-toolbar-spacer" />
               {isCsv && (
-                <button
-                  type="button"
-                  className={`log-viewer-search-toggle${csvAsTable ? ' active' : ''}`}
-                  onClick={() => setCsvAsTable((v) => !v)}
-                  title={t('panes.logViewer.tableView')}
-                  aria-label={t('panes.logViewer.tableView')}
-                  aria-pressed={csvAsTable}
-                >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <rect x="3" y="3" width="18" height="18" rx="1" />
-                    <path d="M3 9h18M3 15h18M9 3v18" />
-                  </svg>
-                </button>
+                <Segmented
+                  options={[
+                    { value: 'table', label: t('panes.logViewer.viewTable') },
+                    { value: 'text', label: t('panes.logViewer.viewText') },
+                  ]}
+                  value={csvAsTable ? 'table' : 'text'}
+                  onChange={(v) => setCsvAsTable(v === 'table')}
+                  ariaLabel={t('panes.logViewer.viewAria')}
+                />
               )}
               {isMd && (
+                <Segmented
+                  options={[
+                    { value: 'formatted', label: t('panes.logViewer.viewFormatted') },
+                    { value: 'text', label: t('panes.logViewer.viewText') },
+                  ]}
+                  value={mdRendered ? 'formatted' : 'text'}
+                  onChange={(v) => setMdRendered(v === 'formatted')}
+                  ariaLabel={t('panes.logViewer.viewAria')}
+                />
+              )}
+              <button
+                type="button"
+                className={`log-viewer-follow${follow ? ' on' : ''}`}
+                aria-pressed={follow}
+                onClick={() => setFollow((v) => !v)}
+              >
+                ↓ {t('panes.logViewer.follow')}
+              </button>
+            </div>
+          )}
+
+          {selectedFile && (
+            <div className="log-viewer-search-bar">
+              <div className="log-viewer-search-box">
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  className={`log-viewer-search-input${regexInvalid ? ' invalid' : ''}`}
+                  placeholder={t('panes.logViewer.searchPlaceholder')}
+                  aria-label={t('panes.logViewer.searchAria')}
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={handleSearchKeyDown}
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    className="log-viewer-search-clear"
+                    onClick={() => { setSearchQuery(''); focusSearch(); }}
+                    title={t('panes.logViewer.clearSearch')}
+                    aria-label={t('panes.logViewer.clearSearch')}
+                  >
+                    &times;
+                  </button>
+                )}
                 <button
                   type="button"
-                  className={`log-viewer-search-toggle${mdRendered ? ' active' : ''}`}
-                  onClick={() => setMdRendered((v) => !v)}
-                  title={t('panes.logViewer.renderedView')}
-                  aria-label={t('panes.logViewer.renderedView')}
-                  aria-pressed={mdRendered}
+                  className={`log-viewer-search-toggle${caseSensitive ? ' active' : ''}`}
+                  onClick={() => setCaseSensitive((v) => !v)}
+                  title={t('panes.logViewer.caseSensitive')}
+                  aria-label={t('panes.logViewer.caseSensitive')}
+                  aria-pressed={caseSensitive}
                 >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                    <path d="M4 5h16M4 10h16M4 15h11M4 20h7" />
-                  </svg>
+                  Aa
                 </button>
-              )}
+                <button
+                  type="button"
+                  className={`log-viewer-search-toggle${useRegex ? ' active' : ''}`}
+                  onClick={() => setUseRegex((v) => !v)}
+                  title={t('panes.logViewer.useRegex')}
+                  aria-label={t('panes.logViewer.useRegex')}
+                  aria-pressed={useRegex}
+                >
+                  .*
+                </button>
+              </div>
+              <span
+                className="log-viewer-search-count"
+                title={matchesTruncated ? t('panes.logViewer.tooManyMatches', { limit: MAX_MATCHES }) : undefined}
+              >
+                {countLabel}
+              </span>
               <button
                 type="button"
                 className="log-viewer-search-btn"
@@ -594,25 +616,20 @@ export function LogViewerPane({ paneId, active }: LogViewerPaneProps) {
               >
                 &#9660;
               </button>
-              <span
-                className="log-viewer-search-count"
-                title={matchesTruncated ? t('panes.logViewer.tooManyMatches', { limit: MAX_MATCHES }) : undefined}
-              >
-                {countLabel}
-              </span>
-              <label className={`log-viewer-search-filter-toggle${showMarkdown ? ' disabled' : ''}`}>
-                <input
-                  type="checkbox"
-                  checked={filterOnly}
-                  disabled={showMarkdown}
-                  onChange={(e) => setFilterOnly(e.target.checked)}
-                />
-                {t('panes.logViewer.onlyMatchingLines')}
-              </label>
+              <Segmented
+                options={[
+                  { value: 'all', label: t('panes.logViewer.linesAll') },
+                  { value: 'matching', label: t('panes.logViewer.linesMatching') },
+                ]}
+                value={filterOnly && !showMarkdown ? 'matching' : 'all'}
+                onChange={(v) => setFilterOnly(v === 'matching')}
+                ariaLabel={t('panes.logViewer.linesAria')}
+                disabled={showMarkdown}
+              />
             </div>
           )}
 
-          <div className="log-viewer-file-content">
+          <div className="log-viewer-file-content" ref={scrollerRef} onScroll={handleContentScroll}>
             {loading && <div className="log-viewer-loading">{t('common.loading')}</div>}
             {!loading && selectedFile && csvView && csvTable && (
               csvView.rows.length === 0 ? (
@@ -698,7 +715,11 @@ export function LogViewerPane({ paneId, active }: LogViewerPaneProps) {
               <div className="log-viewer-placeholder">{t('panes.logViewer.selectFile')}</div>
             )}
             {!loading && !folderPath && (
-              <div className="log-viewer-placeholder">{t('panes.logViewer.enterFolder')}</div>
+              <div className="log-viewer-placeholder">
+                <button type="button" className="log-viewer-link-btn" onClick={() => void handleChooseFolder()}>
+                  {t('panes.logViewer.chooseFolder')}
+                </button>
+              </div>
             )}
           </div>
         </div>

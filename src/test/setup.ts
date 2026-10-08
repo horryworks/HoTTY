@@ -32,6 +32,9 @@ if (typeof Element !== 'undefined' && !Element.prototype.setPointerCapture) {
 // left behind would make the next one's pane start with a conversation.
 import { afterEach } from 'vitest';
 import { useAiTranscriptStore } from '../stores/aiTranscriptStore';
+// Tool-pane state kept across remounts is module-global for the same reason.
+import { clearAllPaneMemory } from '../hooks/usePaneMemory';
 afterEach(() => {
     useAiTranscriptStore.setState({ panes: new Map() });
+    clearAllPaneMemory();
 });

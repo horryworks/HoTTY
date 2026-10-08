@@ -49,6 +49,9 @@ interface PaneActions {
   removeSession: (sessionId: string) => void;
   reorderSession: (fromIndex: number, toIndex: number) => void;
   moveSessionToPane: (sessionId: string, targetPaneId: string) => void;
+  /** Take a session out of its pane without closing it. The pane is left
+   *  empty on purpose — refilling it would undo the user's "put this away". */
+  unplaceSession: (sessionId: string) => void;
 }
 
 function findEmptyGridPane(
@@ -166,16 +169,25 @@ export const usePaneStore = create<PaneState & PaneActions>()(
         set((s) => {
           const sessionOrder = s.sessionOrder.filter((id) => id !== sessionId);
           const paneAllocations = { ...s.paneAllocations };
+          const freed: string[] = [];
           for (const [pid, sid] of Object.entries(paneAllocations)) {
-            if (sid === sessionId) paneAllocations[pid] = null;
+            if (sid === sessionId) {
+              paneAllocations[pid] = null;
+              freed.push(pid);
+            }
           }
+          // Only the pane the closed tab leaves behind is refilled. A pane the
+          // user emptied on purpose (unplaceSession) stays empty, or closing an
+          // unrelated tab would bring the put-away tab straight back.
+          const visible = new Set(visiblePaneIdsInOrder(s.layoutMode));
           const unassigned = sessionOrder.filter(
             (sid) => !Object.values(paneAllocations).includes(sid)
           );
-          for (const sid of unassigned) {
-            const empty = findEmptyPane(paneAllocations, s.layoutMode);
-            if (!empty) break;
-            paneAllocations[empty] = sid;
+          for (const pid of freed) {
+            if (!visible.has(pid)) continue;
+            const sid = unassigned.shift();
+            if (!sid) break;
+            paneAllocations[pid] = sid;
           }
           return { sessionOrder, paneAllocations };
         }),
@@ -214,6 +226,13 @@ export const usePaneStore = create<PaneState & PaneActions>()(
             paneAllocations[sourcePaneId] = targetSession;
           }
           return { paneAllocations, activePaneId: targetPaneId };
+        }),
+
+      unplaceSession: (sessionId) =>
+        set((s) => {
+          const entry = Object.entries(s.paneAllocations).find(([, sid]) => sid === sessionId);
+          if (!entry) return s;
+          return { paneAllocations: { ...s.paneAllocations, [entry[0]]: null } };
         }),
 
     }),

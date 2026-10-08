@@ -45,6 +45,22 @@ describe('uiOverlayStore', () => {
     expect(useUiOverlayStore.getState().overlayOpen).toBe(true);
   });
 
+  // Dock menus (New Session, More, the folded layout / bar pickers) open over
+  // panes, so a Web Browser page must hide while one is open.
+  it('treats a dock menu and the watch picker as overlays', async () => {
+    initOverlayWatcher();
+    for (const cls of ['dock-menu new-session-menu', 'tab-watch-menu']) {
+      const el = document.createElement('div');
+      el.className = cls;
+      document.body.appendChild(el);
+      await tick();
+      expect(useUiOverlayStore.getState().overlayOpen).toBe(true);
+      el.remove();
+      await tick();
+      expect(useUiOverlayStore.getState().overlayOpen).toBe(false);
+    }
+  });
+
   it('ignores non-overlay DOM changes', async () => {
     initOverlayWatcher();
     document.body.appendChild(document.createElement('div'));

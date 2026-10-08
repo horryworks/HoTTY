@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildTabItems } from './tabBarHelpers';
+import { buildTabItems, sessionDetail, paneBadge, groupTabs } from './tabBarHelpers';
 import type { SessionRecord } from '../../hooks/useSessionManager';
 import type { FeaturePaneInfo } from '../../utils/paneTypes';
 
@@ -104,5 +104,59 @@ describe('buildTabItems', () => {
     const result = buildTabItems([makeSession('s1')], [], ['s1']);
     expect(result[0].ptyCols).toBeUndefined();
     expect(result[0].fixedSize).toBe(false);
+  });
+});
+
+describe('sessionDetail', () => {
+  it('names the protocol and the host for ssh/telnet', () => {
+    expect(sessionDetail({ protocol: 'ssh', connectionConfig: { host: '192.0.2.10' } as never })).toBe('SSH · 192.0.2.10');
+    expect(sessionDetail({ protocol: 'telnet', connectionConfig: { host: 'sw-01' } as never })).toBe('Telnet · sw-01');
+  });
+
+  it('falls back to the protocol name when the target is unknown', () => {
+    expect(sessionDetail({ protocol: 'ssh' })).toBe('SSH');
+    expect(sessionDetail({ protocol: 'powershell' })).toBe('PowerShell');
+  });
+
+  it('describes serial, wsl and iap targets', () => {
+    expect(sessionDetail({ protocol: 'serial', connectionConfig: { path: 'COM3', baudRate: 9600 } as never })).toBe('COM3 · 9600');
+    expect(sessionDetail({ protocol: 'wsl', connectionConfig: { distribution: 'Ubuntu' } as never })).toBe('WSL · Ubuntu');
+    expect(sessionDetail({ protocol: 'wsl', connectionConfig: {} as never })).toBe('WSL');
+    expect(sessionDetail({ protocol: 'gcloud-iap', connectionConfig: { instance: 'vm-01' } as never })).toBe('IAP · vm-01');
+  });
+
+  it('is carried on session tabs by buildTabItems', () => {
+    const [item] = buildTabItems([makeSession('s1', { connectionConfig: { host: 'h' } as never })], [], ['s1']);
+    expect(item.detail).toBe('SSH · h');
+  });
+});
+
+describe('paneBadge', () => {
+  it('numbers grid cells and names edge bars', () => {
+    expect(paneBadge('0')).toEqual({ kind: 'grid', index: 0 });
+    expect(paneBadge('5')).toEqual({ kind: 'grid', index: 5 });
+    expect(paneBadge('bar-left')).toEqual({ kind: 'edge', edge: 'left' });
+    expect(paneBadge('bar-bottom')).toEqual({ kind: 'edge', edge: 'bottom' });
+    expect(paneBadge('nonsense')).toBeNull();
+  });
+});
+
+describe('groupTabs', () => {
+  const items = buildTabItems(
+    [makeSession('a'), makeSession('b'), makeSession('c'), makeSession('d')],
+    [],
+    ['a', 'b', 'c', 'd']
+  );
+
+  it('orders shown tabs by pane and keeps the rest in tab order', () => {
+    const { shown, hidden } = groupTabs(items, ['0', '1', 'bar-left'], { '0': 'c', '1': 'a', 'bar-left': null });
+    expect(shown.map((p) => [p.item.id, p.paneId])).toEqual([['c', '0'], ['a', '1']]);
+    expect(hidden.map((i) => i.id)).toEqual(['b', 'd']);
+  });
+
+  it('treats a tab in a pane that is not visible as hidden', () => {
+    const { shown, hidden } = groupTabs(items, ['0'], { '0': 'a', 'bar-right': 'b' });
+    expect(shown.map((p) => p.item.id)).toEqual(['a']);
+    expect(hidden.map((i) => i.id)).toEqual(['b', 'c', 'd']);
   });
 });

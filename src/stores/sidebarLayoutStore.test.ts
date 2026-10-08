@@ -44,4 +44,15 @@ describe('sidebarLayoutStore', () => {
     s.setPercent('bottom', 25);
     expect(useSidebarLayoutStore.getState().bottomBarPercent).toBe(25);
   });
+
+  it('v3 drops the remembered session-dialog tab and keeps the rest', async () => {
+    const opts = useSidebarLayoutStore.persist.getOptions();
+    const migrated = (await opts.migrate!(
+      { showLeftSidebar: true, leftSidebarPercent: 30, activeSidebarTab: 'gcp' },
+      2,
+    )) as unknown as Record<string, unknown>;
+    expect(migrated).not.toHaveProperty('activeSidebarTab');
+    expect(migrated.showLeftSidebar).toBe(true);
+    expect(migrated.leftSidebarPercent).toBe(30);
+  });
 });

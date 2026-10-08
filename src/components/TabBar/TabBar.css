@@ -1,380 +1,464 @@
+/* The dock's tab list. Two shapes share one stylesheet:
+   - .tab-bar-vertical   (dock on the left/right): a column that scrolls.
+   - .tab-bar-horizontal (dock on the top/bottom): one row that never scrolls;
+     hidden tabs that do not fit go into the "More" menu.
+   Tabs are split into the ones on screen (with their pane's mark) and the
+   hidden ones. */
 .tab-bar {
   display: flex;
+  min-width: 0;
+  min-height: 0;
   background-color: var(--sidebar-bg);
-  min-height: 35px;
-  align-items: flex-start;
-  padding-left: 0px;
+  color: var(--tab-text);
+  font-family: var(--ui-font-family);
   user-select: none;
-  overflow: visible;
-  --gemini-rainbow: linear-gradient(90deg, var(--accent-light, #42a5f5), var(--accent-color, #007acc), var(--accent-secondary, #ab47bc));
 }
 
+.tab-bar-vertical {
+  flex-direction: column;
+  width: 216px;
+}
+
+.tab-bar-vertical.compact {
+  width: 44px;
+}
+
+.tab-bar-horizontal {
+  flex: 1;
+  flex-direction: row;
+  align-items: center;
+  height: 40px;
+}
+
+.tab-bar-horizontal.compact {
+  height: 28px;
+}
+
+.tab-filter {
+  flex-shrink: 0;
+  height: 24px;
+  margin: 6px 6px 2px;
+  padding: 0 8px;
+  background: var(--input-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-family: var(--ui-font-family);
+  font-size: calc(var(--font-size-base) - 2px);
+  outline: none;
+}
+
+.tab-filter:focus {
+  border-color: var(--accent-color);
+}
+
+/* ── The list and its two groups ── */
 .tab-list {
   display: flex;
-  align-items: flex-start;
-  overflow-x: auto;
-  overflow-y: hidden;
   min-width: 0;
+  min-height: 0;
+  outline: none;
 }
 
-.tab-bar-actions {
-  display: flex;
+.tab-bar-vertical .tab-list {
+  flex: 0 1 auto;
+  flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+}
+
+.tab-bar-horizontal .tab-list {
+  flex: 1;
+  flex-direction: row;
   align-items: center;
+  gap: 2px;
+  padding: 0 4px;
+  overflow: hidden;
+}
+
+.tab-group {
+  display: flex;
+  min-width: 0;
+  border: 1px dashed transparent;
+  border-radius: 6px;
+}
+
+.tab-bar-vertical .tab-group {
+  flex-direction: column;
   flex-shrink: 0;
-  height: 35px;
-  position: relative;
 }
 
+.tab-bar-horizontal .tab-group {
+  flex: 0 1 auto;
+  flex-direction: row;
+  align-items: center;
+  gap: 2px;
+}
+
+/* An empty hidden group still has to be somewhere to drop a tab. */
+.tab-bar.dragging .tab-group-hidden {
+  min-height: 24px;
+  min-width: 48px;
+}
+
+.tab-group.drop-target {
+  border-color: var(--accent-color);
+  background-color: var(--sidebar-btn-hover-bg);
+}
+
+.tab-group-label {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+  font-size: calc(var(--font-size-base) - 3px);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.tab-bar-vertical .tab-group-label {
+  padding: 6px 8px 2px;
+}
+
+/* No room for words in the narrow dock: the group heading becomes a rule. */
+.tab-bar-vertical.compact .tab-group-label {
+  height: 1px;
+  margin: 6px 8px;
+  padding: 0;
+  overflow: hidden;
+  font-size: 0;
+  background-color: var(--border-color);
+}
+
+.tab-bar-horizontal .tab-group-label {
+  padding: 0 2px 0 4px;
+}
+
+.tab-group-count {
+  margin-left: 4px;
+  opacity: 0.7;
+}
+
+.tab-group-sep {
+  flex-shrink: 0;
+}
+
+.tab-bar-horizontal .tab-group-sep {
+  width: 1px;
+  height: 20px;
+  margin: 0 4px;
+  background-color: var(--border-color);
+}
+
+/* ── One tab ── */
 .tab {
+  position: relative;
   display: flex;
   align-items: center;
-  padding: 0 10px;
-  height: 35px;
-  background-color: var(--tab-bg);
+  gap: 6px;
+  flex-shrink: 0;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 2px 6px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
   color: var(--tab-text);
-  border-right: 1px solid var(--border-color);
+  font-family: var(--ui-font-family);
+  text-align: left;
   cursor: pointer;
-  font-size: calc(var(--font-size-base) - 1px);
-  min-width: 120px;
-  max-width: 200px;
-  position: relative;
-  transition: background-color 0.2s;
-  border-top-left-radius: 8px;
-  border-top-right-radius: 8px;
+  transition: background-color 0.1s;
 }
 
-.tab[draggable="true"] {
-  cursor: grab;
+.tab-bar-vertical .tab {
+  min-height: 32px;
+  margin: 0 4px;
+}
+
+.tab-bar-vertical.compact .tab {
+  justify-content: center;
+  min-height: 28px;
+  margin: 1px 4px;
+  padding: 4px 0;
+}
+
+.tab-bar-horizontal .tab {
+  flex: 0 1 160px;
+  min-width: 72px;
+  max-width: 180px;
+  height: 32px;
+}
+
+.tab-bar-horizontal.compact .tab {
+  height: 24px;
+}
+
+.tab:hover {
+  background-color: var(--sidebar-btn-hover-bg);
+}
+
+.tab.active {
+  background-color: var(--tab-bg);
+  border-color: var(--border-color);
+  color: var(--tab-active-text);
 }
 
 .tab[draggable="true"]:active {
   cursor: grabbing;
 }
 
-.tab.drag-over-left {
-  z-index: 10;
-}
-
-.tab.drag-over-left::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  width: 2px;
-  background-color: var(--accent-color);
-  z-index: 20;
-}
-
-.tab.drag-over-right {
-  z-index: 10;
-}
-
-.tab.drag-over-right::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  right: 0;
-  width: 2px;
-  background-color: var(--accent-color);
-  z-index: 20;
-}
-
-.tab:hover {
-  background-color: var(--bg-primary);
-}
-
-.tab.active {
-  background-color: var(--bg-primary);
-  color: var(--tab-active-text);
-}
-
-.tab.error {
-  color: var(--color-danger);
-}
-
-.tab.connecting {
-  background-color: var(--tab-connecting-bg);
-  color: var(--tab-connecting-text);
-  animation: tab-connecting-pulse 1.6s infinite ease-in-out;
-}
-
-.tab.connecting.active,
-.tab.connecting.active-pane-tab {
-  background-color: var(--tab-connecting-bg);
-  color: var(--tab-connecting-text);
-}
-
-@keyframes tab-connecting-pulse {
-  0%, 100% {
-    filter: brightness(1);
-  }
-  50% {
-    filter: brightness(1.18);
-  }
-}
-
-.tab-label {
-  flex: 1;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  margin-right: 8px;
-  text-align: center;
-}
-
-
-/* ── Tab Tooltip (fixed position, shown when title overflows) ── */
-.tab-tooltip {
-  position: fixed;
-  transform: translateX(-50%);
-  padding: 4px 10px;
-  background-color: var(--sidebar-bg);
-  color: var(--text-primary);
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-  font-size: calc(var(--font-size-base) - 1px);
-  white-space: nowrap;
-  z-index: 1000;
-  pointer-events: none;
-  box-shadow: 0 2px 8px var(--modal-shadow, rgba(0, 0, 0, 0.3));
-}
-
-.tab-close {
-  width: 16px;
-  height: 16px;
+.tab-lead {
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  color: var(--text-secondary);
+}
+
+.tab.is-ai-tab .tab-lead {
+  color: var(--accent-secondary);
+}
+
+.tab-text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.tab-bar-vertical.compact .tab-text {
+  display: none;
+}
+
+.tab-label {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: calc(var(--font-size-base) - 2px);
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+.tab.hidden-tab .tab-label {
+  color: var(--text-secondary);
+}
+
+.tab-detail {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text-secondary);
+  opacity: 0.8;
+  font-family: var(--font-family);
+  font-size: calc(var(--font-size-base) - 3px);
+  line-height: 1.25;
+}
+
+.tab-detail.bad {
+  color: var(--color-danger);
+  opacity: 1;
+}
+
+.tab-detail.unread {
+  color: var(--color-warning);
+  opacity: 1;
+}
+
+.tab-bar-horizontal.compact .tab-detail {
+  display: none;
+}
+
+.tab-unread-count {
+  flex-shrink: 0;
+  color: var(--color-warning);
+  font-family: var(--font-family);
+  font-size: calc(var(--font-size-base) - 3px);
+}
+
+.compact .tab-unread-count {
+  display: none;
+}
+
+/* ── State dot: on / connecting / off / new output ── */
+.tab-state-dot {
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
-  background-color: var(--tab-close-bg);
-  color: var(--text-on-accent);
-  margin-left: 5px;
-  border: none;
-  cursor: pointer;
+}
+
+.tab-state-dot.ok { background-color: var(--success-color); }
+.tab-state-dot.bad { background-color: var(--color-danger); }
+.tab-state-dot.unread { background-color: var(--color-warning); }
+.tab-state-dot.connecting {
+  background-color: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--color-warning);
+}
+
+.tab-bar-vertical.compact .tab-state-dot {
+  position: absolute;
+  top: 3px;
+  right: 5px;
+}
+
+/* ── Close and AI-watch buttons: shown on hover / for the selected tab ── */
+.tab-close,
+.tab-watch-btn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
   padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--font-size-base);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.tab:hover .tab-close,
+.tab:hover .tab-watch-btn,
+.tab.active .tab-close,
+.tab.active .tab-watch-btn,
+.tab-watch-btn.watching {
+  display: flex;
 }
 
 .tab-close:hover {
   background-color: var(--tab-close-hover-bg);
-  color: var(--text-on-accent);
-}
-
-.new-tab-btn {
-  width: 35px;
-  height: 35px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-secondary);
-  cursor: pointer;
-  flex-shrink: 0;
-}
-
-.new-tab-btn:hover {
-  background-color: var(--bg-tertiary);
   color: var(--text-primary);
 }
 
-/* Features button */
-.features-btn {
-  position: relative;
-  width: 35px;
-  height: 35px;
-  flex-shrink: 0;
-}
-
-.features-btn-icon {
-  width: 35px;
-  height: 35px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-secondary);
-  cursor: pointer;
-}
-
-.features-btn-icon:hover,
-.features-btn-icon.active {
-  background-color: var(--bg-tertiary);
-  color: var(--text-primary);
-}
-
-.features-dropdown {
-  position: absolute;
-  top: 35px;
-  left: 0;
-  background-color: var(--sidebar-bg);
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  padding: 4px;
-  min-width: 140px;
-  z-index: 1000;
-  box-shadow: 0 4px 12px var(--modal-shadow, rgba(0, 0, 0, 0.3));
-}
-
-.features-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 10px;
-  border-radius: 4px;
-  cursor: pointer;
-  color: var(--text-primary);
-  font-size: calc(var(--font-size-base) - 1px);
-  white-space: nowrap;
-}
-
-.features-item:hover {
-  background-color: var(--bg-primary);
-}
-
-.features-dropdown-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 10px;
-  border-radius: 4px;
-  cursor: pointer;
-  color: var(--text-primary);
-  font-size: calc(var(--font-size-base) - 1px);
-  white-space: nowrap;
-}
-
-.features-dropdown-item:hover {
-  background-color: var(--bg-primary);
-}
-
-.features-dropdown-item svg {
-  flex-shrink: 0;
-  color: var(--text-secondary);
-}
-
-.tab.hidden-tab {
-  background-color: var(--hidden-item-bg);
-  color: var(--text-primary);
-}
-
-.tab.hidden-tab:hover {
-  background-color: var(--hidden-item-bg-hover);
-}
-
-.tab.hidden-tab.active {
-  background-color: var(--hidden-item-bg);
-}
-
-/* Tab corresponding to the active pane: blue background */
-.tab.active-pane-tab {
-  background-color: var(--accent-color);
-  color: var(--text-on-accent);
-}
-
-/* ── AI Watch Button ── */
-
-.tab-watch-btn {
-  background: transparent;
-  border: none;
-  padding: 0;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 14px;
-  height: 14px;
-  color: var(--text-secondary);
-  flex-shrink: 0;
+.compact .tab-close,
+.compact .tab-watch-btn {
+  display: none !important;
 }
 
 .tab-watch-btn.watching {
   animation: ai-glow-pulse 1.5s infinite ease-in-out;
 }
 
-/* Pulse color follows the owning conversation (`--tab-watch-color`, set inline on
-   the watched tab); falls back to the legacy green for other pulse users. */
+/* Pulse color follows the owning conversation (--tab-watch-color, set inline
+   on the watched tab). */
 @keyframes ai-glow-pulse {
-  0% {
-    transform: scale(1);
+  0%, 100% {
     box-shadow: 0 0 2px color-mix(in srgb, var(--tab-watch-color, var(--success-color)) 40%, transparent);
   }
   50% {
-    transform: scale(1.1);
     box-shadow: 0 0 8px color-mix(in srgb, var(--tab-watch-color, var(--success-color)) 80%, transparent);
   }
-  100% {
-    transform: scale(1);
-    box-shadow: 0 0 2px color-mix(in srgb, var(--tab-watch-color, var(--success-color)) 40%, transparent);
-  }
 }
 
-.ai-icon-svg {
-  transition: all 0.3s ease;
-}
-
-.ai-icon-svg.pulse {
-  animation: ai-glow-pulse 1.5s infinite ease-in-out;
-}
-
-/* ── Watched-tab underline bar ── */
-/* Solid conversation color for a watched terminal tab (`--tab-watch-color`, set
-   inline); falls back to the rainbow gradient if no conversation color is present. */
-.tab.gemini-linked-tab::before {
+/* A watched terminal carries its conversation's color on its outer edge. */
+.tab.gemini-linked-tab::after {
   content: '';
   position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
+  background: var(--tab-watch-color, var(--accent-color));
+  border-radius: 2px;
+}
+
+.tab-bar-vertical .tab.gemini-linked-tab::after {
+  top: 6px;
+  bottom: 6px;
+  left: -3px;
+  width: 3px;
+}
+
+.tab-bar-horizontal .tab.gemini-linked-tab::after {
+  left: 6px;
+  right: 6px;
+  bottom: -3px;
   height: 3px;
-  background: var(--tab-watch-color, var(--gemini-rainbow));
-  z-index: 5;
 }
 
-/* Ensure active state doesn't hide it or looks good with it */
-.tab.active.gemini-linked-tab::before {
-  height: 3px;
+.tab.connecting .tab-label {
+  color: var(--tab-connecting-text);
 }
 
-/* ── Full Rainbow AI Tab ── */
-.tab.is-ai-tab {
-  background: var(--gemini-rainbow) !important;
-  background-color: transparent !important;
-  color: var(--text-on-accent) !important;
-  border: none !important;
-  border-top-left-radius: 8px;
-  border-top-right-radius: 8px;
-  position: relative;
-  z-index: 1;
+/* ── Drag feedback ── */
+.tab.drag-over-into {
+  border-color: var(--accent-color);
+  border-style: dashed;
 }
 
-/* Hide the top bar for AI tab since it's already full rainbow */
-.tab.is-ai-tab::before {
-  display: none !important;
+.tab.drag-over-before::before,
+.tab.drag-over-after::before {
+  content: '';
+  position: absolute;
+  background-color: var(--accent-color);
 }
 
-.tab.is-ai-tab:hover {
-  filter: brightness(1.1);
+.tab-bar-vertical .tab.drag-over-before::before { left: 4px; right: 4px; top: -1px; height: 2px; }
+.tab-bar-vertical .tab.drag-over-after::before { left: 4px; right: 4px; bottom: -1px; height: 2px; }
+.tab-bar-horizontal .tab.drag-over-before::before { top: 4px; bottom: 4px; left: -1px; width: 2px; }
+.tab-bar-horizontal .tab.drag-over-after::before { top: 4px; bottom: 4px; right: -1px; width: 2px; }
+
+/* ── New Session row and the "More" button ── */
+.tab-new-wrap {
+  flex-shrink: 0;
+  display: flex;
 }
 
-.tab.active.is-ai-tab {
-  filter: brightness(1.1);
-  box-shadow: none !important;
+.tab-bar-vertical .tab-new-wrap {
+  flex-direction: column;
+  padding-bottom: 4px;
 }
 
-.tab.is-ai-tab .tab-close {
-  background-color: color-mix(in srgb, var(--text-primary) 30%, transparent);
+.tab.tab-new,
+.tab.tab-more {
+  color: var(--text-secondary);
 }
 
-.tab.is-ai-tab .tab-close:hover {
-  background-color: color-mix(in srgb, var(--text-primary) 50%, transparent);
+.tab.tab-new .tab-label {
+  font-weight: 400;
 }
 
-/* ── Hidden AI Tab: reddish gradient ── */
-.tab.is-ai-tab.hidden-tab {
-  background: linear-gradient(90deg, var(--color-danger-shade), var(--color-danger), var(--color-danger-shade)) !important;
+.tab.tab-new.open,
+.tab.tab-more.open {
+  background-color: var(--sidebar-btn-hover-bg);
 }
 
-.tab.is-ai-tab.hidden-tab:hover {
-  filter: brightness(1.15);
+.tab-bar-vertical .tab.tab-new {
+  min-height: 28px;
+}
+
+.tab-bar-horizontal .tab.tab-new {
+  flex: none;
+  min-width: 0;
+  width: 28px;
+  justify-content: center;
+}
+
+.tab-bar-horizontal .tab.tab-new .tab-text {
+  display: none;
+}
+
+.tab-bar-horizontal .tab.tab-more {
+  flex: none;
+  min-width: 0;
+  gap: 5px;
+}
+
+/* Rows inside the "More" menu are full-width tab rows. */
+.tab-overflow-menu {
+  width: 280px;
+}
+
+/* The menu is rendered inside the horizontal bar, so undo the row sizing
+   (a 160px flex basis would become each row's height in this column). */
+.tab-overflow-menu .tab,
+.tab-bar-horizontal .tab-overflow-menu .tab {
+  flex: none;
+  width: 100%;
+  max-width: none;
+  height: auto;
+  min-height: 34px;
+  margin: 0;
 }
 
 /* ── Tab Context Menu ── */
@@ -385,7 +469,7 @@
   border-radius: 6px;
   padding: 4px;
   min-width: 180px;
-  z-index: 1000;
+  z-index: 30000;
   box-shadow: 0 4px 12px var(--modal-shadow);
   font-family: var(--ui-font-family);
 }
@@ -411,7 +495,7 @@
   border-radius: 6px;
   padding: 4px;
   min-width: 180px;
-  z-index: 1000;
+  z-index: 30000;
   box-shadow: 0 4px 12px var(--modal-shadow);
   font-family: var(--ui-font-family);
 }

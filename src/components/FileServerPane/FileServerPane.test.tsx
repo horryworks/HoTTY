@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react';
 import { FileServerPane } from './FileServerPane';
 import { tauriService } from '../../services/tauriService';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -15,6 +15,8 @@ vi.mock('../../services/tauriService', () => ({
     fileServerSftpStop: vi.fn().mockResolvedValue(undefined),
     fileServerFirewallStatus: vi.fn().mockResolvedValue({ status: 'allowed' }),
     fileServerFirewallAllow: vi.fn().mockResolvedValue(undefined),
+    fileServerLocalAddresses: vi.fn().mockResolvedValue([]),
+    writeClipboard: vi.fn().mockResolvedValue(undefined),
     selectFolder: vi.fn().mockResolvedValue('C:/firmware'),
     onFileServerEvent: vi.fn((cb: (e: FileServerEvent) => void) => {
       eventCb = cb;
@@ -29,10 +31,9 @@ const emit = async (ev: FileServerEvent) => {
   });
 };
 
-beforeEach(() => {
-  vi.clearAllMocks();
-  eventCb = null;
-  // Reset persisted config to a known baseline (empty root).
+const card = (name: 'TFTP' | 'SFTP') => within(screen.getByRole('region', { name }));
+
+const setConfig = (patch: Partial<ReturnType<typeof useSettingsStore.getState>['fileServerConfig']> = {}) =>
   useSettingsStore.getState().update('fileServerConfig', {
     rootDir: '',
     bindAddr: '0.0.0.0',
@@ -41,57 +42,103 @@ beforeEach(() => {
     sftpPort: 2222,
     sftpUsername: 'hotty',
     sftpAllowWrite: false,
+    ...patch,
   });
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  eventCb = null;
+  vi.mocked(tauriService.fileServerFirewallStatus).mockResolvedValue({ status: 'allowed' });
+  vi.mocked(tauriService.fileServerLocalAddresses).mockResolvedValue([]);
+  setConfig();
 });
 
 describe('FileServerPane', () => {
-  it('renders title, exposure warning, and both protocol sections', () => {
+  it('shows one card per protocol with a switch, both stopped, and no warning', () => {
     render(<FileServerPane paneId="fs-1" active />);
-    expect(screen.getByText('File Server')).toBeTruthy();
-    expect(screen.getByText(/exposes the selected folder/i)).toBeTruthy();
-    expect(screen.getByText('TFTP')).toBeTruthy();
-    expect(screen.getByText('SFTP')).toBeTruthy();
-    expect(screen.getAllByText('Start')).toHaveLength(2);
+    expect(card('TFTP').getByRole('switch', { name: 'Run TFTP' }).getAttribute('aria-checked')).toBe('false');
+    expect(card('SFTP').getByRole('switch', { name: 'Run SFTP' }).getAttribute('aria-checked')).toBe('false');
     expect(screen.getAllByText('Stopped')).toHaveLength(2);
+    expect(screen.queryByText(/anyone on this network/)).toBeNull();
   });
 
-  it('blocks TFTP start without a served folder', async () => {
+  it('shows the address a device should use, with the adapter list when there are several', async () => {
+    vi.mocked(tauriService.fileServerLocalAddresses).mockResolvedValue([
+      { name: 'Ethernet', address: '192.0.2.15' },
+      { name: 'Wi-Fi', address: '198.51.100.7' },
+    ]);
     render(<FileServerPane paneId="fs-1" active />);
-    fireEvent.click(screen.getAllByText('Start')[0]);
-    await waitFor(() => {
-      expect(screen.getByText('Choose a folder to serve first')).toBeTruthy();
-    });
+    await waitFor(() => expect(screen.getByText('192.0.2.15')).toBeTruthy());
+    fireEvent.change(screen.getByRole('combobox', { name: 'Network adapter' }), { target: { value: '198.51.100.7' } });
+    expect(screen.getByText('198.51.100.7', { selector: '.fs-address' })).toBeTruthy();
+  });
+
+  it('copies the address', async () => {
+    vi.mocked(tauriService.fileServerLocalAddresses).mockResolvedValue([{ name: 'Ethernet', address: '192.0.2.15' }]);
+    render(<FileServerPane paneId="fs-1" active />);
+    await waitFor(() => screen.getByText('192.0.2.15'));
+    fireEvent.click(screen.getByRole('button', { name: 'Copy' }));
+    await waitFor(() => expect(tauriService.writeClipboard).toHaveBeenCalledWith('192.0.2.15'));
+  });
+
+  it('picks the shared folder with its button', async () => {
+    render(<FileServerPane paneId="fs-1" active />);
+    fireEvent.click(screen.getByRole('button', { name: 'Choose a folder…' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'C:/firmware' })).toBeTruthy());
+  });
+
+  it('refuses to start TFTP without a shared folder', async () => {
+    render(<FileServerPane paneId="fs-1" active />);
+    fireEvent.click(card('TFTP').getByRole('switch'));
+    await waitFor(() => expect(screen.getByText('Choose a folder to share first')).toBeTruthy());
     expect(tauriService.fileServerTftpStart).not.toHaveBeenCalled();
   });
 
-  it('starts TFTP with the configured parameters', async () => {
+  it('starts TFTP with the configured parameters from its switch', async () => {
+    setConfig({ rootDir: 'C:/firmware' });
     render(<FileServerPane paneId="fs-1" active />);
-    fireEvent.change(screen.getByPlaceholderText('Choose a folder to share…'), {
-      target: { value: 'C:/firmware' },
-    });
-    fireEvent.click(screen.getAllByText('Start')[0]);
+    fireEvent.click(card('TFTP').getByRole('switch'));
     await waitFor(() => {
       expect(tauriService.fileServerTftpStart).toHaveBeenCalledWith('fs-1', '0.0.0.0', 69, 'C:/firmware', false);
     });
   });
 
-  it('shows Running and Stop once a running status event arrives', async () => {
+  it('turns the switch on and shows the device command once running', async () => {
+    vi.mocked(tauriService.fileServerLocalAddresses).mockResolvedValue([{ name: 'Ethernet', address: '192.0.2.15' }]);
+    render(<FileServerPane paneId="fs-1" active />);
+    await waitFor(() => screen.getByText('192.0.2.15'));
+    await emit({ serverId: 'fs-1', protocol: 'tftp', kind: 'status', status: 'running', timestamp: 0 });
+    expect(card('TFTP').getByRole('switch').getAttribute('aria-checked')).toBe('true');
+    expect(card('TFTP').getByText('Running')).toBeTruthy();
+    expect(card('TFTP').getByText('tftp://192.0.2.15/')).toBeTruthy();
+  });
+
+  it('stops TFTP from its switch while running', async () => {
     render(<FileServerPane paneId="fs-1" active />);
     await emit({ serverId: 'fs-1', protocol: 'tftp', kind: 'status', status: 'running', timestamp: 0 });
-    expect(screen.getByText('Stop')).toBeTruthy();
-    expect(screen.getByText('Running')).toBeTruthy();
+    fireEvent.click(card('TFTP').getByRole('switch'));
+    await waitFor(() => expect(tauriService.fileServerTftpStop).toHaveBeenCalledWith('fs-1'));
+  });
+
+  it('warns only when a running server accepts uploads', async () => {
+    setConfig({ rootDir: 'C:/firmware', tftpAllowWrite: true });
+    render(<FileServerPane paneId="fs-1" active />);
+    expect(screen.queryByText(/anyone on this network/)).toBeNull();
+    await emit({ serverId: 'fs-1', protocol: 'tftp', kind: 'status', status: 'running', timestamp: 0 });
+    expect(screen.getByText(/TFTP accepts uploads/)).toBeTruthy();
+  });
+
+  it('sets uploads with the two-way choice', () => {
+    render(<FileServerPane paneId="fs-1" active />);
+    fireEvent.click(card('SFTP').getByRole('button', { name: 'Accept uploads' }));
+    expect(useSettingsStore.getState().fileServerConfig.sftpAllowWrite).toBe(true);
   });
 
   it('requires SFTP credentials before starting', async () => {
+    setConfig({ rootDir: 'C:/firmware' });
     render(<FileServerPane paneId="fs-1" active />);
-    fireEvent.change(screen.getByPlaceholderText('Choose a folder to share…'), {
-      target: { value: 'C:/firmware' },
-    });
-    // SFTP start is the second Start button; password is empty by default.
-    fireEvent.click(screen.getAllByText('Start')[1]);
-    await waitFor(() => {
-      expect(screen.getByText('Enter an SFTP username and password')).toBeTruthy();
-    });
+    fireEvent.click(card('SFTP').getByRole('switch'));
+    await waitFor(() => expect(screen.getByText('Enter an SFTP username and password')).toBeTruthy());
     expect(tauriService.fileServerSftpStart).not.toHaveBeenCalled();
   });
 
@@ -99,32 +146,21 @@ describe('FileServerPane', () => {
     render(<FileServerPane paneId="fs-1" active />);
     expect(screen.getByText('No transfers yet')).toBeTruthy();
     await emit({
-      serverId: 'fs-1',
-      protocol: 'tftp',
-      kind: 'transfer',
-      client: '10.0.0.5:5000',
-      filename: 'ios.bin',
-      direction: 'download',
-      bytes: 2048,
-      timestamp: 0,
+      serverId: 'fs-1', protocol: 'tftp', kind: 'transfer', client: '192.0.2.5:5000',
+      filename: 'ios.bin', direction: 'download', bytes: 2048, timestamp: 0,
     });
     expect(screen.getByText('ios.bin')).toBeTruthy();
-    expect(screen.getByText('10.0.0.5:5000')).toBeTruthy();
+    expect(screen.getByText('192.0.2.5:5000')).toBeTruthy();
   });
 
   it('shows — for a transfer whose size is unknown (TFTP without tsize)', async () => {
     render(<FileServerPane paneId="fs-1" active />);
     await emit({
-      serverId: 'fs-1',
-      protocol: 'tftp',
-      kind: 'transfer',
-      client: '192.168.1.1:16189',
-      filename: 'ips.zip',
-      direction: 'upload',
+      serverId: 'fs-1', protocol: 'tftp', kind: 'transfer', client: '192.0.2.1:16189',
+      filename: 'ips.zip', direction: 'upload',
       // Backend sends null (serde None) when the client omits the tsize option;
       // this must render as an em dash, not the literal "null B".
-      bytes: null as unknown as undefined,
-      timestamp: 0,
+      bytes: null as unknown as undefined, timestamp: 0,
     });
     expect(screen.getByText('ips.zip')).toBeTruthy();
     expect(screen.getByText('—')).toBeTruthy();
@@ -133,85 +169,60 @@ describe('FileServerPane', () => {
   it('ignores events for other panes', async () => {
     render(<FileServerPane paneId="fs-1" active />);
     await emit({ serverId: 'fs-OTHER', protocol: 'tftp', kind: 'status', status: 'running', timestamp: 0 });
-    expect(screen.queryByText('Running')).toBeNull();
     expect(screen.getAllByText('Stopped')).toHaveLength(2);
   });
 
-  it('shows backend error events in the banner', async () => {
+  it('shows a backend error and clears it on the next start', async () => {
+    setConfig({ rootDir: 'C:/firmware' });
     render(<FileServerPane paneId="fs-1" active />);
     await emit({
-      serverId: 'fs-1',
-      protocol: 'tftp',
-      kind: 'error',
-      message: "TFTP upload failed: 'rtr1.cfg' from 10.0.0.5:5000 — uploads are disabled.",
-      timestamp: 0,
+      serverId: 'fs-1', protocol: 'tftp', kind: 'error',
+      message: "TFTP upload failed: 'rtr1.cfg' from 192.0.2.5:5000 — uploads are disabled.", timestamp: 0,
     });
     expect(screen.getByText(/uploads are disabled/i)).toBeTruthy();
+    fireEvent.click(card('TFTP').getByRole('switch'));
+    await waitFor(() => expect(screen.queryByText(/uploads are disabled/i)).toBeNull());
   });
 
   describe('firewall status', () => {
-    /** Start TFTP, then report `report` from the firewall check. */
-    const startTftpWith = async (report: FirewallReport) => {
+    /** Render and let the before-start check report `report`. */
+    const renderWith = async (report: FirewallReport) => {
       vi.mocked(tauriService.fileServerFirewallStatus).mockResolvedValue(report);
       render(<FileServerPane paneId="fs-1" active />);
-      await emit({ serverId: 'fs-1', protocol: 'tftp', kind: 'status', status: 'running', timestamp: 0 });
-      fireEvent.click(screen.getByText('Re-check'));
-      await waitFor(() => {
-        expect(tauriService.fileServerFirewallStatus).toHaveBeenCalledWith('tftp', 69);
-      });
+      await waitFor(() => expect(tauriService.fileServerFirewallStatus).toHaveBeenCalledWith('tftp', 69));
     };
 
+    it('checks before any server starts', async () => {
+      await renderWith({ status: 'allowed' });
+      await waitFor(() => expect(card('TFTP').getByText(/Passes the firewall/)).toBeTruthy());
+      expect(tauriService.fileServerFirewallStatus).toHaveBeenCalledWith('sftp', 2222);
+    });
+
     it('names the other HoTTY installation when its rule is the one that exists', async () => {
-      await startTftpWith({
-        status: 'blocked',
-        reason: 'otherExeRule',
-        otherExePath: 'C:\\dev\\HoTTY\\target\\debug\\hotty.exe',
-      });
-      await waitFor(() => {
-        expect(screen.getByText(/Blocked by Windows Firewall/i)).toBeTruthy();
-      });
-      expect(screen.getByText('Allow through firewall')).toBeTruthy();
-      expect(screen.getByText(/C:\\dev\\HoTTY\\target\\debug\\hotty\.exe/)).toBeTruthy();
+      await renderWith({ status: 'blocked', reason: 'otherExeRule', otherExePath: 'C:\\dev\\HoTTY\\target\\debug\\hotty.exe' });
+      await waitFor(() => expect(card('TFTP').getByText(/Blocked by Windows Firewall/)).toBeTruthy());
+      expect(card('TFTP').getByRole('button', { name: /Allow through firewall/ })).toBeTruthy();
+      expect(card('TFTP').getByText(/C:\\dev\\HoTTY\\target\\debug\\hotty\.exe/)).toBeTruthy();
     });
 
-    it('still offers remediation when the status is unknown', async () => {
-      await startTftpWith({ status: 'unknown', reason: 'queryFailed' });
-      await waitFor(() => {
-        expect(screen.getByText('Firewall status unknown')).toBeTruthy();
-      });
-      // A check we could not complete must not strand the user.
-      expect(screen.getByText('Allow through firewall')).toBeTruthy();
-      expect(screen.getByText(/Couldn’t determine the firewall status/i)).toBeTruthy();
-    });
-
-    it('explains a profile-scoped rule', async () => {
-      await startTftpWith({ status: 'blocked', reason: 'profileMismatch' });
-      await waitFor(() => {
-        expect(screen.getByText(/not for the network you are on now/i)).toBeTruthy();
-      });
-    });
-
-    it('offers nothing to fix when allowed', async () => {
-      await startTftpWith({ status: 'allowed' });
-      await waitFor(() => {
-        expect(screen.getByText('Allowed through firewall')).toBeTruthy();
-      });
-      expect(screen.queryByText('Allow through firewall')).toBeNull();
+    it('still offers the fix when the status is unknown', async () => {
+      await renderWith({ status: 'unknown', reason: 'queryFailed' });
+      await waitFor(() => expect(card('TFTP').getByText('Firewall status unknown')).toBeTruthy());
+      expect(card('TFTP').getByRole('button', { name: /Allow through firewall/ })).toBeTruthy();
     });
 
     it('adds the rule and re-checks when Allow is clicked', async () => {
-      await startTftpWith({ status: 'blocked', reason: 'noRule' });
-      await waitFor(() => {
-        expect(screen.getByText('Allow through firewall')).toBeTruthy();
-      });
+      await renderWith({ status: 'blocked', reason: 'noRule' });
+      await waitFor(() => card('TFTP').getByRole('button', { name: /Allow through firewall/ }));
       vi.mocked(tauriService.fileServerFirewallStatus).mockResolvedValue({ status: 'allowed' });
-      fireEvent.click(screen.getByText('Allow through firewall'));
-      await waitFor(() => {
-        expect(tauriService.fileServerFirewallAllow).toHaveBeenCalledWith('tftp', 69);
-      });
-      await waitFor(() => {
-        expect(screen.getByText('Allowed through firewall')).toBeTruthy();
-      });
+      fireEvent.click(card('TFTP').getByRole('button', { name: /Allow through firewall/ }));
+      await waitFor(() => expect(tauriService.fileServerFirewallAllow).toHaveBeenCalledWith('tftp', 69));
+      await waitFor(() => expect(card('TFTP').getByText(/Passes the firewall/)).toBeTruthy());
+    });
+
+    it('shows nothing where the check does not apply', async () => {
+      await renderWith({ status: 'notApplicable' });
+      await waitFor(() => expect(card('TFTP').queryByText(/firewall/i)).toBeNull());
     });
   });
 });

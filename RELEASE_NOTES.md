@@ -1,5 +1,41 @@
 # Release Notes
 
+## v2.1.0-beta12
+
+**The tabs became a dock, and the four tool panes were rebuilt so each control says what it does.** The tab bar is now a vertical list kept together with the icon column, on whichever window edge you choose; hidden tabs show what they are connected to and their newest output. Each New Session row opens only what it needs, and Ping Monitor, Interface Traffic, File Server and Log Viewer now show their state and Start/Stop in one place.
+
+### New Features
+
+- **Dock on any edge.** The icon column and the tab list are one block you can put on the left, right, top or bottom, from the buttons in its header or by dragging it to an edge. It can also be narrowed to icons only. Settings → Appearance → Dock position replaces the old sidebar position.
+
+- **Tabs on screen and hidden tabs.** Tabs shown in a pane are listed first, each with its pane's number mark (the same mark sits at the top of the pane). Hidden tabs show their target, or the newest line of output that arrived while hidden, with a dot for connected, connecting, disconnected or new output. On the top or bottom edge the list never scrolls sideways; hidden tabs that do not fit go into one "More" menu.
+
+- **Every pane has a one-line header** with its mark, name and close button; a terminal's header also shows its target and the AI link.
+
+- **New Session opens only what you picked.** SSH and Telnet open the host tree with an SSH / Telnet switch; Serial opens a small dialog with the serial form alone; GCP and Web open their lists. WSL, Command Prompt, PowerShell and Git Bash start straight from the menu with no dialog. With several WSL distributions a list opens beside the menu, and a shell that is not installed is greyed out.
+
+- **File Server shows the address devices should use.** The PC's own address (with a choice of network adapter) sits at the top with a copy button, and each running server shows what to type on the device.
+
+### Improvements
+
+- **Ping Monitor:** targets are added in the last row of the table (Enter, or paste several lines) and removed with ×, taking effect at once. Each row shows its last 60 replies as bars (misses in red), loss and average, and the status in words ("Replying", "No reply", "Name not found"). The interval is a row of buttons; Record CSV can be turned on or off while running. Targets and interval are remembered for the next pane.
+
+- **Interface Traffic:** before connecting only the connection form is shown; one button connects and starts watching. While watching, the form folds into one line naming the device. Receive and send show a utilisation bar, the rate and a graph of recent polls; errors and discards appear only when they grew. Click a row for a larger graph. Devices you used before are listed above the form, shared by every pane. The default interval is now 10 seconds, and the wait for the first rates is counted down. When the device stops answering, the status turns amber and the table fades.
+
+- **File Server:** TFTP and SFTP each start from a switch on their own card; the firewall is checked before a server starts; uploads are a "Download only / Accept uploads" choice, and the warning appears only while a running server accepts uploads. The listen address moved under Details.
+
+- **Log Viewer:** the folder name is a button that opens another folder. Files are grouped by day and named by the device or chat they came from, with a red dot on one still being written. A file still being written opens following its end; scrolling up stops it. Table / Text, Formatted / Text and All lines / Matching lines are two-way choices.
+
+- **The four tool panes share one look:** state and Start/Stop together at the right end of the toolbar, no status bar at the bottom, and their state kept while the tab is hidden.
+
+### Bug Fixes
+
+- **A hidden Ping Monitor, Interface Traffic or File Server tab came back saying "Stopped"** while the monitor or server kept running in the background. It now comes back as it was.
+
+- **Interface Traffic's "Remember these connection settings" never took effect** in a new pane. Saved settings are now kept per device; earlier saved entries are carried over once.
+
+- **Help said Ctrl + N opens the connection dialog**, but nothing did. The line is gone; Ctrl + N stays with the terminal.
+
 ## v2.1.0-beta11
 
 **An AI command runs only on the terminal its answer was written for.** A command without a `target=` used to go to whichever terminal had the focus when you pressed Run, so switching terminals in between sent it somewhere else. It is now tied to the terminal in focus when the answer arrived, and if that terminal is no longer watched by the tab, Run says it is not connected instead of picking another one. The rest are fixes from testing on real devices.

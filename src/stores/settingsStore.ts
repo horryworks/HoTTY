@@ -1,10 +1,11 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Encoding, FeatureId, FileServerConfig, NetboxConfig, PromptPattern, ThemeId, LanguageId, CommandExecutionMode, ClassifierStrategy, PersonaDefinition, AiConnectPolicy, AiLocalShellType, WindowRect } from '../types/appTypes';
+import type { Encoding, FeatureId, FileServerConfig, NetboxConfig, PingMonitorConfig, SnmpSavedDevice, PromptPattern, ThemeId, LanguageId, CommandExecutionMode, ClassifierStrategy, PersonaDefinition, AiConnectPolicy, AiLocalShellType, WindowRect, DockPosition } from '../types/appTypes';
 import { DEFAULT_THEMES } from '../themes/defaults';
 import { DEFAULT_WHITELIST, DEFAULT_BLACKLIST } from '../utils/commandLists';
 import { AUTO_LANGUAGE } from '../constants/aiPrompts';
 import { STORAGE_KEYS } from '../constants/storage';
+import { importLegacySnmpTargets } from '../utils/snmpDevices';
 import type { FixedSizeMode } from '../utils/fixedTerminalSize';
 
 /**
@@ -86,7 +87,10 @@ interface SettingsState {
   theme: ThemeId;
   fontSize: number;
   fontFamily: string;
-  sidebarPosition: 'left' | 'right';
+  /** Edge the dock (icon column + tab list) sits on. Shared by every window. */
+  dockPosition: DockPosition;
+  /** Dock shrunk to icons and pane marks (left/right) or one-line tabs (top/bottom). */
+  dockCompact: boolean;
 
   // Encoding
   globalEncoding: Encoding;
@@ -144,6 +148,12 @@ interface SettingsState {
 
   // File Server (TFTP / SFTP) — persisted config (password excluded)
   fileServerConfig: FileServerConfig;
+
+  // Ping Monitor — the last targets and interval, so a new pane starts with them
+  pingMonitorConfig: PingMonitorConfig;
+
+  // Interface Traffic — devices connected to before, newest first
+  snmpDevices: SnmpSavedDevice[];
 
   // NetBox — folder tree mirrored from a NetBox server (token lives in the
   // backend store, never here)
@@ -242,7 +252,8 @@ const DEFAULTS: SettingsState = {
   theme: 'dark',
   fontSize: 14,
   fontFamily: 'Consolas, "Courier New", monospace',
-  sidebarPosition: 'left',
+  dockPosition: 'left',
+  dockCompact: false,
   globalEncoding: 'utf8',
   gcpIapUsername: '',
   terminalForeground: DEFAULT_THEMES.dark.terminal.foreground,
@@ -285,6 +296,8 @@ const DEFAULTS: SettingsState = {
     sftpUsername: 'hotty',
     sftpAllowWrite: false,
   },
+  pingMonitorConfig: { targets: [], intervalMs: 5000 },
+  snmpDevices: [],
   netbox: {
     baseUrl: '',
     siteIdField: '',
@@ -334,7 +347,7 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
     }),
     {
       name: 'hotty-settings',
-      version: 35,
+      version: 37,
       migrate: (persistedState, version) => {
         const state = (persistedState ?? {}) as Partial<SettingsState>;
         if (version < 2 && state.theme === undefined) {
@@ -554,6 +567,24 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
           }
           delete legacy.settingsModalWidth;
           delete legacy.settingsModalHeight;
+        }
+        if (version < 36) {
+          // The icon column and the tab list became one dock that can sit on
+          // any edge, so the left/right "sidebar position" became a four-way
+          // dock position. Carry the old side over, then drop the old key so
+          // `partialize` does not write it back forever.
+          const legacy = state as Partial<SettingsState> & { sidebarPosition?: string };
+          state.dockPosition = legacy.sidebarPosition === 'right' ? 'right' : (state.dockPosition ?? DEFAULTS.dockPosition);
+          state.dockCompact ??= DEFAULTS.dockCompact;
+          delete legacy.sidebarPosition;
+        }
+        if (version < 37) {
+          // Ping Monitor remembers its targets, and Interface Traffic keeps one
+          // list of devices instead of one entry per pane. The per-pane entries
+          // could never be read back (a pane id is new every time), so fold
+          // them into the list and remove them.
+          state.pingMonitorConfig ??= DEFAULTS.pingMonitorConfig;
+          state.snmpDevices ??= importLegacySnmpTargets();
         }
         return state as SettingsState;
       },

@@ -58,36 +58,6 @@
     min-height: 0;
 }
 
-.host-panel-tabs {
-    display: flex;
-    border-bottom: 1px solid var(--border-color);
-    background: var(--bg-tertiary);
-    flex-shrink: 0;
-}
-
-.host-panel-tab {
-    background: transparent;
-    border: none;
-    color: var(--text-secondary);
-    padding: 6px 18px;
-    cursor: pointer;
-    font-size: calc(var(--font-size-base) - 2px);
-    font-family: var(--ui-font-family);
-    font-weight: 600;
-    transition: background 0.15s, color 0.15s;
-}
-
-.host-panel-tab:hover {
-    background: var(--hover-bg);
-    color: var(--text-primary);
-}
-
-.host-panel-tab.active {
-    background: var(--bg-secondary);
-    color: var(--text-primary);
-    border-bottom: 2px solid var(--accent-color);
-}
-
 .panel-divider {
     width: 5px;
     flex-shrink: 0;
@@ -106,6 +76,56 @@
     padding: 0 14px 12px;
     display: flex;
     flex-direction: column;
+}
+
+/* The serial dialog: the form alone, no host tree and no banner above it, so
+   it drops the panel frame and uses the ordinary dialog-body padding. */
+.connection-dialog-serial .session-dialog-content {
+    padding: 0;
+}
+
+.connection-dialog-serial .dialog-body {
+    border: none;
+    border-radius: 0;
+}
+
+.serial-form-panel {
+    padding: 15px 20px;
+}
+
+/* SSH / Telnet: two joined buttons in place of a protocol select. */
+.protocol-switch {
+    display: flex;
+    align-self: flex-start;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.protocol-switch-btn {
+    padding: 5px 16px;
+    border: none;
+    background: var(--input-bg);
+    color: var(--text-secondary);
+    font-family: var(--ui-font-family);
+    font-size: calc(var(--font-size-base) - 1px);
+    cursor: pointer;
+    transition: background-color 0.1s;
+}
+
+.protocol-switch-btn + .protocol-switch-btn {
+    border-left: 1px solid var(--border-color);
+}
+
+.protocol-switch-btn:hover:not(:disabled):not(.active) {
+    background: var(--hover-bg);
+    color: var(--text-primary);
+}
+
+.protocol-switch-btn.active {
+    background: var(--accent-color);
+    color: var(--text-on-accent);
+    font-weight: 600;
 }
 
 .form-status-banner {

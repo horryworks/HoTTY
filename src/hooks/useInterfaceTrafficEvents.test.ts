@@ -88,6 +88,37 @@ describe('useInterfaceTrafficEvents', () => {
     expect(result.current.snapshot?.interfaces.map((r) => r.ifIndex)).toEqual([1]);
   });
 
+  it('keeps each interface rate history, skips stale polls, and clears it on reconnect', async () => {
+    let emitData: ((p: SnmpDataPayload) => void) | undefined;
+    let emitStatus: ((p: SnmpStatusPayload) => void) | undefined;
+    onData.mockImplementation(async (cb) => {
+      emitData = cb;
+      return () => {};
+    });
+    onStatus.mockImplementation(async (cb) => {
+      emitStatus = cb;
+      return () => {};
+    });
+    const { result } = renderHook(() => useInterfaceTrafficEvents('if-1'));
+    await waitFor(() => expect(emitData && emitStatus).toBeDefined());
+
+    const withRate = (bps: number | undefined, extra: Partial<SnmpDataPayload> = {}) => ({
+      ...makeSnapshot('if-1', [1]),
+      interfaces: [{ ifIndex: 1, discontinuity: false, bpsIn: bps, bpsOut: bps }],
+      ...extra,
+    });
+    act(() => emitData!(withRate(undefined)));
+    act(() => emitData!(withRate(100)));
+    act(() => emitData!(withRate(100, { staleForMs: 20000, status: 'error' })));
+    act(() => emitData!(withRate(200)));
+    expect(result.current.history.get(1)?.bpsIn).toEqual([undefined, 100, 200]);
+    expect(result.current.receivedAt).not.toBeNull();
+
+    act(() => emitStatus!({ paneId: 'if-1', state: 'connecting', timestamp: 't' }));
+    expect(result.current.history.size).toBe(0);
+    expect(result.current.snapshot).toBeNull();
+  });
+
   it('tracks watcher state transitions and messages', async () => {
     let emit: ((p: SnmpStatusPayload) => void) | undefined;
     onStatus.mockImplementation(async (cb) => {

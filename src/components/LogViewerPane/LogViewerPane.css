@@ -9,11 +9,11 @@
   font-family: var(--font-family);
 }
 
-/* Toolbar */
+/* Toolbar: the folder (a button — press it to open another) and the file filter. */
 .log-viewer-toolbar {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   min-height: 36px;
   padding: 6px 10px;
   background: var(--ai-header-bg);
@@ -29,96 +29,57 @@
   flex-shrink: 0;
 }
 
-.log-viewer-toolbar-path {
-  font-size: calc(var(--font-size-base) - 1px);
-  color: var(--text-secondary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  min-width: 0;
-}
-
 .log-viewer-toolbar-spacer {
   flex: 1;
 }
 
-.log-viewer-folder-input {
-  flex: 1;
+.log-viewer-folder-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   min-width: 0;
-  padding: 3px 8px;
-  background: var(--input-bg);
+  max-width: 60%;
+  padding: 3px 10px;
   border: 1px solid var(--border-color);
   border-radius: 4px;
+  background: var(--input-bg);
   color: var(--text-primary);
   font-family: var(--font-family);
   font-size: calc(var(--font-size-base) - 1px);
-  outline: none;
-}
-
-.log-viewer-folder-input:focus {
-  border-color: var(--accent-color);
-}
-
-.log-viewer-toolbar-btn {
-  flex-shrink: 0;
-  padding: 3px 8px;
+  cursor: pointer;
   transition: background-color 0.1s;
-  background: var(--btn-secondary-bg);
-  border: none;
-  border-radius: 4px;
-  color: var(--text-primary);
-  cursor: pointer;
+}
+
+.log-viewer-folder-btn:hover:not(:disabled) {
+  background: var(--hover-bg);
+}
+
+.log-viewer-folder-btn.empty {
+  color: var(--accent-color);
   font-family: var(--ui-font-family);
-  font-size: calc(var(--font-size-base) - 2px);
-  display: flex;
-  align-items: center;
-  gap: 4px;
 }
 
-.log-viewer-toolbar-btn:hover:not(:disabled) {
-  background: var(--btn-secondary-hover-bg);
+.log-viewer-folder-btn svg {
+  flex-shrink: 0;
 }
 
-.log-viewer-toolbar-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.log-viewer-auto-refresh {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: calc(var(--font-size-base) - 2px);
-  color: var(--text-secondary);
-  cursor: pointer;
+/* Long paths keep their end (the folder name) in view. */
+.log-viewer-folder-path {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
+  direction: rtl;
+  text-align: left;
 }
 
-/* Body: split layout */
-.log-viewer-content {
-  display: flex;
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
-  position: relative;
-}
-
-/* Left: file list panel */
-.log-viewer-file-list {
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  background: var(--bg-secondary);
-  overflow: hidden;
-}
-
-.log-viewer-filter-bar {
-  padding: 6px 8px;
-  flex-shrink: 0;
+.log-viewer-folder-btn.empty .log-viewer-folder-path {
+  direction: ltr;
 }
 
 .log-viewer-filter-input {
-  width: 100%;
+  width: 200px;
+  min-width: 0;
   padding: 4px 8px;
   background: var(--input-bg);
   border: 1px solid var(--border-color);
@@ -128,61 +89,61 @@
   font-size: calc(var(--font-size-base) - 2px);
   outline: none;
   box-sizing: border-box;
+  transition: border-color 0.2s;
 }
 
 .log-viewer-filter-input:focus {
   border-color: var(--accent-color);
 }
 
-.log-viewer-refresh-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  width: calc(100% - 16px);
-  margin: 0 8px 6px;
-  padding: 3px 8px;
-  background: var(--btn-secondary-bg);
-  border: none;
-  border-radius: 4px;
-  color: var(--text-primary);
-  cursor: pointer;
-  font-family: var(--ui-font-family);
-  font-size: calc(var(--font-size-base) - 2px);
-  flex-shrink: 0;
-}
-
-.log-viewer-refresh-btn:hover:not(:disabled) {
-  background: var(--btn-secondary-hover-bg);
-}
-
-.log-viewer-refresh-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* Error inside file list */
 .log-viewer-error {
   padding: 6px 10px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
   color: var(--color-danger);
   font-size: calc(var(--font-size-base) - 2px);
   flex-shrink: 0;
 }
 
-/* Scrollable file items */
-.log-viewer-file-items {
+/* Body: the file list beside the open file */
+.log-viewer-content {
+  display: flex;
   flex: 1;
   min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+/* Left: files, grouped by day */
+.log-viewer-file-list {
+  width: 240px;
+  flex-shrink: 0;
   overflow-y: auto;
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border-color);
+}
+
+.log-viewer-group-label {
+  padding: 8px 10px 4px;
+  color: var(--text-tertiary);
+  font-family: var(--ui-font-family);
+  font-size: calc(var(--font-size-base) - 3px);
+  font-weight: 600;
+  letter-spacing: 0.04em;
 }
 
 .log-viewer-file-item {
-  padding: 6px 10px;
-  cursor: pointer;
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-  border-bottom: 1px solid var(--border-color);
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 10px;
+  border: none;
+  background: none;
+  color: var(--text-primary);
+  font-family: var(--ui-font-family);
+  text-align: left;
+  cursor: pointer;
 }
 
 .log-viewer-file-item:hover {
@@ -193,8 +154,19 @@
   background: var(--accent-light);
 }
 
+.log-viewer-file-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
 .log-viewer-file-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: calc(var(--font-size-base) - 1px);
+  font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -205,53 +177,115 @@
   color: var(--text-tertiary);
 }
 
-/* Divider with resize handle and collapse toggle */
-.log-viewer-divider {
-  position: relative;
+/* "Still being written" */
+.log-viewer-live {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-danger);
   flex-shrink: 0;
-  width: 6px;
-  display: flex;
+}
+
+/* Type badge: where the file came from, at a glance. */
+.log-viewer-badge {
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-}
-
-.log-viewer-divider-handle {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  cursor: col-resize;
-  z-index: 2;
-}
-
-.log-viewer-divider-handle:hover {
-  background: var(--accent-color);
-  opacity: 0.5;
-}
-
-.log-viewer-divider-toggle {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  z-index: 3;
-  width: 16px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
+  min-width: 30px;
+  height: 18px;
+  padding: 0 4px;
   border-radius: 3px;
-  color: var(--text-tertiary);
-  cursor: pointer;
-  padding: 0;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-family: var(--ui-font-family);
+  font-size: calc(var(--font-size-base) - 5px);
+  font-weight: 700;
+  flex-shrink: 0;
 }
 
-.log-viewer-divider-toggle:hover {
-  color: var(--text-primary);
-  background: var(--hover-bg);
+.log-viewer-badge.ssh,
+.log-viewer-badge.telnet,
+.log-viewer-badge.gcp {
+  background: var(--accent-color);
+  color: var(--text-on-accent);
+}
+
+.log-viewer-badge.aichat {
+  background: var(--accent-secondary);
+  color: var(--text-on-accent);
+}
+
+.log-viewer-badge.ping {
+  background: var(--success-color);
+  color: var(--text-on-accent);
+}
+
+.log-viewer-badge.serial {
+  background: var(--color-warning);
+  color: var(--text-on-accent);
+}
+
+/* The open file's own line: what it is, how to view it, follow its end. */
+.log-viewer-file-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+.log-viewer-file-head-title {
+  flex: 0 1 auto;
+  min-width: 48px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+/* Gives way before the name does. */
+.log-viewer-file-head-meta {
+  flex: 0 2 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-tertiary);
+  font-family: var(--ui-font-family);
+  font-size: calc(var(--font-size-base) - 2px);
+  white-space: nowrap;
+}
+
+.log-viewer-follow {
+  padding: 2px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  background: var(--input-bg);
+  color: var(--text-secondary);
+  font-family: var(--ui-font-family);
+  font-size: calc(var(--font-size-base) - 2px);
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.log-viewer-follow.on {
+  border-color: var(--accent-color);
+  color: var(--accent-color);
+}
+
+.log-viewer-link-btn {
+  border: none;
+  background: none;
+  color: var(--accent-color);
+  font-family: var(--ui-font-family);
+  font-size: calc(var(--font-size-base) - 1px);
+  cursor: pointer;
+}
+
+.log-viewer-link-btn:hover {
+  text-decoration: underline;
 }
 
 /* Right: search bar + file content */
@@ -330,6 +364,7 @@
 .log-viewer-search-bar {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
   min-height: 36px;
   padding: 6px 10px;
@@ -339,27 +374,39 @@
   flex-shrink: 0;
 }
 
+.log-viewer-search-box {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 1;
+  min-width: 160px;
+  padding-right: 2px;
+  background: var(--input-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  transition: border-color 0.2s;
+}
+
+.log-viewer-search-box:focus-within {
+  border-color: var(--accent-color);
+}
+
+.log-viewer-search-box:has(.log-viewer-search-input.invalid) {
+  border-color: var(--color-danger);
+}
+
 .log-viewer-search-input {
   flex: 1;
   min-width: 0;
   padding: 3px 8px;
-  background: var(--input-bg);
-  border: 1px solid var(--border-color);
+  background: transparent;
+  border: none;
   border-radius: 4px;
   color: var(--text-primary);
   font-family: var(--font-family);
   font-size: calc(var(--font-size-base) - 1px);
   outline: none;
   transition: border-color 0.2s;
-}
-
-.log-viewer-search-input:focus {
-  border-color: var(--accent-color);
-}
-
-.log-viewer-search-input.invalid,
-.log-viewer-search-input.invalid:focus {
-  border-color: var(--color-danger);
 }
 
 .log-viewer-search-clear,
@@ -398,17 +445,6 @@
 .log-viewer-search-count {
   color: var(--text-tertiary);
   font-size: calc(var(--font-size-base) - 2px);
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-.log-viewer-search-filter-toggle {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: calc(var(--font-size-base) - 2px);
-  color: var(--text-secondary);
-  cursor: pointer;
   white-space: nowrap;
   flex-shrink: 0;
 }
@@ -492,9 +528,12 @@
   font-size: calc(var(--font-size-base) - 2px);
 }
 
-/* "Matching lines only" has no meaning over a rendered document — a formatted
-   transcript has blocks, not lines — so it is disabled in that view. */
-.log-viewer-search-filter-toggle.disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+/* Case and regex sit inside the search field, so the three read as one control. */
+.log-viewer-search-box .log-viewer-search-toggle,
+.log-viewer-search-box .log-viewer-search-clear {
+  background: transparent;
+}
+
+.log-viewer-search-box .log-viewer-search-toggle.active {
+  background: var(--accent-light);
 }

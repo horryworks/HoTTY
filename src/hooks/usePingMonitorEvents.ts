@@ -1,20 +1,28 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { tauriService } from '../services/tauriService';
 import { logError } from '../utils/logger';
 import i18n from '../i18n';
+import { recallPaneMemory, rememberPaneMemory, useRememberPane } from './usePaneMemory';
 import type { PingResult } from '../types/appTypes';
 
-const MAX_HISTORY = 60;
+export const MAX_HISTORY = 60;
 
 interface PingMonitorEventData {
   latestResults: Map<string, PingResult>;
+  /** The last MAX_HISTORY results per target, oldest first. */
+  history: Map<string, PingResult[]>;
   logFileName: string | null;
+  /** Forget the file name, e.g. when recording is turned off. */
+  clearLogFileName: () => void;
 }
 
 export function usePingMonitorEvents(sessionId: string): PingMonitorEventData {
-  const [latestResults, setLatestResults] = useState<Map<string, PingResult>>(new Map());
-  const [logFileName, setLogFileName] = useState<string | null>(null);
-  const historyRef = useRef<Map<string, PingResult[]>>(new Map());
+  // Kept across remounts: the monitor keeps running while its tab is hidden.
+  const [latestResults, setLatestResults] = useState<Map<string, PingResult>>(() => recallPaneMemory(sessionId, 'ping.latest', new Map()));
+  const [logFileName, setLogFileName] = useState<string | null>(() => recallPaneMemory(sessionId, 'ping.logFile', null));
+  const [history, setHistory] = useState<Map<string, PingResult[]>>(() => recallPaneMemory(sessionId, 'ping.history', new Map()));
+  const historyRef = useRef<Map<string, PingResult[]>>(recallPaneMemory(sessionId, 'ping.historyRef', new Map()));
+  useRememberPane(sessionId, { 'ping.latest': latestResults, 'ping.logFile': logFileName, 'ping.history': history });
 
   useEffect(() => {
     let cancelled = false;
@@ -34,16 +42,20 @@ export function usePingMonitorEvents(sessionId: string): PingMonitorEventData {
           next.set(result.target, result);
           seen.add(result.target);
           // Update history
-          const history = historyRef.current.get(result.target) ?? [];
-          history.push(result);
-          if (history.length > MAX_HISTORY) history.shift();
-          historyRef.current.set(result.target, history);
+          const past = historyRef.current.get(result.target) ?? [];
+          past.push(result);
+          if (past.length > MAX_HISTORY) past.shift();
+          historyRef.current.set(result.target, past);
         }
         // Prune history for targets no longer present in the snapshot.
         for (const key of Array.from(historyRef.current.keys())) {
           if (!seen.has(key)) historyRef.current.delete(key);
         }
         setLatestResults(next);
+        rememberPaneMemory(sessionId, 'ping.historyRef', historyRef.current);
+        // A fresh Map (and fresh arrays) so the table re-renders; the ref keeps
+        // the running copy between events.
+        setHistory(new Map(Array.from(historyRef.current, ([k, v]) => [k, [...v]])));
       });
       // If the effect was already torn down while this subscribe was in flight,
       // unlisten immediately instead of leaking the listener.
@@ -67,7 +79,9 @@ export function usePingMonitorEvents(sessionId: string): PingMonitorEventData {
       dataUnlisten?.();
       logUnlisten?.();
     };
-  }, [sessionId]);
+  }, [sessionId, setLatestResults, setHistory, setLogFileName]);
 
-  return { latestResults, logFileName };
+  const clearLogFileName = useCallback(() => setLogFileName(null), [setLogFileName]);
+
+  return { latestResults, history, logFileName, clearLogFileName };
 }

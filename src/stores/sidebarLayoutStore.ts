@@ -5,10 +5,6 @@ import { WINDOW_LABEL } from '../utils/windowLabel';
 
 export type SidebarEdge = 'left' | 'right' | 'top' | 'bottom';
 
-type SidebarTab = 'hosts' | 'gcp' | 'web';
-
-const SIDEBAR_TABS: readonly SidebarTab[] = ['hosts', 'gcp', 'web'];
-
 interface SidebarLayoutState {
   showLeftSidebar: boolean;
   showRightSidebar: boolean;
@@ -18,10 +14,8 @@ interface SidebarLayoutState {
   rightSidebarPercent: number;
   topBarPercent: number;
   bottomBarPercent: number;
-  activeSidebarTab: SidebarTab;
   toggle: (edge: SidebarEdge) => void;
   setPercent: (edge: SidebarEdge, percent: number) => void;
-  setActiveSidebarTab: (tab: SidebarTab) => void;
 }
 
 const clamp = (n: number) => Math.max(5, Math.min(80, n));
@@ -37,7 +31,6 @@ export const useSidebarLayoutStore = create<SidebarLayoutState>()(
       rightSidebarPercent: 20,
       topBarPercent: 20,
       bottomBarPercent: 20,
-      activeSidebarTab: 'hosts',
       toggle: (edge) =>
         set((s) => {
           switch (edge) {
@@ -65,19 +58,17 @@ export const useSidebarLayoutStore = create<SidebarLayoutState>()(
               return { bottomBarPercent: v };
           }
         }),
-      setActiveSidebarTab: (tab) => set({ activeSidebarTab: tab }),
     }),
     {
       // Per-window: each window keeps its own sidebar visibility/sizing. The
       // initial "main" window keeps the legacy unsuffixed key (back-compat).
       name: windowScopedKey('hotty-sidebar-layout', WINDOW_LABEL),
-      version: 2,
+      version: 3,
       migrate: (persistedState) => {
-        const state = (persistedState ?? {}) as Partial<SidebarLayoutState>;
-        // Normalize any unknown/corrupt tab value to 'hosts'.
-        if (!state.activeSidebarTab || !SIDEBAR_TABS.includes(state.activeSidebarTab)) {
-          state.activeSidebarTab = 'hosts';
-        }
+        // v3: the session dialog's Hosts / GCP / Web tabs are gone (the New
+        // Session menu row picks the dialog), so the remembered tab is dropped.
+        const state = (persistedState ?? {}) as Partial<SidebarLayoutState> & { activeSidebarTab?: unknown };
+        delete state.activeSidebarTab;
         return state as SidebarLayoutState;
       },
     }

@@ -9,11 +9,12 @@
   font-family: var(--font-family);
 }
 
-/* Toolbar */
+/* Toolbar: what to watch on the left, its state and Start/Stop on the right. */
 .ping-monitor-toolbar {
   display: flex;
   align-items: center;
-  gap: 6px;
+  flex-wrap: wrap;
+  gap: 8px;
   min-height: 36px;
   padding: 6px 10px;
   background: var(--ai-header-bg);
@@ -33,248 +34,76 @@
   flex: 1;
 }
 
-.ping-monitor-toolbar-btn {
-  background: var(--btn-secondary-bg);
-  color: var(--text-primary);
-  padding: 3px 8px;
-  transition: background-color 0.1s;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
+/* "Record CSV": a toggle chip that names the file while it records. */
+.ping-monitor-record {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 320px;
+  padding: 2px 9px;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  background: var(--input-bg);
+  color: var(--text-secondary);
   font-family: var(--ui-font-family);
   font-size: calc(var(--font-size-base) - 2px);
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.ping-monitor-btn-start {
-  background: var(--accent-color);
-  color: var(--text-on-accent);
-}
-
-.ping-monitor-btn-start:hover:not(:disabled) {
-  background: var(--accent-hover);
-}
-
-.ping-monitor-btn-stop {
-  background: var(--btn-danger-bg);
-  color: var(--text-on-accent);
-}
-
-.ping-monitor-btn-stop:hover:not(:disabled) {
-  background: var(--btn-danger-hover-bg);
-}
-
-.ping-monitor-toolbar-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.ping-monitor-interval-label {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: calc(var(--font-size-base) - 2px);
-  color: var(--text-secondary);
-  flex-shrink: 0;
-}
-
-.ping-monitor-interval-select {
-  padding: 3px 8px;
-  background: var(--input-bg);
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-  color: var(--text-primary);
-  font-family: var(--font-family);
-  font-size: calc(var(--font-size-base) - 2px);
-  outline: none;
   cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background-color 0.1s, border-color 0.1s;
 }
 
-.ping-monitor-interval-select:focus {
-  border-color: var(--accent-color);
+.ping-monitor-record:hover:not(:disabled) {
+  background: var(--hover-bg);
 }
 
-.ping-monitor-log-indicator {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: calc(var(--font-size-base) - 2px);
-  color: var(--success-color);
+.ping-monitor-record.on {
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+}
+
+.ping-monitor-record-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
   flex-shrink: 0;
+}
+
+.ping-monitor-record.on .ping-monitor-record-dot {
+  background: currentColor;
 }
 
 /* Error bar */
 .ping-monitor-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   padding: 4px 10px;
   background: var(--color-danger);
   color: var(--text-on-accent);
+  font-family: var(--ui-font-family);
   font-size: calc(var(--font-size-base) - 2px);
   flex-shrink: 0;
 }
 
-/* Body: split layout */
-.ping-monitor-body {
-  display: flex;
+.ping-monitor-error span {
   flex: 1;
-  min-height: 0;
-  overflow: hidden;
-  position: relative;
 }
 
-/* Left: targets panel */
-.ping-monitor-targets-panel {
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  background: var(--bg-secondary);
-  overflow: hidden;
-}
-
-.ping-monitor-targets-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 6px 10px;
-  border-bottom: 1px solid var(--border-color);
-  flex-shrink: 0;
-}
-
-.ping-monitor-targets-title {
-  font-size: calc(var(--font-size-base) - 1px);
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.ping-monitor-targets-count {
-  font-size: calc(var(--font-size-base) - 2px);
-  color: var(--text-tertiary);
-}
-
-.ping-monitor-target-input {
-  flex: 1;
-  min-height: 0;
-  padding: 8px 10px;
-  background: var(--bg-tertiary);
-  border: none;
-  color: var(--text-primary);
-  font-family: var(--font-family);
-  font-size: calc(var(--font-size-base) - 1px);
-  outline: none;
-  resize: none;
-  box-sizing: border-box;
-  overflow-y: scroll;
-}
-
-.ping-monitor-logging-section {
-  padding: 6px 10px;
-  border-top: 1px solid var(--border-color);
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  flex-shrink: 0;
-}
-
-.ping-monitor-logging-toggle {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: calc(var(--font-size-base) - 2px);
-  color: var(--text-secondary);
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.ping-monitor-logging-toggle.disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* Read-only reminder of where CSV files land (the app-wide log folder). */
-.ping-monitor-logging-hint {
-  font-size: calc(var(--font-size-base) - 3px);
-  color: var(--text-tertiary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* "Set log folder…" — a link to Settings → General, shown while no folder is set. */
-.ping-monitor-logging-link {
-  align-self: flex-start;
-  padding: 0;
+.ping-monitor-error-close {
   border: none;
   background: none;
-  font-size: calc(var(--font-size-base) - 3px);
-  color: var(--accent-color);
+  color: inherit;
   cursor: pointer;
+  font-size: var(--font-size-base);
+  padding: 0 4px;
 }
 
-.ping-monitor-logging-link:hover {
-  text-decoration: underline;
-}
-
-/* Divider with resize handle and collapse toggle */
-.ping-monitor-divider {
-  position: relative;
-  flex-shrink: 0;
-  width: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.ping-monitor-divider-handle {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  cursor: col-resize;
-  z-index: 2;
-}
-
-.ping-monitor-divider-handle:hover {
-  background: var(--accent-color);
-  opacity: 0.5;
-}
-
-.ping-monitor-divider-toggle {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  z-index: 3;
-  width: 16px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 3px;
-  color: var(--text-tertiary);
-  cursor: pointer;
-  padding: 0;
-}
-
-.ping-monitor-divider-toggle:hover {
-  color: var(--text-primary);
-  background: var(--hover-bg);
-}
-
-/* Right: results panel */
-.ping-monitor-results-panel {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.ping-monitor-results-wrapper {
+/* The table: one row per target, a last row to add more. */
+.ping-monitor-results {
   flex: 1;
   min-height: 0;
   overflow: auto;
@@ -284,105 +113,118 @@
   width: 100%;
   border-collapse: collapse;
   font-size: calc(var(--font-size-base) - 1px);
-}
-
-.ping-monitor-table thead {
-  position: sticky;
-  top: 0;
-  z-index: 1;
+  font-variant-numeric: tabular-nums;
 }
 
 .ping-monitor-table th {
-  padding: 4px 10px;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 5px 10px;
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
-  text-align: left;
+  color: var(--text-secondary);
+  font-family: var(--ui-font-family);
+  font-size: calc(var(--font-size-base) - 2px);
   font-weight: 600;
+  text-align: left;
   white-space: nowrap;
+}
+
+.ping-monitor-table td {
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--border-color);
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.ping-monitor-table .num {
+  text-align: right;
 }
 
 .ping-monitor-row:hover {
   background: var(--hover-bg);
 }
 
-.ping-monitor-table td {
-  padding: 3px 10px;
-  border-bottom: 1px solid var(--border-color);
-  white-space: nowrap;
-}
-
-.ping-monitor-td-status {
+.ping-monitor-target {
   font-weight: 600;
-  text-transform: uppercase;
 }
 
-.ping-monitor-status-ok .ping-monitor-td-status {
-  color: var(--success-color);
-}
-
-.ping-monitor-status-fail .ping-monitor-td-status,
-.ping-monitor-status-dns .ping-monitor-td-status {
-  color: var(--color-danger);
-}
-
-.ping-monitor-th-num,
-.ping-monitor-td-num {
-  text-align: center;
-  width: 32px;
-  color: var(--text-tertiary);
-}
-
-.ping-monitor-td-rtt,
-.ping-monitor-td-ttl {
-  text-align: right;
-  font-family: var(--font-family);
-}
-
-.ping-monitor-td-time {
-  color: var(--text-tertiary);
-}
-
-.ping-monitor-placeholder {
-  display: flex;
+.ping-monitor-state {
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  height: 100%;
-  color: var(--text-tertiary);
-  font-size: calc(var(--font-size-base) - 1px);
-}
-
-/* Status bar */
-.ping-monitor-statusbar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 10px;
-  background: var(--bg-secondary);
-  border-top: 1px solid var(--border-color);
+  gap: 5px;
+  font-family: var(--ui-font-family);
   font-size: calc(var(--font-size-base) - 2px);
-  color: var(--text-secondary);
-  flex-shrink: 0;
+  font-weight: 600;
+  color: var(--text-tertiary);
 }
 
-.ping-monitor-status-dot {
+.ping-monitor-state-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  flex-shrink: 0;
+  background: currentColor;
 }
 
-.ping-monitor-status-dot.running {
-  background: var(--success-color);
+.ping-monitor-state.ok {
+  color: var(--success-color);
 }
 
-.ping-monitor-status-dot.stopped {
-  background: var(--text-tertiary);
+.ping-monitor-state.fail {
+  color: var(--color-danger);
 }
 
-.ping-monitor-status-label {
-  font-weight: 600;
+.ping-monitor-state.dns {
+  color: var(--color-warning);
 }
 
-.ping-monitor-status-info {
+.ping-monitor-loss {
+  color: var(--color-danger);
+}
+
+.ping-monitor-time {
   color: var(--text-tertiary);
+}
+
+.ping-monitor-remove {
+  opacity: 0;
+  border: none;
+  background: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  font-size: var(--font-size-base);
+  padding: 0 4px;
+}
+
+.ping-monitor-row:hover .ping-monitor-remove,
+.ping-monitor-remove:focus-visible {
+  opacity: 1;
+}
+
+.ping-monitor-remove:hover {
+  color: var(--color-danger);
+}
+
+.ping-monitor-table tfoot td {
+  border-bottom: none;
+  padding: 6px 10px;
+}
+
+.ping-monitor-add {
+  width: 100%;
+  padding: 5px 8px;
+  background: transparent;
+  border: 1px dashed var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-family: var(--font-family);
+  font-size: calc(var(--font-size-base) - 1px);
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.ping-monitor-add:focus {
+  border-style: solid;
+  border-color: var(--accent-color);
 }

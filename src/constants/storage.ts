@@ -18,9 +18,9 @@ export const STORAGE_KEYS = {
   UI_GRID_ROW_SIZES: (rows: number) => `hotty_ui_gridRowSizes_${rows}`,
   GCP_SHOW_INACCESSIBLE: 'hotty_gcp_show_inaccessible',
   GCP_SEARCH_QUERY: 'hotty_gcp_search_query',
-  /** Interface Traffic Watcher connection settings, per pane. Secrets are only
-   *  present when the user ticked "remember", and are DPAPI-encrypted (`[SAFE]`). */
-  SNMP_TARGET: (paneId: string) => `hotty_snmp_target_${paneId}`,
+  /** Prefix of the old per-pane Interface Traffic settings. Read once by the
+   *  settings v37 migration (into `snmpDevices`) and then removed. */
+  LEGACY_SNMP_TARGET_PREFIX: 'hotty_snmp_target_',
 } as const;
 
 /**

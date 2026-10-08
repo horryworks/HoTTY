@@ -1,0 +1,58 @@
+/* A pane's one-line header (terminals, AI Chat): mark, title, detail, buttons. */
+.pane-term-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  height: 22px;
+  padding: 0 8px 0 6px;
+  background: var(--ai-header-bg);
+  border-bottom: 1px solid var(--border-color);
+  font-family: var(--ui-font-family);
+  font-size: calc(var(--font-size-base) - 2px);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.pane-term-name {
+  color: var(--text-primary);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pane-term-detail {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pane-term-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--font-size-base);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.pane-term-close:hover {
+  background-color: var(--tab-close-hover-bg);
+  color: var(--text-primary);
+}
+
+/* The AI link button is the tab row's (hidden there until hover); here it is
+   always shown. */
+.pane-term-header .tab-watch-btn {
+  display: flex;
+}

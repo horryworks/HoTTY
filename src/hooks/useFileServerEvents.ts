@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { tauriService } from '../services/tauriService';
 import { logError } from '../utils/logger';
 import i18n from '../i18n';
+import { recallPaneMemory, useRememberPane } from './usePaneMemory';
 import type { FileServerProtocol } from '../types/appTypes';
 
 const MAX_TRANSFERS = 200;
@@ -26,6 +27,8 @@ interface FileServerEventData {
   transfers: TransferLogEntry[];
   lastError: string | null;
   clearTransfers: () => void;
+  /** Forget the last backend error, e.g. when the user tries again. */
+  clearLastError: () => void;
 }
 
 /**
@@ -34,11 +37,12 @@ interface FileServerEventData {
  */
 export function useFileServerEvents(serverId: string): FileServerEventData {
   const { t } = useTranslation();
-  const [tftpState, setTftpState] = useState<ServerRunState>('stopped');
-  const [sftpState, setSftpState] = useState<ServerRunState>('stopped');
-  const [transfers, setTransfers] = useState<TransferLogEntry[]>([]);
-  const [lastError, setLastError] = useState<string | null>(null);
-  const seqRef = useRef(0);
+  // Kept across remounts: the servers keep running while the tab is hidden.
+  const [tftpState, setTftpState] = useState<ServerRunState>(() => recallPaneMemory(serverId, 'fs.tftp', 'stopped'));
+  const [sftpState, setSftpState] = useState<ServerRunState>(() => recallPaneMemory(serverId, 'fs.sftp', 'stopped'));
+  const [transfers, setTransfers] = useState<TransferLogEntry[]>(() => recallPaneMemory(serverId, 'fs.transfers', []));
+  const [lastError, setLastError] = useState<string | null>(() => recallPaneMemory(serverId, 'fs.error', null));
+  useRememberPane(serverId, { 'fs.tftp': tftpState, 'fs.sftp': sftpState, 'fs.transfers': transfers, 'fs.error': lastError });
 
   useEffect(() => {
     let cancelled = false;
@@ -56,7 +60,8 @@ export function useFileServerEvents(serverId: string): FileServerEventData {
         } else if (ev.kind === 'transfer') {
           setTransfers((prev) => {
             const entry: TransferLogEntry = {
-              id: (seqRef.current += 1),
+              // Newest first, so the next id follows the first entry's.
+              id: (prev[0]?.id ?? 0) + 1,
               protocol: ev.protocol,
               client: ev.client ?? '',
               filename: ev.filename ?? '',
@@ -86,9 +91,10 @@ export function useFileServerEvents(serverId: string): FileServerEventData {
     };
     // `t` is included so the fallback resolves in the current language; its
     // identity only changes on a language switch, so re-subscribing then is fine.
-  }, [serverId, t]);
+  }, [serverId, t, setTftpState, setSftpState, setTransfers, setLastError]);
 
-  const clearTransfers = useCallback(() => setTransfers([]), []);
+  const clearTransfers = useCallback(() => setTransfers([]), [setTransfers]);
+  const clearLastError = useCallback(() => setLastError(null), [setLastError]);
 
-  return { tftpState, sftpState, transfers, lastError, clearTransfers };
+  return { tftpState, sftpState, transfers, lastError, clearTransfers, clearLastError };
 }

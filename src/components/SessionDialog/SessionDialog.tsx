@@ -14,7 +14,6 @@ import { ConfirmModal } from '../ConfirmModal/ConfirmModal';
 import { GcpInstancesPane, type VmSelection } from '../GcpInstancesPane/GcpInstancesPane';
 import { BookmarkTree } from '../BookmarkTree/BookmarkTree';
 import { flattenBookmarks } from '../BookmarkTree/bookmarkTreeHelpers';
-import { useSidebarLayoutStore } from '../../stores/sidebarLayoutStore';
 import { useDragSafeClick } from '../../hooks/useDragSafeClick';
 import { Dialog } from '../Dialog/Dialog';
 import { useSshKeys } from '../../hooks/useSshKeys';
@@ -23,7 +22,7 @@ import { SshKeyGenerateModal } from '../SshKeyGenerateModal/SshKeyGenerateModal'
 import { useResize } from '../../hooks/useResize';
 import { useSettingsStore } from '../../stores/settingsStore';
 import type { SessionRecord } from '../../hooks/useSessionManager';
-import type { HostTreeNode, HostEntry, ProtocolId, Encoding, BookmarkNode, SessionDialogPrefill } from '../../types/appTypes';
+import type { HostTreeNode, HostEntry, ProtocolId, Encoding, BookmarkNode, SessionDialogKind, SessionDialogPrefill, SessionDialogProtocolPick } from '../../types/appTypes';
 import type {
     SshConnectionConfig,
     TelnetConnectionConfig,
@@ -95,17 +94,18 @@ interface SessionDialogProps {
      * dialog is open and `nonce` changes.
      */
     prefill?: SessionDialogPrefill;
+    /**
+     * Which dialog this is (the New Session menu row it was opened from). Each
+     * shows only what its kind needs; the default is the host tree.
+     */
+    kind?: SessionDialogKind;
+    /**
+     * Open on a blank SSH or Telnet form (the dock's New Session menu).
+     * Applied whenever the dialog is open and `nonce` changes.
+     */
+    initialProtocol?: SessionDialogProtocolPick;
 }
 
-const PROTOCOLS: { value: ProtocolId; label: string }[] = [
-    { value: 'ssh', label: 'SSH' },
-    { value: 'telnet', label: 'Telnet' },
-    { value: 'serial', label: 'Serial' },
-    { value: 'wsl', label: 'WSL' },
-    { value: 'cmd', label: 'Command Prompt' },
-    { value: 'powershell', label: 'PowerShell' },
-    { value: 'git-bash', label: 'Git Bash' },
-];
 
 const NETWORK_PROTOCOLS = new Set<ProtocolId>(['ssh', 'telnet']);
 
@@ -118,6 +118,11 @@ const NETWORK_PROTOCOLS = new Set<ProtocolId>(['ssh', 'telnet']);
 const DEFAULT_SIZE = { width: 960, height: 540 };
 const MIN_SIZE = { width: 640, height: 420 };
 
+/** The serial dialog is a short form: a fixed size, not movable or resizable. */
+const SERIAL_WIDTH = 440;
+
+type NetworkProtocol = 'ssh' | 'telnet';
+
 export const SessionDialog: React.FC<SessionDialogProps> = ({
     open: isOpen,
     onClose,
@@ -127,15 +132,17 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
     sessions,
     onOpenBookmark,
     prefill,
+    kind: requestedKind = 'hosts',
+    initialProtocol,
 }) => {
     const { t } = useTranslation();
     const hostManager = useHostManager();
     const netboxSync = useNetboxSync();
     const settings = useSettingsStore();
-    const activeSidebarTab = useSidebarLayoutStore((s) => s.activeSidebarTab);
-    const setActiveSidebarTab = useSidebarLayoutStore((s) => s.setActiveSidebarTab);
-    // The Web (bookmarks) tab follows the Settings → Features "Web Browser" toggle.
+    // The Web (bookmarks) dialog follows the Settings → Features "Web Browser"
+    // toggle; with it off the host tree opens instead.
     const webEnabled = settings.enabledFeatures['web-browser'];
+    const kind: SessionDialogKind = requestedKind === 'web' && !webEnabled ? 'hosts' : requestedKind;
 
     const [selectedHostId, setSelectedHostId] = useState<string | null>(null);
     const [isDecrypting, setIsDecrypting] = useState(false);
@@ -189,7 +196,10 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
     const [port, setPort] = useState('22');
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
-    const [protocol, setProtocol] = useState<ProtocolId>('ssh');
+    // The host-tree form is SSH or Telnet; the serial dialog is always serial.
+    // Kept apart so opening the serial dialog leaves the SSH / Telnet form as it was.
+    const [formProtocol, setProtocol] = useState<NetworkProtocol>('ssh');
+    const protocol: NetworkProtocol | 'serial' = kind === 'serial' ? 'serial' : formProtocol;
     const [isJumpbox, setIsJumpbox] = useState(false);
     const [jumpboxId, setJumpboxId] = useState('');
     // Per-connection "fixed terminal size" override (SSH/Telnet). 'default' follows
@@ -212,13 +222,6 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
     const [parity, setParity] = useState('none');
     const [stopBits, setStopBits] = useState('1');
     const [flowControl, setFlowControl] = useState('none');
-
-    // WSL
-    const [wslDistros, setWslDistros] = useState<string[]>([]);
-    const [selectedDistro, setSelectedDistro] = useState('');
-
-    // Git Bash
-    const [gitBashPath, setGitBashPath] = useState<string | null>(null);
 
     // Common
     const [encoding, setEncoding] = useState<Encoding>(settings.globalEncoding);
@@ -248,18 +251,11 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
         port: string;
         username: string;
         password: string;
-        protocol: ProtocolId;
+        protocol: NetworkProtocol;
         isJumpbox: boolean;
         jumpboxId: string;
         privateKeyPath: string;
         privateKeyPassphrase: string;
-        serialPath: string;
-        baudRate: string;
-        dataBits: string;
-        parity: string;
-        stopBits: string;
-        flowControl: string;
-        selectedDistro: string;
         encoding: Encoding;
         fixedTerminalSize: FixedSizeTri;
     };
@@ -375,25 +371,10 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                     setSerialPath(ports[0].path);
                 }
             }).catch(() => { /* non-fatal */ });
-        } else if (protocol === 'wsl') {
-            tauriService.listWslDistributions().then((distros) => {
-                if (aborted) return;
-                setWslDistros(distros);
-                if (distros.length > 0 && !selectedDistro) {
-                    setSelectedDistro(distros[0]);
-                }
-            }).catch(() => { /* non-fatal */ });
-        } else if (protocol === 'git-bash') {
-            tauriService.detectGitBash().then((path) => {
-                if (aborted) return;
-                setGitBashPath(path ?? '');
-            }).catch(() => {
-                if (!aborted) setGitBashPath('');
-            });
         }
 
         return () => { aborted = true; };
-    }, [protocol, isOpen, selectedDistro, serialPath]);
+    }, [protocol, isOpen, serialPath]);
 
     // Sync displayName when the selected host is renamed in the tree
     useEffect(() => {
@@ -454,7 +435,6 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
         const p = prefillRef.current;
         if (!isOpen || !p || p.nonce !== prefillNonce) return;
         /* eslint-disable react-hooks/set-state-in-effect */
-        setActiveSidebarTab('hosts');
         setNewConnectionDraft(null);
         resetForm();
         setProtocol(p.protocol);
@@ -464,7 +444,24 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
         setDisplayName(p.displayName ?? '');
         filledFromPrefillRef.current = true;
         /* eslint-enable react-hooks/set-state-in-effect */
-    }, [isOpen, prefillNonce, resetForm, setActiveSidebarTab]);
+    }, [isOpen, prefillNonce, resetForm]);
+
+    // SSH or Telnet picked in the dock's New Session menu: a blank New
+    // Connection form of that protocol. Keyed on the nonce the same way as the
+    // prefill.
+    const initialProtocolRef = useRef(initialProtocol);
+    useEffect(() => { initialProtocolRef.current = initialProtocol; }, [initialProtocol]);
+    const initialProtocolNonce = initialProtocol?.nonce;
+    useEffect(() => {
+        const p = initialProtocolRef.current;
+        if (!isOpen || !p || p.nonce !== initialProtocolNonce) return;
+        /* eslint-disable react-hooks/set-state-in-effect */
+        setNewConnectionDraft(null);
+        resetForm();
+        setProtocol(p.protocol);
+        if (p.protocol === 'telnet') setPort('23');
+        /* eslint-enable react-hooks/set-state-in-effect */
+    }, [isOpen, initialProtocolNonce, resetForm]);
 
     // Subscription effect: watches the parent's sessions map for any session
     // initiated from this dialog transitioning to 'connected'. For saved-host /
@@ -587,7 +584,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
         }
 
         const e = node.entry;
-        setProtocol(e.protocol);
+        setProtocol(e.protocol === 'telnet' ? 'telnet' : 'ssh');
         setHost(e.host ?? '');
         setPort(String(e.port ?? (e.protocol === 'ssh' ? 22 : 23)));
 
@@ -826,10 +823,9 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
     const [pendingSwitch, setPendingSwitch] = useState<SwitchTarget | null>(null);
 
     const captureDraft = (): NewConnectionDraft => ({
-        displayName, host, port, username, password, protocol,
+        displayName, host, port, username, password, protocol: formProtocol,
         isJumpbox, jumpboxId, privateKeyPath, privateKeyPassphrase,
-        serialPath, baudRate, dataBits, parity, stopBits, flowControl,
-        selectedDistro, encoding, fixedTerminalSize,
+        encoding, fixedTerminalSize,
     });
 
     const restoreDraft = (draft: NewConnectionDraft) => {
@@ -845,13 +841,6 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
         setJumpboxId(draft.jumpboxId);
         setPrivateKeyPath(draft.privateKeyPath);
         setPrivateKeyPassphrase(draft.privateKeyPassphrase);
-        setSerialPath(draft.serialPath);
-        setBaudRate(draft.baudRate);
-        setDataBits(draft.dataBits);
-        setParity(draft.parity);
-        setStopBits(draft.stopBits);
-        setFlowControl(draft.flowControl);
-        setSelectedDistro(draft.selectedDistro);
         setEncoding(draft.encoding);
         setFixedTerminalSize(draft.fixedTerminalSize);
     };
@@ -1035,7 +1024,9 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
         // verbatim, so key auth failed for any host whose passphrase was stored
         // encrypted. Mirrors handleSave's three-credential resolution.
         let finalKpp = privateKeyPassphrase;
-        if (isEncrypted(finalU) || isEncrypted(finalP) || isEncrypted(finalKpp)) {
+        // The serial dialog sends none of these; a saved host's ciphertext left
+        // in the SSH / Telnet form is not worth a DPAPI round-trip.
+        if (protocol !== 'serial' && (isEncrypted(finalU) || isEncrypted(finalP) || isEncrypted(finalKpp))) {
             const cached = selectedHostId ? getCachedCredential(selectedHostId) : undefined;
             const needsDecryption = [undefined, undefined, undefined] as (string | undefined)[];
             if (isEncrypted(finalU)) {
@@ -1092,7 +1083,9 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
         const sshConnectTimeout = settings.sshConnectTimeoutSecs;
         const telnetConnectTimeout = settings.telnetConnectTimeoutSecs;
         const buildName = (): string => {
-            if (displayName) return displayName;
+            // A saved host's name may still sit in the SSH / Telnet form; it is
+            // not this serial connection's name.
+            if (displayName && protocol !== 'serial') return displayName;
             switch (protocol) {
                 case 'ssh':
                 case 'telnet': {
@@ -1101,25 +1094,15 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                 }
                 case 'serial':
                     return `Serial ${serialPath} (${baudRate})`;
-                case 'wsl':
-                    return `WSL ${selectedDistro}`;
-                case 'cmd':
-                    return 'Command Prompt';
-                case 'powershell':
-                    return 'PowerShell';
-                case 'git-bash':
-                    return 'Git Bash';
-                // gcloud-iap is not configurable from this form; the GCP tab
-                // owns IAP connections. Treat as no-op for type exhaustiveness.
-                case 'gcloud-iap':
-                    return displayName || 'IAP';
             }
         };
 
         // A New Connection (no saved host selected) keeps its form values after
         // a successful connect so the next open is pre-filled for a similar host.
         // Editing/connecting a saved host resets as before.
-        const isNewConnection = selectedHostId === null;
+        // The serial dialog never edits a saved host, whatever the SSH / Telnet
+        // form has selected.
+        const isNewConnection = protocol === 'serial' || selectedHostId === null;
 
         switch (protocol) {
             case 'ssh': {
@@ -1171,25 +1154,6 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                 dispatchConnect({ displayName: buildName(), protocol, config }, isNewConnection);
                 break;
             }
-            case 'wsl': {
-                const config: WslConnectionConfig = {
-                    distribution: selectedDistro,
-                    encoding,
-                };
-                dispatchConnect({ displayName: buildName(), protocol, config }, isNewConnection);
-                break;
-            }
-            case 'cmd':
-            case 'powershell':
-            case 'git-bash': {
-                const config: LocalConnectionConfig = {
-                    shellType: protocol === 'cmd' ? 'cmd' : protocol === 'powershell' ? 'powershell' : 'git-bash',
-                    shellPath: protocol === 'git-bash' && gitBashPath ? gitBashPath : undefined,
-                    encoding,
-                };
-                dispatchConnect({ displayName: buildName(), protocol, config }, isNewConnection);
-                break;
-            }
         }
 
         // Form values intentionally persist across modal close — auth
@@ -1228,71 +1192,356 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                 return host.trim().length > 0 && parseInt(port) > 0 && parseInt(port) <= 65535 && username.trim().length > 0;
             case 'telnet':
                 return host.trim().length > 0 && parseInt(port) > 0 && parseInt(port) <= 65535;
-            case 'gcloud-iap':
-                // Not selectable from the Hosts-tab dropdown; the GCP tab
-                // bypasses this form entirely.
-                return false;
             case 'serial':
                 return serialPath.trim().length > 0;
-            case 'wsl':
-                return selectedDistro.length > 0;
-            case 'cmd':
-            case 'powershell':
-                return true;
-            case 'git-bash':
-                return gitBashPath !== null && gitBashPath !== '';
         }
     })();
 
     if (!isOpen) return null;
 
+    // The connection form: SSH / Telnet beside the host tree, or alone in the
+    // serial dialog.
+    const connectForm = (
+        <form ref={formRef} onSubmit={handleSubmit}>
+            <fieldset disabled={isDecrypting} style={{ border: 'none', padding: 0, margin: 0 }}>
+                {/* Display Name (only when a host is selected) */}
+                {originalState !== null && protocol !== 'serial' && (
+                    <div className="form-group">
+                        <label>{t('sessionDialog.nameLabel')}</label>
+                        <input
+                            type="text"
+                            value={displayName}
+                            onChange={e => setDisplayName(e.target.value)}
+                            placeholder={t('sessionDialog.namePlaceholder')}
+                        />
+                    </div>
+                )}
+
+                {/* SSH / Telnet switch */}
+                {protocol !== 'serial' && (
+                    <div className="form-group">
+                        <div className="protocol-switch" role="group" aria-label={t('sessionDialog.protocolLabel')}>
+                            {(['ssh', 'telnet'] as const).map(p => (
+                                <button
+                                    key={p}
+                                    type="button"
+                                    aria-pressed={protocol === p}
+                                    className={`protocol-switch-btn${protocol === p ? ' active' : ''}`}
+                                    onClick={() => {
+                                        if (p === protocol) return;
+                                        setProtocol(p);
+                                        setPort(p === 'ssh' ? '22' : '23');
+                                        if (p !== 'ssh') setIsJumpbox(false);
+                                    }}
+                                >
+                                    {p === 'ssh' ? 'SSH' : 'Telnet'}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* Jumpbox checkbox */}
+                {selectedHostId && protocol === 'ssh' && (
+                    <div className="form-group form-group-checkbox">
+                        <label>
+                            <input
+                                type="checkbox"
+                                checked={isJumpbox}
+                                onChange={e => setIsJumpbox(e.target.checked)}
+                                disabled={protocol !== 'ssh'}
+                            />
+                            {t('sessionDialog.useAsJumpbox')}
+                        </label>
+                    </div>
+                )}
+
+                {/* SSH/Telnet fields */}
+                {NETWORK_PROTOCOLS.has(protocol) && (
+                    <>
+                        <div className="form-row">
+                            <div className="form-group" style={{ flex: 3 }}>
+                                <label>{t('sessionDialog.hostLabel')}</label>
+                                <input
+                                    type="text"
+                                    value={host}
+                                    onChange={e => setHost(e.target.value)}
+                                    placeholder={t('sessionDialog.hostPlaceholder')}
+                                    required
+                                    autoFocus
+                                />
+                            </div>
+                            <div className="form-group" style={{ flex: 1 }}>
+                                <label>{t('sessionDialog.portLabel')}</label>
+                                <input
+                                    type="number"
+                                    value={port}
+                                    onChange={e => setPort(e.target.value)}
+                                    required
+                                />
+                            </div>
+                        </div>
+                        <div className="form-group">
+                            <label>{t('sessionDialog.usernameLabel')}</label>
+                            <input
+                                type="text"
+                                value={isDecrypting ? t('sessionDialog.decrypting') : username}
+                                onChange={e => setUsername(e.target.value)}
+                                className={isDecrypting ? 'decrypting-placeholder' : ''}
+                                disabled={isDecrypting}
+                                autoComplete="off"
+                                required={protocol === 'ssh'}
+                            />
+                        </div>
+                        <div className="form-group">
+                            <label>{t('sessionDialog.passwordLabel')}</label>
+                            <input
+                                type="password"
+                                value={isDecrypting ? t('sessionDialog.decrypting') : password}
+                                onChange={e => setPassword(e.target.value)}
+                                className={isDecrypting ? 'decrypting-placeholder' : ''}
+                                disabled={isDecrypting}
+                                autoComplete="new-password"
+                            />
+                        </div>
+                        {jumpboxHosts.length > 0 && (
+                            <div className="form-group">
+                                <label>{t('sessionDialog.jumpboxLabel')}</label>
+                                <select
+                                    value={jumpboxId}
+                                    onChange={e => setJumpboxId(e.target.value)}
+                                >
+                                    <option value="">{t('sessionDialog.directConnection')}</option>
+                                    {jumpboxHosts
+                                        .filter(jb => jb.id !== selectedHostId)
+                                        .map(jb => (
+                                            <option key={jb.id} value={jb.id}>
+                                                {jb.name}
+                                            </option>
+                                        ))
+                                    }
+                                </select>
+                            </div>
+                        )}
+                    </>
+                )}
+
+                {/* SSH-specific fields */}
+                {protocol === 'ssh' && (
+                    <>
+                        <div className="form-group">
+                            <label>{t('sessionDialog.privateKeyPathLabel')}</label>
+                            <div className="connect-form-inline">
+                                <input
+                                    type="text"
+                                    value={privateKeyPath}
+                                    onChange={(e) => setPrivateKeyPath(e.target.value)}
+                                    placeholder={t('sessionDialog.privateKeyPathPlaceholder')}
+                                />
+                                <button
+                                    type="button"
+                                    className="btn-secondary"
+                                    onClick={handleBrowseKey}
+                                >
+                                    {t('common.browse')}
+                                </button>
+                            {/* The free-text field and Browse stay: plenty of
+                                people keep keys outside ~/.ssh, and this picker
+                                must not take that away. It resets to its
+                                placeholder after each pick, because the field
+                                above is what actually holds the choice. */}
+                            {sshKeys.available && sshKeys.keys.length > 0 && (
+                                <select
+                                    className="connect-key-picker"
+                                    value=""
+                                    onChange={(e) => handlePickKey(e.target.value)}
+                                    aria-label={t('sessionDialog.keyPickerLabel')}
+                                >
+                                    <option value="">
+                                        {t('sessionDialog.keyPickerNone')}
+                                    </option>
+                                    {sshKeys.keys.map(k => (
+                                        <option key={k.name} value={k.path}>
+                                            {k.name}
+                                        </option>
+                                    ))}
+                                    <option value={GENERATE_KEY_OPTION}>
+                                        {t('sessionDialog.keyPickerGenerate')}
+                                    </option>
+                                </select>
+                            )}
+                            {sshKeys.available && sshKeys.keys.length === 0 && (
+                                <button
+                                    type="button"
+                                    className="btn-secondary"
+                                    onClick={() => setGenerateKeyOpen(true)}
+                                >
+                                    {t('sessionDialog.keyPickerGenerate')}
+                                </button>
+                            )}
+                            </div>
+                        </div>
+                        <div className="form-group">
+                            <label>{t('sessionDialog.privateKeyPassphraseLabel')}</label>
+                            <input
+                                type="password"
+                                value={privateKeyPassphrase}
+                                onChange={(e) => setPrivateKeyPassphrase(e.target.value)}
+                            />
+                        </div>
+                    </>
+                )}
+
+                {/* Serial fields */}
+                {protocol === 'serial' && (
+                    <>
+                        <div className="form-group">
+                            <label>{t('sessionDialog.serialPortLabel')}</label>
+                            {serialPorts.length > 0 ? (
+                                <select value={serialPath} onChange={(e) => setSerialPath(e.target.value)}>
+                                    {serialPorts.map((p) => (
+                                        <option key={p.path} value={p.path}>
+                                            {p.displayName ? `${p.path} (${p.displayName})` : p.path}
+                                        </option>
+                                    ))}
+                                </select>
+                            ) : (
+                                <input
+                                    type="text"
+                                    value={serialPath}
+                                    onChange={(e) => setSerialPath(e.target.value)}
+                                    placeholder={t('sessionDialog.serialPortPlaceholder')}
+                                    autoFocus
+                                />
+                            )}
+                        </div>
+                        <div className="form-row">
+                            <div className="form-group form-group-half">
+                                <label>{t('sessionDialog.baudRateLabel')}</label>
+                                <select value={baudRate} onChange={(e) => setBaudRate(e.target.value)}>
+                                    <option value="9600">9600</option>
+                                    <option value="19200">19200</option>
+                                    <option value="38400">38400</option>
+                                    <option value="57600">57600</option>
+                                    <option value="115200">115200</option>
+                                </select>
+                            </div>
+                            <div className="form-group form-group-half">
+                                <label>{t('sessionDialog.dataBitsLabel')}</label>
+                                <select value={dataBits} onChange={(e) => setDataBits(e.target.value)}>
+                                    <option value="8">8</option>
+                                    <option value="7">7</option>
+                                    <option value="6">6</option>
+                                    <option value="5">5</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div className="form-row">
+                            <div className="form-group form-group-half">
+                                <label>{t('sessionDialog.parityLabel')}</label>
+                                <select value={parity} onChange={(e) => setParity(e.target.value)}>
+                                    <option value="none">{t('sessionDialog.parity.none')}</option>
+                                    <option value="odd">{t('sessionDialog.parity.odd')}</option>
+                                    <option value="even">{t('sessionDialog.parity.even')}</option>
+                                    <option value="mark">{t('sessionDialog.parity.mark')}</option>
+                                    <option value="space">{t('sessionDialog.parity.space')}</option>
+                                </select>
+                            </div>
+                            <div className="form-group form-group-half">
+                                <label>{t('sessionDialog.stopBitsLabel')}</label>
+                                <select value={stopBits} onChange={(e) => setStopBits(e.target.value)}>
+                                    <option value="1">1</option>
+                                    <option value="1.5">1.5</option>
+                                    <option value="2">2</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div className="form-group">
+                            <label>{t('sessionDialog.flowControlLabel')}</label>
+                            <select value={flowControl} onChange={(e) => setFlowControl(e.target.value)}>
+                                <option value="none">{t('sessionDialog.flowControl.none')}</option>
+                                <option value="xon/xoff">XON/XOFF</option>
+                                <option value="rts/cts">RTS/CTS</option>
+                            </select>
+                        </div>
+                    </>
+                )}
+
+                {/* Encoding */}
+                <div className="form-group">
+                    <label>{t('sessionDialog.encodingLabel')}</label>
+                    <select
+                        value={encoding}
+                        onChange={(e) => setEncoding(e.target.value as Encoding)}
+                    >
+                        <option value="utf8">UTF-8</option>
+                        <option value="shift_jis">Shift_JIS</option>
+                        <option value="euc-jp">EUC-JP</option>
+                    </select>
+                </div>
+
+                {/* Fixed terminal size (SSH/Telnet) — pins the grid to the
+                    connect-time width for devices that ignore later resizes. */}
+                {(protocol === 'ssh' || protocol === 'telnet') && (
+                    <div className="form-group">
+                        <label>{t('sessionDialog.fixedTerminalSizeLabel')}</label>
+                        <select
+                            value={fixedTerminalSize}
+                            onChange={(e) => setFixedTerminalSize(e.target.value as FixedSizeTri)}
+                        >
+                            <option value="default">{t('sessionDialog.fixedTerminalSizeDefault')}</option>
+                            <option value="on">{t('sessionDialog.fixedTerminalSizeOn')}</option>
+                            <option value="off">{t('sessionDialog.fixedTerminalSizeOff')}</option>
+                        </select>
+                    </div>
+                )}
+            </fieldset>
+
+            <div className="form-actions">
+                {originalState !== null && NETWORK_PROTOCOLS.has(protocol) && (
+                    <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={handleSave}
+                        disabled={!isDirty || isDecrypting}
+                        title={isDirty ? t('sessionDialog.saveTitleDirty') : t('sessionDialog.saveTitleClean')}
+                    >
+                        {t('common.save')}
+                    </button>
+                )}
+                <button
+                    type="submit"
+                    className="btn-primary"
+                    disabled={!canSubmit || isDecrypting || isConnecting}
+                >
+                    {isConnecting ? t('sessionDialog.connecting') : t('sessionDialog.connect')}
+                </button>
+            </div>
+        </form>
+    );
+
+    const title = kind === 'serial' ? 'Serial'
+        : kind === 'gcp' ? t('sessionDialog.tabs.gcp')
+        : kind === 'web' ? t('sessionDialog.tabs.web')
+        : 'SSH / Telnet';
+
     return (
         <Dialog
             open={isOpen}
             onClose={handleDialogClose}
-            title={t('sessionDialog.title')}
-            className="connection-dialog"
+            title={title}
+            className={`connection-dialog connection-dialog-${kind}`}
             bodyClassName="session-dialog-body"
-            geometry={{ persistKey: 'session', defaultSize: DEFAULT_SIZE, minSize: MIN_SIZE }}
+            {...(kind === 'serial'
+                ? { width: SERIAL_WIDTH }
+                : { geometry: { persistKey: 'session' as const, defaultSize: DEFAULT_SIZE, minSize: MIN_SIZE } })}
         >
             <div className="session-dialog-content" ref={containerRef} {...blankAreaClickProps}>
-                <div className={`dialog-body tab-${activeSidebarTab}`}>
-                    {/* Left: Host tree / GCP discovery tabs */}
+                <div className={`dialog-body kind-${kind}`}>
                     <div className="host-panel" style={{ flex: 1, minWidth: 0 }}>
-                        <div className="host-panel-tabs" role="tablist" aria-label={t('sessionDialog.tabs.sourceAriaLabel')}>
-                            <button
-                                type="button"
-                                role="tab"
-                                aria-selected={activeSidebarTab === 'hosts'}
-                                className={`host-panel-tab${activeSidebarTab === 'hosts' ? ' active' : ''}`}
-                                onClick={() => setActiveSidebarTab('hosts')}
-                            >
-                                <span aria-hidden="true">📡 </span>{t('sessionDialog.tabs.hosts')}
-                            </button>
-                            <button
-                                type="button"
-                                role="tab"
-                                aria-selected={activeSidebarTab === 'gcp'}
-                                className={`host-panel-tab${activeSidebarTab === 'gcp' ? ' active' : ''}`}
-                                onClick={() => setActiveSidebarTab('gcp')}
-                            >
-                                <span aria-hidden="true">☁ </span>{t('sessionDialog.tabs.gcp')}
-                            </button>
-                            {webEnabled && (
-                                <button
-                                    type="button"
-                                    role="tab"
-                                    aria-selected={activeSidebarTab === 'web'}
-                                    className={`host-panel-tab${activeSidebarTab === 'web' ? ' active' : ''}`}
-                                    onClick={() => setActiveSidebarTab('web')}
-                                >
-                                    <span aria-hidden="true">🌐 </span>{t('sessionDialog.tabs.web')}
-                                </button>
-                            )}
-                        </div>
                         {/* Dialog-level connect status — rendered outside the tab
                             content so the "Connecting…" spinner + Cancel appear no
-                            matter which tab (Hosts / GCP / Web) started the connect. */}
+                            matter which dialog (SSH / Telnet, Serial, GCP) started the connect. */}
                         {(isConnecting || connectError) && (
                             <div
                                 className={`connect-status connect-status-dialog${connectError ? ' connect-status-error' : ''}`}
@@ -1329,7 +1578,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                                 )}
                             </div>
                         )}
-                        {activeSidebarTab === 'hosts' || (activeSidebarTab === 'web' && !webEnabled) ? (
+                        {kind === 'hosts' ? (
                             <div className="hosts-tab-content">
                                 <div className="hosts-tab-tree" style={{ width: treePanelWidth, flexShrink: 0 }}>
                                     <HostTree
@@ -1392,347 +1641,13 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                                 onSelectChild={handleHostTreeSelect}
                             />
                         ) : (
-                        <form ref={formRef} onSubmit={handleSubmit}>
-                            <fieldset disabled={isDecrypting} style={{ border: 'none', padding: 0, margin: 0 }}>
-                                {/* Display Name (only when a host is selected) */}
-                                {originalState !== null && (
-                                    <div className="form-group">
-                                        <label>{t('sessionDialog.nameLabel')}</label>
-                                        <input
-                                            type="text"
-                                            value={displayName}
-                                            onChange={e => setDisplayName(e.target.value)}
-                                            placeholder={t('sessionDialog.namePlaceholder')}
-                                        />
-                                    </div>
-                                )}
-
-                                {/* Protocol */}
-                                <div className="form-group">
-                                    <label>{t('sessionDialog.protocolLabel')}</label>
-                                    <select
-                                        value={protocol}
-                                        onChange={(e) => {
-                                            const p = e.target.value as ProtocolId;
-                                            setProtocol(p);
-                                            if (p === 'ssh') setPort('22');
-                                            else if (p === 'telnet') setPort('23');
-                                            if (p !== 'ssh') setIsJumpbox(false);
-                                            if (p !== 'ssh' && p !== 'telnet') setJumpboxId('');
-                                        }}
-                                    >
-                                        {PROTOCOLS.map(p => (
-                                            <option key={p.value} value={p.value}>{p.label}</option>
-                                        ))}
-                                    </select>
-                                </div>
-
-                                {/* Jumpbox checkbox */}
-                                {selectedHostId && protocol === 'ssh' && (
-                                    <div className="form-group form-group-checkbox">
-                                        <label>
-                                            <input
-                                                type="checkbox"
-                                                checked={isJumpbox}
-                                                onChange={e => setIsJumpbox(e.target.checked)}
-                                                disabled={protocol !== 'ssh'}
-                                            />
-                                            {t('sessionDialog.useAsJumpbox')}
-                                        </label>
-                                    </div>
-                                )}
-
-                                {/* SSH/Telnet fields */}
-                                {NETWORK_PROTOCOLS.has(protocol) && (
-                                    <>
-                                        <div className="form-row">
-                                            <div className="form-group" style={{ flex: 3 }}>
-                                                <label>{t('sessionDialog.hostLabel')}</label>
-                                                <input
-                                                    type="text"
-                                                    value={host}
-                                                    onChange={e => setHost(e.target.value)}
-                                                    placeholder={t('sessionDialog.hostPlaceholder')}
-                                                    required
-                                                    autoFocus
-                                                />
-                                            </div>
-                                            <div className="form-group" style={{ flex: 1 }}>
-                                                <label>{t('sessionDialog.portLabel')}</label>
-                                                <input
-                                                    type="number"
-                                                    value={port}
-                                                    onChange={e => setPort(e.target.value)}
-                                                    required
-                                                />
-                                            </div>
-                                        </div>
-                                        <div className="form-group">
-                                            <label>{t('sessionDialog.usernameLabel')}</label>
-                                            <input
-                                                type="text"
-                                                value={isDecrypting ? t('sessionDialog.decrypting') : username}
-                                                onChange={e => setUsername(e.target.value)}
-                                                className={isDecrypting ? 'decrypting-placeholder' : ''}
-                                                disabled={isDecrypting}
-                                                autoComplete="off"
-                                                required={protocol === 'ssh'}
-                                            />
-                                        </div>
-                                        <div className="form-group">
-                                            <label>{t('sessionDialog.passwordLabel')}</label>
-                                            <input
-                                                type="password"
-                                                value={isDecrypting ? t('sessionDialog.decrypting') : password}
-                                                onChange={e => setPassword(e.target.value)}
-                                                className={isDecrypting ? 'decrypting-placeholder' : ''}
-                                                disabled={isDecrypting}
-                                                autoComplete="new-password"
-                                            />
-                                        </div>
-                                        {jumpboxHosts.length > 0 && (
-                                            <div className="form-group">
-                                                <label>{t('sessionDialog.jumpboxLabel')}</label>
-                                                <select
-                                                    value={jumpboxId}
-                                                    onChange={e => setJumpboxId(e.target.value)}
-                                                >
-                                                    <option value="">{t('sessionDialog.directConnection')}</option>
-                                                    {jumpboxHosts
-                                                        .filter(jb => jb.id !== selectedHostId)
-                                                        .map(jb => (
-                                                            <option key={jb.id} value={jb.id}>
-                                                                {jb.name}
-                                                            </option>
-                                                        ))
-                                                    }
-                                                </select>
-                                            </div>
-                                        )}
-                                    </>
-                                )}
-
-                                {/* SSH-specific fields */}
-                                {protocol === 'ssh' && (
-                                    <>
-                                        <div className="form-group">
-                                            <label>{t('sessionDialog.privateKeyPathLabel')}</label>
-                                            <div className="connect-form-inline">
-                                                <input
-                                                    type="text"
-                                                    value={privateKeyPath}
-                                                    onChange={(e) => setPrivateKeyPath(e.target.value)}
-                                                    placeholder={t('sessionDialog.privateKeyPathPlaceholder')}
-                                                />
-                                                <button
-                                                    type="button"
-                                                    className="btn-secondary"
-                                                    onClick={handleBrowseKey}
-                                                >
-                                                    {t('common.browse')}
-                                                </button>
-                                            {/* The free-text field and Browse stay: plenty of
-                                                people keep keys outside ~/.ssh, and this picker
-                                                must not take that away. It resets to its
-                                                placeholder after each pick, because the field
-                                                above is what actually holds the choice. */}
-                                            {sshKeys.available && sshKeys.keys.length > 0 && (
-                                                <select
-                                                    className="connect-key-picker"
-                                                    value=""
-                                                    onChange={(e) => handlePickKey(e.target.value)}
-                                                    aria-label={t('sessionDialog.keyPickerLabel')}
-                                                >
-                                                    <option value="">
-                                                        {t('sessionDialog.keyPickerNone')}
-                                                    </option>
-                                                    {sshKeys.keys.map(k => (
-                                                        <option key={k.name} value={k.path}>
-                                                            {k.name}
-                                                        </option>
-                                                    ))}
-                                                    <option value={GENERATE_KEY_OPTION}>
-                                                        {t('sessionDialog.keyPickerGenerate')}
-                                                    </option>
-                                                </select>
-                                            )}
-                                            {sshKeys.available && sshKeys.keys.length === 0 && (
-                                                <button
-                                                    type="button"
-                                                    className="btn-secondary"
-                                                    onClick={() => setGenerateKeyOpen(true)}
-                                                >
-                                                    {t('sessionDialog.keyPickerGenerate')}
-                                                </button>
-                                            )}
-                                            </div>
-                                        </div>
-                                        <div className="form-group">
-                                            <label>{t('sessionDialog.privateKeyPassphraseLabel')}</label>
-                                            <input
-                                                type="password"
-                                                value={privateKeyPassphrase}
-                                                onChange={(e) => setPrivateKeyPassphrase(e.target.value)}
-                                            />
-                                        </div>
-                                    </>
-                                )}
-
-                                {/* Serial fields */}
-                                {protocol === 'serial' && (
-                                    <>
-                                        <div className="form-group">
-                                            <label>{t('sessionDialog.serialPortLabel')}</label>
-                                            {serialPorts.length > 0 ? (
-                                                <select value={serialPath} onChange={(e) => setSerialPath(e.target.value)}>
-                                                    {serialPorts.map((p) => (
-                                                        <option key={p.path} value={p.path}>
-                                                            {p.displayName ? `${p.path} (${p.displayName})` : p.path}
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                            ) : (
-                                                <input
-                                                    type="text"
-                                                    value={serialPath}
-                                                    onChange={(e) => setSerialPath(e.target.value)}
-                                                    placeholder={t('sessionDialog.serialPortPlaceholder')}
-                                                    autoFocus
-                                                />
-                                            )}
-                                        </div>
-                                        <div className="form-row">
-                                            <div className="form-group form-group-half">
-                                                <label>{t('sessionDialog.baudRateLabel')}</label>
-                                                <select value={baudRate} onChange={(e) => setBaudRate(e.target.value)}>
-                                                    <option value="9600">9600</option>
-                                                    <option value="19200">19200</option>
-                                                    <option value="38400">38400</option>
-                                                    <option value="57600">57600</option>
-                                                    <option value="115200">115200</option>
-                                                </select>
-                                            </div>
-                                            <div className="form-group form-group-half">
-                                                <label>{t('sessionDialog.dataBitsLabel')}</label>
-                                                <select value={dataBits} onChange={(e) => setDataBits(e.target.value)}>
-                                                    <option value="8">8</option>
-                                                    <option value="7">7</option>
-                                                    <option value="6">6</option>
-                                                    <option value="5">5</option>
-                                                </select>
-                                            </div>
-                                        </div>
-                                        <div className="form-row">
-                                            <div className="form-group form-group-half">
-                                                <label>{t('sessionDialog.parityLabel')}</label>
-                                                <select value={parity} onChange={(e) => setParity(e.target.value)}>
-                                                    <option value="none">{t('sessionDialog.parity.none')}</option>
-                                                    <option value="odd">{t('sessionDialog.parity.odd')}</option>
-                                                    <option value="even">{t('sessionDialog.parity.even')}</option>
-                                                    <option value="mark">{t('sessionDialog.parity.mark')}</option>
-                                                    <option value="space">{t('sessionDialog.parity.space')}</option>
-                                                </select>
-                                            </div>
-                                            <div className="form-group form-group-half">
-                                                <label>{t('sessionDialog.stopBitsLabel')}</label>
-                                                <select value={stopBits} onChange={(e) => setStopBits(e.target.value)}>
-                                                    <option value="1">1</option>
-                                                    <option value="1.5">1.5</option>
-                                                    <option value="2">2</option>
-                                                </select>
-                                            </div>
-                                        </div>
-                                        <div className="form-group">
-                                            <label>{t('sessionDialog.flowControlLabel')}</label>
-                                            <select value={flowControl} onChange={(e) => setFlowControl(e.target.value)}>
-                                                <option value="none">{t('sessionDialog.flowControl.none')}</option>
-                                                <option value="xon/xoff">XON/XOFF</option>
-                                                <option value="rts/cts">RTS/CTS</option>
-                                            </select>
-                                        </div>
-                                    </>
-                                )}
-
-                                {/* WSL fields */}
-                                {protocol === 'wsl' && (
-                                    <div className="form-group">
-                                        <label>{t('sessionDialog.distributionLabel')}</label>
-                                        {wslDistros.length > 0 ? (
-                                            <select value={selectedDistro} onChange={e => setSelectedDistro(e.target.value)}>
-                                                {wslDistros.map(d => <option key={d} value={d}>{d}</option>)}
-                                            </select>
-                                        ) : (
-                                            <div style={{ color: 'var(--text-secondary)', fontSize: 'calc(var(--font-size-base) - 1px)', fontStyle: 'italic' }}>
-                                                {t('sessionDialog.noWslDistros')}
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-
-                                {/* Git Bash warning */}
-                                {protocol === 'git-bash' && gitBashPath === '' && (
-                                    <div className="form-group">
-                                        <div style={{ color: 'var(--color-warning)', fontSize: 'calc(var(--font-size-base) - 1px)', fontStyle: 'italic' }}>
-                                            {t('sessionDialog.gitBashNotInstalled')}
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* Encoding */}
-                                <div className="form-group">
-                                    <label>{t('sessionDialog.encodingLabel')}</label>
-                                    <select
-                                        value={encoding}
-                                        onChange={(e) => setEncoding(e.target.value as Encoding)}
-                                    >
-                                        <option value="utf8">UTF-8</option>
-                                        <option value="shift_jis">Shift_JIS</option>
-                                        <option value="euc-jp">EUC-JP</option>
-                                    </select>
-                                </div>
-
-                                {/* Fixed terminal size (SSH/Telnet) — pins the grid to the
-                                    connect-time width for devices that ignore later resizes. */}
-                                {(protocol === 'ssh' || protocol === 'telnet') && (
-                                    <div className="form-group">
-                                        <label>{t('sessionDialog.fixedTerminalSizeLabel')}</label>
-                                        <select
-                                            value={fixedTerminalSize}
-                                            onChange={(e) => setFixedTerminalSize(e.target.value as FixedSizeTri)}
-                                        >
-                                            <option value="default">{t('sessionDialog.fixedTerminalSizeDefault')}</option>
-                                            <option value="on">{t('sessionDialog.fixedTerminalSizeOn')}</option>
-                                            <option value="off">{t('sessionDialog.fixedTerminalSizeOff')}</option>
-                                        </select>
-                                    </div>
-                                )}
-                            </fieldset>
-
-                            <div className="form-actions">
-                                {originalState !== null && NETWORK_PROTOCOLS.has(protocol) && (
-                                    <button
-                                        type="button"
-                                        className="btn-secondary"
-                                        onClick={handleSave}
-                                        disabled={!isDirty || isDecrypting}
-                                        title={isDirty ? t('sessionDialog.saveTitleDirty') : t('sessionDialog.saveTitleClean')}
-                                    >
-                                        {t('common.save')}
-                                    </button>
-                                )}
-                                <button
-                                    type="submit"
-                                    className="btn-primary"
-                                    disabled={!canSubmit || isDecrypting || isConnecting || (protocol === 'git-bash' && gitBashPath === '')}
-                                >
-                                    {isConnecting ? t('sessionDialog.connecting') : t('sessionDialog.connect')}
-                                </button>
-                            </div>
-                        </form>
+                            connectForm
                         )}
                     </div>
                             </div>
-                        ) : activeSidebarTab === 'gcp' ? (
+                        ) : kind === 'serial' ? (
+                            <div className="form-panel serial-form-panel">{connectForm}</div>
+                        ) : kind === 'gcp' ? (
                             <GcpInstancesPane
                                 onActivateInstance={handleActivateGcpInstance}
                             />

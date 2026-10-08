@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, renderHook, screen, fireEvent } from '@testing-library/react';
 import { useTabKeyboardNav } from './useTabKeyboardNav';
 
 interface StripProps {
@@ -103,4 +103,21 @@ describe('useTabKeyboardNav', () => {
         expect(press('ArrowRight')).toBe(true);
         expect(onSelect).not.toHaveBeenCalled();
     });
+});
+
+describe('useTabKeyboardNav (vertical)', () => {
+  it('moves with Up/Down and ignores Left/Right', () => {
+    const onSelect = vi.fn();
+    const { result } = renderHook(() =>
+      useTabKeyboardNav({ ids: ['a', 'b', 'c'], activeId: 'b', onSelect, orientation: 'vertical' })
+    );
+    const key = (k: string) => ({ key: k, preventDefault: vi.fn() }) as unknown as React.KeyboardEvent;
+    result.current.onKeyDown(key('ArrowDown'));
+    expect(onSelect).toHaveBeenLastCalledWith('c');
+    result.current.onKeyDown(key('ArrowUp'));
+    expect(onSelect).toHaveBeenLastCalledWith('a');
+    onSelect.mockClear();
+    result.current.onKeyDown(key('ArrowRight'));
+    expect(onSelect).not.toHaveBeenCalled();
+  });
 });

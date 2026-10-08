@@ -14,8 +14,8 @@ use commands::ai::{
 use commands::chat_log::{ai_chat_log_append, ai_chat_log_close};
 use commands::dpapi::{dpapi_decrypt, dpapi_decrypt_batch, dpapi_encrypt, dpapi_encrypt_batch};
 use commands::file_server::{
-    file_server_firewall_allow, file_server_firewall_status, file_server_sftp_start,
-    file_server_sftp_stop, file_server_tftp_start, file_server_tftp_stop,
+    file_server_firewall_allow, file_server_firewall_status, file_server_local_addresses,
+    file_server_sftp_start, file_server_sftp_stop, file_server_tftp_start, file_server_tftp_stop,
 };
 use commands::host_tree::{
     decrypt_import_file, export_htree, migrate_host_tree_credentials, select_import_file,
@@ -449,6 +449,7 @@ pub fn run() {
             file_server_sftp_stop,
             file_server_firewall_status,
             file_server_firewall_allow,
+            file_server_local_addresses,
             // Web browser pane (embedded native webview)
             web_browser_create,
             web_browser_navigate,

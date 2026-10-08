@@ -1,5 +1,6 @@
-/* Interface Traffic Watcher pane.
-   Split layout mirrors PingMonitorPane: config panel | divider | results table. */
+/* Interface Traffic pane.
+   Two looks: before connecting, the connection form alone in the middle; while
+   watching, one line naming the device above the interface table. */
 
 .itw-pane {
   display: flex;
@@ -13,12 +14,13 @@
   font-size: var(--font-size-base);
 }
 
-/* --- Toolbar ------------------------------------------------------------ */
+/* --- Toolbar: the device on the left, its state and Start/Stop on the right */
 
 .itw-toolbar {
   display: flex;
   align-items: center;
-  gap: 6px;
+  flex-wrap: wrap;
+  gap: 8px;
   min-height: 36px;
   padding: 6px 10px;
   background: var(--ai-header-bg);
@@ -34,14 +36,34 @@
   white-space: nowrap;
 }
 
-.itw-toolbar-target {
+.itw-device-name {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.itw-device-meta {
+  min-width: 0;
   color: var(--text-secondary);
   font-family: var(--font-family);
   font-size: calc(var(--font-size-base) - 2px);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 40%;
+}
+
+.itw-link-btn {
+  padding: 0 2px;
+  border: none;
+  background: none;
+  color: var(--accent-color);
+  font-family: var(--ui-font-family);
+  font-size: calc(var(--font-size-base) - 2px);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.itw-link-btn:hover {
+  text-decoration: underline;
 }
 
 .itw-legacy-badge {
@@ -58,63 +80,10 @@
   flex: 1;
 }
 
-.itw-interval-label {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  color: var(--text-secondary);
-  font-size: calc(var(--font-size-base) - 1px);
-  white-space: nowrap;
-}
-
-.itw-interval-select {
-  padding: 2px 4px;
-  background: var(--input-bg);
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-  color: var(--text-primary);
-  font-family: var(--ui-font-family);
-  font-size: calc(var(--font-size-base) - 1px);
-  outline: none;
-}
-
-.itw-interval-select:focus {
-  border-color: var(--accent-color);
-}
-
-.itw-toolbar-btn {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 8px;
-  border: none;
-  border-radius: 4px;
-  color: var(--text-on-accent);
-  font-family: var(--ui-font-family);
+.itw-last {
+  color: var(--text-tertiary);
   font-size: calc(var(--font-size-base) - 2px);
-  cursor: pointer;
-  transition: background-color 0.1s;
-}
-
-.itw-toolbar-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.itw-btn-start {
-  background: var(--accent-color);
-}
-
-.itw-btn-start:hover:not(:disabled) {
-  background: var(--accent-hover);
-}
-
-.itw-btn-stop {
-  background: var(--btn-danger-bg);
-}
-
-.itw-btn-stop:hover:not(:disabled) {
-  background: var(--btn-danger-hover-bg);
+  white-space: nowrap;
 }
 
 /* --- Error banner ------------------------------------------------------- */
@@ -128,35 +97,32 @@
   flex-shrink: 0;
 }
 
-/* --- Body / split ------------------------------------------------------- */
+/* --- Connection form ---------------------------------------------------- */
 
-.itw-body {
-  display: flex;
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.itw-config-panel {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  border-right: 1px solid var(--border-color);
-  background: var(--bg-secondary);
-}
-
-.itw-config-scroll {
+.itw-connect-wrap {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 10px;
+  padding: 24px 16px;
+}
+
+.itw-connect {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 420px;
+  margin: 0 auto;
+  padding: 16px 18px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
 }
 
 .itw-field {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  margin-bottom: 10px;
+  min-width: 0;
 }
 
 .itw-field-row {
@@ -166,11 +132,15 @@
 
 .itw-field-grow {
   flex: 1;
-  min-width: 0;
 }
 
 .itw-field-port {
-  width: 80px;
+  width: 90px;
+  flex-shrink: 0;
+}
+
+.itw-field-proto {
+  width: 110px;
   flex-shrink: 0;
 }
 
@@ -180,6 +150,7 @@
 }
 
 .itw-input {
+  width: 100%;
   padding: 5px 8px;
   background: var(--input-bg);
   border: 1px solid var(--border-color);
@@ -189,123 +160,77 @@
   font-size: var(--font-size-base);
   outline: none;
   transition: border-color 0.2s;
-  width: 100%;
-  box-sizing: border-box;
 }
 
 .itw-input:focus {
   border-color: var(--accent-color);
 }
 
-.itw-input:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+.itw-hint-warning {
+  margin: 0;
+  color: var(--color-warning);
+  font-size: calc(var(--font-size-base) - 2px);
 }
 
 .itw-checkbox {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-bottom: 4px;
-  color: var(--text-primary);
+  color: var(--text-secondary);
   font-size: calc(var(--font-size-base) - 1px);
   cursor: pointer;
 }
 
-.itw-checkbox-inline {
-  margin-bottom: 0;
-  white-space: nowrap;
+.itw-connect-btn {
+  align-self: flex-end;
+  padding: 5px 14px;
 }
 
-.itw-hint {
-  margin: 0 0 10px;
-  color: var(--text-tertiary);
-  font-size: calc(var(--font-size-base) - 3px);
-  line-height: 1.4;
+/* "Used before": one chip per device, × to forget it. */
+.itw-recent {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
-.itw-hint-warning {
-  color: var(--color-warning);
+.itw-recent-chip {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  background: var(--input-bg);
+  overflow: hidden;
 }
 
-.itw-hint-ok {
-  color: var(--success-color);
+.itw-recent-chip.active {
+  border-color: var(--accent-color);
 }
 
-.itw-discover-btn {
-  width: 100%;
-  padding: 6px 16px;
-  background: var(--btn-secondary-bg);
+.itw-recent-pick,
+.itw-recent-forget {
   border: none;
-  border-radius: 4px;
+  background: none;
   color: var(--text-primary);
   font-family: var(--ui-font-family);
-  font-size: calc(var(--font-size-base) - 1px);
+  font-size: calc(var(--font-size-base) - 2px);
   cursor: pointer;
-  transition: background-color 0.1s;
 }
 
-.itw-discover-btn:hover:not(:disabled) {
-  background: var(--btn-secondary-hover-bg);
+.itw-recent-pick {
+  padding: 2px 4px 2px 10px;
 }
 
-.itw-discover-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+.itw-recent-forget {
+  padding: 2px 8px 2px 4px;
+  color: var(--text-tertiary);
 }
 
-/* --- Divider ------------------------------------------------------------ */
-
-.itw-divider {
-  position: relative;
-  width: 5px;
-  flex-shrink: 0;
-  background: var(--bg-secondary);
+.itw-recent-pick:hover,
+.itw-recent-forget:hover {
+  color: var(--accent-color);
 }
 
-.itw-divider-handle {
-  position: absolute;
-  inset: 0;
-  cursor: col-resize;
-}
-
-.itw-divider-handle:hover {
-  background: var(--accent-color);
-}
-
-.itw-divider-toggle {
-  position: absolute;
-  top: 50%;
-  left: -3px;
-  transform: translateY(-50%);
-  width: 11px;
-  height: 26px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-  color: var(--text-secondary);
-  cursor: pointer;
-  z-index: 1;
-}
-
-.itw-divider-toggle:hover {
-  color: var(--text-primary);
-  background: var(--hover-bg);
-}
-
-/* --- Results ------------------------------------------------------------ */
-
-.itw-results-panel {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
-}
+/* --- Filter bar --------------------------------------------------------- */
 
 .itw-filter-bar {
   display: flex;
@@ -317,8 +242,25 @@
 }
 
 .itw-filter-input {
-  flex: 1;
-  min-width: 0;
+  max-width: 260px;
+  font-size: calc(var(--font-size-base) - 1px);
+}
+
+.itw-chip {
+  padding: 2px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  background: var(--input-bg);
+  color: var(--text-secondary);
+  font-family: var(--ui-font-family);
+  font-size: calc(var(--font-size-base) - 2px);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.itw-chip.on {
+  border-color: var(--accent-color);
+  color: var(--accent-color);
 }
 
 .itw-filter-count {
@@ -327,167 +269,243 @@
   white-space: nowrap;
 }
 
+/* --- Table -------------------------------------------------------------- */
+
 .itw-table-wrapper {
   flex: 1;
   min-height: 0;
   overflow: auto;
-  transition: opacity 0.2s;
 }
 
-/* The device stopped answering: rows are the last known good values. */
+/* No reply from the device: the last rows stay, faded, until it answers. */
 .itw-table-wrapper.stale {
-  opacity: 0.55;
+  opacity: 0.5;
 }
 
 .itw-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: calc(var(--font-size-base) - 2px);
-}
-
-.itw-table thead {
-  position: sticky;
-  top: 0;
-  z-index: 1;
+  font-size: calc(var(--font-size-base) - 1px);
+  font-variant-numeric: tabular-nums;
 }
 
 .itw-th {
-  padding: 5px 8px;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 5px 10px;
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
   color: var(--text-secondary);
-  text-align: left;
+  font-size: calc(var(--font-size-base) - 2px);
   font-weight: 600;
+  text-align: left;
   white-space: nowrap;
-  cursor: pointer;
   user-select: none;
 }
 
-.itw-th:hover {
-  color: var(--text-primary);
-  background: var(--hover-bg);
+.itw-th.sortable {
+  cursor: pointer;
 }
 
 .itw-th.sorted {
-  color: var(--accent-color);
+  color: var(--text-primary);
 }
 
-.itw-th-num {
+.itw-table td {
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--border-color);
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.itw-num {
   text-align: right;
 }
 
-.itw-row td {
-  padding: 3px 8px;
-  border-bottom: 1px solid var(--border-color);
-  white-space: nowrap;
+.itw-row {
+  cursor: pointer;
 }
 
-.itw-row:hover td {
+.itw-row:hover {
   background: var(--hover-bg);
 }
 
-/* Link is not up — the first thing you want to spot in the table. */
-.itw-row-down .itw-td-status {
-  color: var(--color-danger);
+.itw-row.down {
+  color: var(--text-tertiary);
 }
 
-.itw-td-num {
+.itw-row.open td {
+  border-bottom-color: transparent;
+}
+
+.itw-td-name {
+  max-width: 260px;
+}
+
+.itw-if-name {
+  display: block;
+  font-family: var(--font-family);
+  font-weight: 600;
+}
+
+.itw-if-alias {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-tertiary);
+  font-size: calc(var(--font-size-base) - 3px);
+}
+
+.itw-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: calc(var(--font-size-base) - 2px);
+  font-weight: 600;
+}
+
+.itw-state.up {
+  color: var(--success-color);
+}
+
+.itw-state.down {
+  color: var(--text-tertiary);
+}
+
+.itw-state-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.itw-admin-down {
+  font-weight: normal;
+}
+
+/* Receive / send: utilisation bar, value, recent graph. */
+.itw-rate {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.itw-rate-track {
+  width: 60px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--bg-tertiary);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.itw-rate-fill {
+  display: block;
+  height: 100%;
+  background: var(--accent-color);
+}
+
+.itw-rate.hot .itw-rate-fill {
+  background: var(--color-warning);
+}
+
+.itw-rate-value {
+  min-width: 76px;
   text-align: right;
   font-family: var(--font-family);
 }
 
-.itw-td-name {
-  font-family: var(--font-family);
-  max-width: 180px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.itw-td-alias {
-  color: var(--text-secondary);
-  max-width: 200px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.itw-admin-down {
-  color: var(--text-tertiary);
-}
-
-.itw-util,
-.itw-delta {
-  color: var(--text-tertiary);
-  font-size: calc(var(--font-size-base) - 3px);
-}
-
-/* A non-zero increment this poll, or a saturated link. */
-.itw-warn {
+.itw-rate.hot .itw-rate-value {
   color: var(--color-warning);
 }
 
-.itw-warn .itw-delta,
-.itw-warn .itw-util {
+.itw-measuring {
+  color: var(--text-tertiary);
+  font-size: calc(var(--font-size-base) - 2px);
+}
+
+.itw-issues {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.itw-badge {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--color-warning) 18%, transparent);
   color: var(--color-warning);
-}
-
-.itw-placeholder {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-  color: var(--placeholder-color);
-  font-size: calc(var(--font-size-base) - 1px);
-  text-align: center;
-}
-
-/* --- Status bar --------------------------------------------------------- */
-
-.itw-statusbar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 4px 10px;
-  background: var(--bg-secondary);
-  border-top: 1px solid var(--border-color);
   font-size: calc(var(--font-size-base) - 3px);
-  color: var(--text-secondary);
-  flex-shrink: 0;
-  overflow: hidden;
-}
-
-.itw-status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  background: var(--text-tertiary);
-}
-
-.itw-status-dot.running {
-  background: var(--success-color);
-}
-
-.itw-status-dot.error {
-  background: var(--color-danger);
-}
-
-.itw-status-label {
   font-weight: 600;
 }
 
-.itw-status-info {
-  white-space: nowrap;
+.itw-expand {
+  border: none;
+  background: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  padding: 0 4px;
+  transition: transform 0.15s;
 }
 
-.itw-status-stale {
-  color: var(--color-warning);
-  white-space: nowrap;
+.itw-expand.open {
+  transform: rotate(90deg);
 }
 
-.itw-status-error {
-  color: var(--color-danger);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.itw-trend-row td {
+  background: var(--bg-secondary);
+  padding: 8px 12px;
+}
+
+.itw-trend {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.itw-trend-svg {
+  width: 100%;
+  height: 64px;
+}
+
+.itw-trend-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  color: var(--text-tertiary);
+  font-size: calc(var(--font-size-base) - 2px);
+}
+
+.itw-trend-key::before {
+  content: '';
+  display: inline-block;
+  width: 14px;
+  height: 2px;
+  margin-right: 6px;
+  vertical-align: middle;
+  background: var(--accent-color);
+}
+
+.itw-trend-key.out::before {
+  background: var(--success-color);
+}
+
+.itw-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  color: var(--text-tertiary);
+  font-size: calc(var(--font-size-base) - 1px);
+}
+
+/* The trend stretches to the row width; keep its lines one pixel wide. */
+.itw-trend-svg polyline,
+.itw-trend-svg line {
+  vector-effect: non-scaling-stroke;
+}
+
+/* A picker in a form column keeps its own width instead of stretching. */
+.itw-field > .pt-seg {
+  align-self: flex-start;
 }

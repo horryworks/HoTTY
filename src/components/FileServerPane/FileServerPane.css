@@ -9,11 +9,12 @@
   font-family: var(--ui-font-family);
 }
 
-/* Toolbar */
-.file-server-toolbar {
+/* Top strip: the address a device types, and the folder being shared. */
+.fs-top {
   display: flex;
   align-items: center;
-  gap: 6px;
+  flex-wrap: wrap;
+  gap: 8px 20px;
   min-height: 36px;
   padding: 6px 10px;
   background: var(--ai-header-bg);
@@ -22,33 +23,108 @@
   flex-shrink: 0;
 }
 
-.file-server-toolbar-title {
-  font-size: calc(var(--font-size-base) - 1px);
+.fs-reach,
+.fs-root {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* The address never shrinks; the folder takes what is left and drops to its
+   own line rather than squeezing under 220px. */
+.fs-reach {
+  flex: 0 0 auto;
+}
+
+.fs-root {
+  flex: 1 1 220px;
+  min-width: 0;
+  justify-content: flex-end;
+}
+
+.fs-address {
+  font-family: var(--font-family);
+  font-size: calc(var(--font-size-base) + 2px);
   font-weight: 600;
+  user-select: all;
+}
+
+.fs-address-pick {
+  width: auto;
+  padding: 2px 6px;
+  font-size: calc(var(--font-size-base) - 2px);
+}
+
+.fs-adapter {
+  color: var(--text-tertiary);
+  font-size: calc(var(--font-size-base) - 2px);
+}
+
+.fs-root-btn {
+  min-width: 0;
+  max-width: 360px;
+  padding: 3px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--input-bg);
   color: var(--text-primary);
+  font-family: var(--font-family);
+  font-size: calc(var(--font-size-base) - 1px);
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: left;
+  transition: background-color 0.1s;
 }
 
-.file-server-toolbar-spacer {
-  flex: 1;
+.fs-root-btn.empty {
+  direction: ltr;
+  color: var(--accent-color);
 }
 
-/* Network-exposure warning */
+.fs-root-btn:hover:not(:disabled) {
+  background: var(--hover-bg);
+}
+
+.fs-root-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Shown only while a running server accepts uploads. */
 .file-server-warning {
   padding: 6px 10px;
-  background: var(--bg-tertiary);
-  border-bottom: 1px solid var(--border-color);
-  color: var(--color-warning);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--color-danger) 14%, transparent);
+  color: var(--color-danger);
   font-size: calc(var(--font-size-base) - 2px);
-  flex-shrink: 0;
 }
 
 /* Error bar */
 .file-server-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   padding: 4px 10px;
   background: var(--color-danger);
   color: var(--text-on-accent);
   font-size: calc(var(--font-size-base) - 2px);
   flex-shrink: 0;
+}
+
+.file-server-error span {
+  flex: 1;
+}
+
+.fs-error-close {
+  border: none;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  font-size: var(--font-size-base);
+  padding: 0 4px;
 }
 
 /* Body (scrollable) */
@@ -63,39 +139,109 @@
   box-sizing: border-box;
 }
 
-/* Shared config */
-.fs-shared {
+/* One card per protocol, side by side; stacked when the pane is narrow. */
+.fs-cards {
   display: flex;
-  gap: 12px;
   flex-wrap: wrap;
+  gap: 12px;
+}
+
+.fs-card {
+  flex: 1 1 300px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  transition: border-color 0.2s;
+}
+
+.fs-card.running {
+  border-color: var(--success-color);
+}
+
+.fs-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fs-card-title {
+  font-size: var(--font-size-base);
+  font-weight: 600;
+}
+
+/* On/off switch: on starts the server, off stops it. */
+.fs-switch {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  margin-left: auto;
+  padding: 0;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--bg-tertiary);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+
+.fs-switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--text-tertiary);
+  transition: left 0.15s, background-color 0.15s;
+}
+
+.fs-switch[aria-checked='true'] {
+  background: var(--success-color);
+  border-color: var(--success-color);
+}
+
+.fs-switch[aria-checked='true']::after {
+  left: 18px;
+  background: var(--text-on-accent);
+}
+
+.fs-card-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.fs-card-fields .fs-field {
+  flex: 1 1 120px;
+}
+
+.fs-card-fields .fs-field-port {
+  flex: 0 0 90px;
+}
+
+.fs-card-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .fs-field {
   display: flex;
   flex-direction: column;
   gap: 4px;
-}
-
-.fs-field-grow {
-  flex: 1;
-  min-width: 220px;
-}
-
-.fs-field-port {
-  width: 100px;
-  flex-shrink: 0;
+  min-width: 0;
 }
 
 .fs-label {
   font-size: calc(var(--font-size-base) - 1px);
   color: var(--text-secondary);
-}
-
-.fs-row {
-  display: flex;
-  align-items: flex-end;
-  gap: 8px;
-  flex-wrap: wrap;
+  white-space: nowrap;
 }
 
 .fs-input {
@@ -112,18 +258,6 @@
   width: 100%;
 }
 
-.fs-row .fs-input {
-  flex: 1;
-  min-width: 120px;
-}
-
-/* The port field has a fixed 100px width; the generic .fs-row min-width above
-   would otherwise overflow it and overlap the adjacent checkbox. */
-.fs-field-port .fs-input {
-  flex: none;
-  min-width: 0;
-}
-
 .fs-input:focus {
   border-color: var(--accent-color);
 }
@@ -133,149 +267,77 @@
   cursor: not-allowed;
 }
 
-.fs-checkbox {
+/* What to type on the device, with a copy button. */
+.fs-cmd {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: calc(var(--font-size-base) - 1px);
-  color: var(--text-secondary);
-  cursor: pointer;
-  white-space: nowrap;
-  padding-bottom: 5px;
+  min-width: 0;
+  padding: 4px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--input-bg);
 }
 
-/* Protocol sections */
-.fs-sections {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.fs-section {
+.fs-cmd code {
   flex: 1;
-  min-width: 260px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-family);
+  font-size: calc(var(--font-size-base) - 1px);
+  user-select: all;
+}
+
+/* Firewall line */
+.fs-fw {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 10px 12px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  box-sizing: border-box;
+  gap: 2px;
+  font-size: calc(var(--font-size-base) - 2px);
 }
 
-.fs-section-header {
-  display: flex;
+.fs-fw.allowed {
+  flex-direction: row;
   align-items: center;
   gap: 8px;
-}
-
-.fs-section-title {
-  font-size: calc(var(--font-size-base) + 2px);
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.fs-section-status {
-  margin-left: auto;
-  font-size: calc(var(--font-size-base) - 2px);
-  color: var(--text-tertiary);
-}
-
-.fs-status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.fs-status-dot.running {
-  background: var(--success-color);
-}
-
-.fs-status-dot.stopped {
-  background: var(--text-tertiary);
-}
-
-.fs-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.fs-btn {
-  padding: 6px 16px;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-family: var(--ui-font-family);
-  font-size: calc(var(--font-size-base) - 1px);
-  transition: background-color 0.1s;
-}
-
-.fs-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.fs-btn-secondary {
-  background: var(--btn-secondary-bg);
-  color: var(--text-primary);
-  flex-shrink: 0;
-}
-
-.fs-btn-secondary:hover:not(:disabled) {
-  background: var(--btn-secondary-hover-bg);
-}
-
-.fs-btn-start {
-  background: var(--accent-color);
-  color: var(--text-on-accent);
-}
-
-.fs-btn-start:hover:not(:disabled) {
-  background: var(--accent-hover);
-}
-
-.fs-btn-stop {
-  background: var(--btn-danger-bg);
-  color: var(--text-on-accent);
-}
-
-.fs-btn-stop:hover:not(:disabled) {
-  background: var(--btn-danger-hover-bg);
-}
-
-/* Firewall status row */
-.fs-firewall {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 6px 8px;
-  border-radius: 4px;
-  font-size: calc(var(--font-size-base) - 2px);
-  background: var(--bg-tertiary);
-}
-
-.fs-firewall-label {
-  font-weight: 600;
-}
-
-.fs-fw-allowed .fs-firewall-label {
   color: var(--success-color);
 }
 
-.fs-fw-blocked .fs-firewall-label {
+.fs-fw.checking {
+  color: var(--text-tertiary);
+}
+
+.fs-fw.blocked {
   color: var(--color-danger);
 }
 
-.fs-fw-unknown .fs-firewall-label {
+.fs-fw.unknown {
+  color: var(--color-warning);
+}
+
+.fs-fw-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.fs-fw-hint {
   color: var(--text-secondary);
 }
 
-.fs-firewall-hint {
-  color: var(--text-tertiary);
-  flex-basis: 100%;
+/* Bind address, folded away: 0.0.0.0 is right for nearly everyone. */
+.fs-details summary {
+  color: var(--text-secondary);
+  font-size: calc(var(--font-size-base) - 2px);
+  cursor: pointer;
+}
+
+.fs-field-bind {
+  max-width: 220px;
+  margin-top: 6px;
 }
 
 .fs-link-btn {
@@ -296,10 +358,6 @@
 .fs-link-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-}
-
-.fs-fw-allow {
-  font-weight: 600;
 }
 
 /* Transfer log */

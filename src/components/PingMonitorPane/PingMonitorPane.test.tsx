@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { PingMonitorPane } from './PingMonitorPane';
 import { tauriService } from '../../services/tauriService';
 import { useSettingsStore } from '../../stores/settingsStore';
+import type { PingResult } from '../../types/appTypes';
 
 vi.mock('../../services/tauriService', () => ({
   tauriService: {
@@ -16,12 +17,10 @@ vi.mock('../../services/tauriService', () => ({
   },
 }));
 
-vi.mock('../../hooks/useResize', () => ({
-  useResize: () => ({ startResize: vi.fn(), isResizing: false }),
-}));
-
 const mockStart = vi.mocked(tauriService.pingMonitorStart);
 const mockStop = vi.mocked(tauriService.pingMonitorStop);
+const mockUpdateTargets = vi.mocked(tauriService.pingMonitorUpdateTargets);
+const mockUpdateInterval = vi.mocked(tauriService.pingMonitorUpdateInterval);
 const mockConfirm = vi.mocked(tauriService.confirmLogDir);
 
 /** Point the app-wide log folder somewhere, as Settings → General would. */
@@ -31,10 +30,20 @@ const setLogFolder = (path: string) => {
   });
 };
 
+const addTarget = (text: string) => {
+  const input = screen.getByRole('textbox', { name: 'Add a target' });
+  fireEvent.change(input, { target: { value: text } });
+  fireEvent.keyDown(input, { key: 'Enter' });
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(tauriService.onPingMonitorData).mockResolvedValue(() => {});
   vi.mocked(tauriService.onPingMonitorLogFile).mockResolvedValue(() => {});
+  mockStart.mockResolvedValue();
+  mockStop.mockResolvedValue();
+  mockUpdateTargets.mockResolvedValue();
+  mockUpdateInterval.mockResolvedValue();
   act(() => {
     useSettingsStore.getState().reset();
   });
@@ -42,221 +51,184 @@ beforeEach(() => {
 });
 
 describe('PingMonitorPane', () => {
-  it('renders split layout with targets editor and Start button', () => {
+  it('shows the state and Start together, and a row to add targets', () => {
     render(<PingMonitorPane paneId="pm-1" active={true} />);
-    expect(screen.getByText('Start')).toBeTruthy();
-    expect(screen.getByPlaceholderText(/8\.8\.8\.8/)).toBeTruthy();
-    expect(screen.getByText('Enter targets in the editor and click Start')).toBeTruthy();
+    expect(screen.getByRole('status').textContent).toBe('Stopped');
+    expect(screen.getByRole('button', { name: /Start/ })).toBeTruthy();
+    expect(screen.getByRole('textbox', { name: 'Add a target' })).toBeTruthy();
   });
 
-  it('renders toolbar with title, interval selector, and start button', () => {
+  it('picks the interval with buttons, 5s by default', () => {
     render(<PingMonitorPane paneId="pm-1" active={true} />);
-    expect(screen.getByText('Ping Monitor')).toBeTruthy();
-    expect(screen.getByText('Interval:')).toBeTruthy();
-    const select = document.querySelector('.ping-monitor-interval-select') as HTMLSelectElement;
-    expect(select).toBeTruthy();
-    expect(select.value).toBe('5000');
+    const group = screen.getByRole('group', { name: 'Interval' });
+    expect(group.querySelector('[aria-pressed="true"]')!.textContent).toBe('5s');
   });
 
-  it('renders targets panel with header and count', () => {
+  it('adds a target with Enter and lists it as a row', () => {
     render(<PingMonitorPane paneId="pm-1" active={true} />);
-    expect(screen.getByText('Targets')).toBeTruthy();
-    const countEl = document.querySelector('.ping-monitor-targets-count');
-    expect(countEl).toBeTruthy();
-    expect(countEl!.textContent).toContain('0 target');
+    addTarget('192.0.2.1');
+    expect(screen.getByText('192.0.2.1')).toBeTruthy();
   });
 
-  it('renders status bar showing Stopped state', () => {
+  it('adds every target from a pasted list, skipping duplicates', () => {
     render(<PingMonitorPane paneId="pm-1" active={true} />);
-    expect(screen.getByText('Stopped')).toBeTruthy();
-    expect(screen.getByText('Interval: 5s')).toBeTruthy();
+    addTarget('192.0.2.1');
+    const input = screen.getByRole('textbox', { name: 'Add a target' });
+    fireEvent.paste(input, { clipboardData: { getData: () => '192.0.2.1\n198.51.100.20, sw-01.example.com' } });
+    expect(document.querySelectorAll('.ping-monitor-row')).toHaveLength(3);
   });
 
-  it('renders divider with collapse toggle', () => {
+  it('removes a target with its × button', () => {
     render(<PingMonitorPane paneId="pm-1" active={true} />);
-    const divider = document.querySelector('.ping-monitor-divider');
-    expect(divider).toBeTruthy();
-    const toggle = document.querySelector('.ping-monitor-divider-toggle');
-    expect(toggle).toBeTruthy();
+    addTarget('192.0.2.1 198.51.100.20');
+    fireEvent.click(screen.getByRole('button', { name: 'Remove 192.0.2.1' }));
+    expect(screen.queryByText('192.0.2.1')).toBeNull();
+    expect(screen.getByText('198.51.100.20')).toBeTruthy();
   });
 
-  it('collapses targets panel when toggle is clicked', () => {
+  it('says to add a target when Start is pressed with none', async () => {
     render(<PingMonitorPane paneId="pm-1" active={true} />);
-    expect(document.querySelector('.ping-monitor-targets-panel')).toBeTruthy();
-
-    const toggle = document.querySelector('.ping-monitor-divider-toggle') as HTMLButtonElement;
-    fireEvent.click(toggle);
-
-    expect(document.querySelector('.ping-monitor-targets-panel')).toBeNull();
-    expect(toggle.classList.contains('collapsed')).toBe(true);
-  });
-
-  it('expands targets panel when toggle is clicked again', () => {
-    render(<PingMonitorPane paneId="pm-1" active={true} />);
-    const toggle = document.querySelector('.ping-monitor-divider-toggle') as HTMLButtonElement;
-
-    fireEvent.click(toggle); // collapse
-    expect(document.querySelector('.ping-monitor-targets-panel')).toBeNull();
-
-    fireEvent.click(toggle); // expand
-    expect(document.querySelector('.ping-monitor-targets-panel')).toBeTruthy();
-  });
-
-  it('shows error when starting without targets', async () => {
-    render(<PingMonitorPane paneId="pm-1" active={true} />);
-    fireEvent.click(screen.getByText('Start'));
-
-    await waitFor(() => {
-      expect(screen.getByText('Enter at least one target')).toBeTruthy();
-    });
+    fireEvent.click(screen.getByRole('button', { name: /Start/ }));
+    await waitFor(() => expect(screen.getByText('Add at least one target')).toBeTruthy());
     expect(mockStart).not.toHaveBeenCalled();
   });
 
-  it('calls pingMonitorStart with correct parameters', async () => {
-    mockStart.mockResolvedValue();
-
+  it('starts with the listed targets and shows Monitoring and Stop', async () => {
     render(<PingMonitorPane paneId="pm-1" active={true} />);
-    const textarea = screen.getByPlaceholderText(/8\.8\.8\.8/);
-    fireEvent.change(textarea, { target: { value: '8.8.8.8, 1.1.1.1' } });
-    fireEvent.click(screen.getByText('Start'));
-
+    addTarget('192.0.2.1, 198.51.100.20');
+    fireEvent.click(screen.getByRole('button', { name: /Start/ }));
     await waitFor(() => {
-      expect(mockStart).toHaveBeenCalledWith(
-        'pm-1',
-        ['8.8.8.8', '1.1.1.1'],
-        5000,
-        false,
-        ''
-      );
+      expect(mockStart).toHaveBeenCalledWith('pm-1', ['192.0.2.1', '198.51.100.20'], 5000, false, '');
+      expect(screen.getByRole('status').textContent).toBe('Monitoring');
+      expect(screen.getByRole('button', { name: /Stop/ })).toBeTruthy();
     });
   });
 
-  it('shows Stop button and Running status when running', async () => {
-    mockStart.mockResolvedValue();
-
+  it('stops and goes back to Stopped', async () => {
     render(<PingMonitorPane paneId="pm-1" active={true} />);
-    const textarea = screen.getByPlaceholderText(/8\.8\.8\.8/);
-    fireEvent.change(textarea, { target: { value: '8.8.8.8' } });
-    fireEvent.click(screen.getByText('Start'));
-
-    await waitFor(() => {
-      expect(screen.getByText('Stop')).toBeTruthy();
-      expect(screen.getByText('Running')).toBeTruthy();
-    });
-  });
-
-  it('calls pingMonitorStop and shows Start button after stopping', async () => {
-    mockStart.mockResolvedValue();
-    mockStop.mockResolvedValue();
-
-    render(<PingMonitorPane paneId="pm-1" active={true} />);
-    const textarea = screen.getByPlaceholderText(/8\.8\.8\.8/);
-    fireEvent.change(textarea, { target: { value: '8.8.8.8' } });
-    fireEvent.click(screen.getByText('Start'));
-
-    await waitFor(() => {
-      expect(screen.getByText('Stop')).toBeTruthy();
-    });
-
-    fireEvent.click(screen.getByText('Stop'));
-
+    addTarget('192.0.2.1');
+    fireEvent.click(screen.getByRole('button', { name: /Start/ }));
+    await waitFor(() => screen.getByRole('button', { name: /Stop/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Stop/ }));
     await waitFor(() => {
       expect(mockStop).toHaveBeenCalledWith('pm-1');
-      expect(screen.getByText('Start')).toBeTruthy();
-      expect(screen.getByText('Stopped')).toBeTruthy();
+      expect(screen.getByRole('status').textContent).toBe('Stopped');
     });
   });
 
-  it('renders CSV logging toggle', () => {
+  it('sends an added target to the running monitor at once', async () => {
     render(<PingMonitorPane paneId="pm-1" active={true} />);
-    expect(screen.getByText('CSV Logging')).toBeTruthy();
+    addTarget('192.0.2.1');
+    fireEvent.click(screen.getByRole('button', { name: /Start/ }));
+    await waitFor(() => screen.getByRole('button', { name: /Stop/ }));
+    addTarget('198.51.100.20');
+    await waitFor(() =>
+      expect(mockUpdateTargets).toHaveBeenCalledWith('pm-1', ['192.0.2.1', '198.51.100.20']),
+    );
   });
 
-  it('disables CSV logging and links to the log folder setting when none is configured', () => {
+  it('changes the interval of the running monitor at once', async () => {
+    render(<PingMonitorPane paneId="pm-1" active={true} />);
+    addTarget('192.0.2.1');
+    fireEvent.click(screen.getByRole('button', { name: /Start/ }));
+    await waitFor(() => screen.getByRole('button', { name: /Stop/ }));
+    fireEvent.click(screen.getByRole('button', { name: '10s' }));
+    await waitFor(() => expect(mockUpdateInterval).toHaveBeenCalledWith('pm-1', 10000));
+  });
+
+  it('is still monitoring after its tab was hidden and shown again', async () => {
+    const first = render(<PingMonitorPane paneId="pm-1" active={true} />);
+    addTarget('192.0.2.1');
+    fireEvent.click(screen.getByRole('button', { name: /Start/ }));
+    await waitFor(() => screen.getByRole('button', { name: /Stop/ }));
+    first.unmount();
+    render(<PingMonitorPane paneId="pm-1" active={true} />);
+    expect(screen.getByRole('status').textContent).toBe('Monitoring');
+    expect(screen.getByText('192.0.2.1')).toBeTruthy();
+  });
+
+  it('remembers the targets and interval for the next pane', () => {
+    const { unmount } = render(<PingMonitorPane paneId="pm-1" active={true} />);
+    addTarget('192.0.2.1');
+    fireEvent.click(screen.getByRole('button', { name: '30s' }));
+    unmount();
+    expect(useSettingsStore.getState().pingMonitorConfig).toEqual({ targets: ['192.0.2.1'], intervalMs: 30000 });
+    render(<PingMonitorPane paneId="pm-2" active={true} />);
+    expect(screen.getByText('192.0.2.1')).toBeTruthy();
+  });
+
+  it('opens the log folder setting when Record CSV is pressed with no folder', () => {
     const onOpenLogSettings = vi.fn();
     render(<PingMonitorPane paneId="pm-1" active={true} onOpenLogSettings={onOpenLogSettings} />);
-    const checkbox = document.querySelector(
-      '.ping-monitor-logging-toggle input',
-    ) as HTMLInputElement;
-    expect(checkbox.disabled).toBe(true);
-    fireEvent.click(screen.getByRole('button', { name: 'Set log folder…' }));
+    fireEvent.click(screen.getByRole('button', { name: /Record CSV/ }));
     expect(onOpenLogSettings).toHaveBeenCalledTimes(1);
   });
 
-  it('shows the app-wide log folder instead of a path input', () => {
-    setLogFolder('C:/logs');
-    render(<PingMonitorPane paneId="pm-1" active={true} />);
-
-    // The pane no longer owns a path field — the folder is read-only info.
-    expect(document.querySelector('.ping-monitor-logging-path')).toBeNull();
-    expect(screen.getByText('Saved to C:/logs')).toBeTruthy();
-    const checkbox = document.querySelector(
-      '.ping-monitor-logging-toggle input',
-    ) as HTMLInputElement;
-    expect(checkbox.disabled).toBe(false);
-  });
-
-  it('approves the app-wide log folder and starts logging to it', async () => {
-    mockStart.mockResolvedValue();
+  it('approves the log folder and starts logging to it', async () => {
     mockConfirm.mockResolvedValue(true);
     setLogFolder('C:/logs');
-
     render(<PingMonitorPane paneId="pm-1" active={true} />);
-    fireEvent.change(screen.getByPlaceholderText(/8.8.8.8/), {
-      target: { value: '8.8.8.8' },
-    });
-    fireEvent.click(document.querySelector('.ping-monitor-logging-toggle input')!);
-    fireEvent.click(screen.getByText('Start'));
-
+    addTarget('192.0.2.1');
+    fireEvent.click(screen.getByRole('button', { name: /Record CSV/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Start/ }));
     await waitFor(() => {
       expect(mockConfirm).toHaveBeenCalledWith('C:/logs');
-      expect(mockStart).toHaveBeenCalledWith('pm-1', ['8.8.8.8'], 5000, true, 'C:/logs');
+      expect(mockStart).toHaveBeenCalledWith('pm-1', ['192.0.2.1'], 5000, true, 'C:/logs');
     });
   });
 
-  it('starts without logging and says so when the folder is not approved', async () => {
-    mockStart.mockResolvedValue();
+  it('restarts the running monitor when recording is turned on', async () => {
+    mockConfirm.mockResolvedValue(true);
+    setLogFolder('C:/logs');
+    render(<PingMonitorPane paneId="pm-1" active={true} />);
+    addTarget('192.0.2.1');
+    fireEvent.click(screen.getByRole('button', { name: /Start/ }));
+    await waitFor(() => screen.getByRole('button', { name: /Stop/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Record CSV/ }));
+    await waitFor(() => {
+      expect(mockStop).toHaveBeenCalledWith('pm-1');
+      expect(mockStart).toHaveBeenLastCalledWith('pm-1', ['192.0.2.1'], 5000, true, 'C:/logs');
+    });
+  });
+
+  it('keeps monitoring without logging and says so when the folder is not approved', async () => {
     mockConfirm.mockResolvedValue(false);
     setLogFolder('C:/logs');
-
     render(<PingMonitorPane paneId="pm-1" active={true} />);
-    fireEvent.change(screen.getByPlaceholderText(/8.8.8.8/), {
-      target: { value: '8.8.8.8' },
-    });
-    fireEvent.click(document.querySelector('.ping-monitor-logging-toggle input')!);
-    fireEvent.click(screen.getByText('Start'));
-
+    addTarget('192.0.2.1');
+    fireEvent.click(screen.getByRole('button', { name: /Record CSV/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Start/ }));
     await waitFor(() => {
-      // Monitoring still runs; only the CSV side is suppressed.
-      expect(mockStart).toHaveBeenCalledWith('pm-1', ['8.8.8.8'], 5000, false, '');
-      expect(
-        screen.getByText('Log folder was not approved — CSV logging is off'),
-      ).toBeTruthy();
-      expect(screen.getByText('Running')).toBeTruthy();
+      expect(mockStart).toHaveBeenCalledWith('pm-1', ['192.0.2.1'], 5000, false, '');
+      expect(screen.getByText('Log folder was not approved — CSV logging is off')).toBeTruthy();
+      expect(screen.getByRole('status').textContent).toBe('Monitoring');
     });
   });
 
-  it('does not prompt for approval when CSV logging is off', async () => {
-    mockStart.mockResolvedValue();
-    setLogFolder('C:/logs');
-
-    render(<PingMonitorPane paneId="pm-1" active={true} />);
-    fireEvent.change(screen.getByPlaceholderText(/8.8.8.8/), {
-      target: { value: '8.8.8.8' },
+  it('shows results in words with loss and average from the history', async () => {
+    let emit: ((p: { sessionId: string; results: PingResult[] }) => void) | null = null;
+    vi.mocked(tauriService.onPingMonitorData).mockImplementation(async (cb) => {
+      emit = cb as typeof emit;
+      return () => {};
     });
-    fireEvent.click(screen.getByText('Start'));
-
-    await waitFor(() => {
-      expect(mockStart).toHaveBeenCalledWith('pm-1', ['8.8.8.8'], 5000, false, '');
-    });
-    expect(mockConfirm).not.toHaveBeenCalled();
-  });
-
-  it('updates target count as targets are entered', () => {
     render(<PingMonitorPane paneId="pm-1" active={true} />);
-    const textarea = screen.getByPlaceholderText(/8\.8\.8\.8/);
-    fireEvent.change(textarea, { target: { value: '8.8.8.8\n1.1.1.1' } });
-    const countEl = document.querySelector('.ping-monitor-targets-count');
-    expect(countEl!.textContent).toContain('2 target');
+    addTarget('192.0.2.1 sw-01.example.com');
+    await waitFor(() => expect(emit).not.toBeNull());
+    const at = '2026-10-09 14:03:21.000';
+    act(() => {
+      emit!({ sessionId: 'pm-1', results: [
+        { target: '192.0.2.1', status: 'ok', rtt: 10, ttl: 64, timestamp: at },
+        { target: 'sw-01.example.com', status: 'dns', rtt: null, ttl: null, timestamp: at },
+      ] });
+      emit!({ sessionId: 'pm-1', results: [
+        { target: '192.0.2.1', status: 'fail', rtt: null, ttl: null, timestamp: at },
+        { target: 'sw-01.example.com', status: 'dns', rtt: null, ttl: null, timestamp: at },
+      ] });
+    });
+    const rows = document.querySelectorAll('.ping-monitor-row');
+    expect(rows[0].textContent).toContain('No reply');
+    expect(rows[0].textContent).toContain('50%');
+    expect(rows[0].textContent).toContain('10 ms');
+    expect(rows[1].textContent).toContain('Name not found');
   });
 });

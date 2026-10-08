@@ -15,6 +15,13 @@ interface AppearanceTabProps {
 
 const FONT_CACHE_KEY = 'hotty-system-fonts-cache';
 
+const DOCK_POSITIONS = [
+  { pos: 'left', labelKey: 'settings.appearance.dockLeft' },
+  { pos: 'right', labelKey: 'settings.appearance.dockRight' },
+  { pos: 'top', labelKey: 'settings.appearance.dockTop' },
+  { pos: 'bottom', labelKey: 'settings.appearance.dockBottom' },
+] as const;
+
 function isMonospace(fontName: string): boolean {
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
@@ -73,18 +80,16 @@ export function AppearanceTab({ themesData, onOpenCustomThemeCreator, onDeleteTh
       <div className="settings-card">
         <h3 className="settings-section-title settings-section-title--first">{t('settings.appearance.layoutSection')}</h3>
         <div className="settings-group">
-          <label>{t('settings.appearance.sidebarPosition')}</label>
+          <label>{t('settings.appearance.dockPosition')}</label>
           <div className="settings-radio-row">
-            {(['left', 'right'] as const).map((pos) => (
+            {DOCK_POSITIONS.map(({ pos, labelKey }) => (
               <label key={pos}>
                 <input
                   type="radio"
-                  checked={settings.sidebarPosition === pos}
-                  onChange={() => update('sidebarPosition', pos)}
+                  checked={settings.dockPosition === pos}
+                  onChange={() => update('dockPosition', pos)}
                 />
-                {pos === 'left'
-                  ? t('settings.appearance.sidebarLeft')
-                  : t('settings.appearance.sidebarRight')}
+                {t(labelKey)}
               </label>
             ))}
           </div>

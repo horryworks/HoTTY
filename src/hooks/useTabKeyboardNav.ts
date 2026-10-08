@@ -12,6 +12,11 @@ export interface TabKeyboardNavOptions {
      * that scrolls, stopping dead at the last tab reads as a broken key.
      */
     wrap?: boolean;
+    /**
+     * Which arrows move the selection: Left/Right for a row of tabs (default),
+     * Up/Down for a column.
+     */
+    orientation?: 'horizontal' | 'vertical';
 }
 
 /**
@@ -32,6 +37,7 @@ export function useTabKeyboardNav({
     activeId,
     onSelect,
     wrap = true,
+    orientation = 'horizontal',
 }: TabKeyboardNavOptions): { onKeyDown: (e: React.KeyboardEvent) => void } {
     const onKeyDown = useCallback(
         (e: React.KeyboardEvent) => {
@@ -44,11 +50,16 @@ export function useTabKeyboardNav({
             const current = activeId ? ids.indexOf(activeId) : -1;
             let next: number | null = null;
 
-            switch (e.key) {
-                case 'ArrowLeft':
+            const prevKey = orientation === 'vertical' ? 'ArrowUp' : 'ArrowLeft';
+            const nextKey = orientation === 'vertical' ? 'ArrowDown' : 'ArrowRight';
+            const key =
+                e.key === prevKey ? 'prev' : e.key === nextKey ? 'next' : e.key;
+
+            switch (key) {
+                case 'prev':
                     next = current <= 0 ? (wrap ? ids.length - 1 : 0) : current - 1;
                     break;
-                case 'ArrowRight':
+                case 'next':
                     next =
                         current === -1
                             ? 0
@@ -75,7 +86,7 @@ export function useTabKeyboardNav({
             const id = ids[next];
             if (id && id !== activeId) onSelect(id);
         },
-        [ids, activeId, onSelect, wrap],
+        [ids, activeId, onSelect, wrap, orientation],
     );
 
     return { onKeyDown };

@@ -4,8 +4,8 @@ import { SessionDialog } from './SessionDialog';
 import type { SessionRecord } from '../../hooks/useSessionManager';
 import type { SessionRecordStatus } from '../../types/appTypes';
 import { STORAGE_KEYS } from '../../constants/storage';
-import { useSidebarLayoutStore } from '../../stores/sidebarLayoutStore';
 import { useBookmarkStore } from '../../stores/bookmarkStore';
+import { useSettingsStore } from '../../stores/settingsStore';
 
 const makeSessions = (entries: Array<[string, SessionRecordStatus]>): Map<string, SessionRecord> => {
   const m = new Map<string, SessionRecord>();
@@ -42,6 +42,12 @@ vi.mock('../../services/tauriService', () => ({
     // Private-key browse. The dialog plugin is reached through tauriService now,
     // so this stands in for the native picker (null = user cancelled).
     selectFile: vi.fn().mockResolvedValue(null),
+    // The GCP tab's instance list subscribes to these on mount.
+    onGcpRefreshProgress: () => Promise.resolve(() => {}),
+    onGcpVmAction: () => Promise.resolve(() => {}),
+    onGcpCacheUpdated: () => Promise.resolve(() => {}),
+    gceIapGetCache: vi.fn().mockResolvedValue(null),
+    gceIapListVmActions: vi.fn().mockResolvedValue([]),
   },
   isEncrypted: (value: string) => value.startsWith('[DPAPI]') || value.startsWith('[SAFE]'),
 }));
@@ -57,9 +63,7 @@ describe('SessionDialog', () => {
     localStorage.clear();
     vi.clearAllMocks();
     emitIapProgress = null;
-    // Tests assume the dialog opens on the Hosts tab; reset the persisted store
-    // (which other tests / cases may have switched) and the bookmark tree.
-    useSidebarLayoutStore.setState({ activeSidebarTab: 'hosts' });
+    // Reset the bookmark tree, which other cases may have filled.
     useBookmarkStore.setState({ tree: [] });
   });
 
@@ -70,7 +74,7 @@ describe('SessionDialog', () => {
 
   it('renders when open', () => {
     render(<SessionDialog {...defaultProps} />);
-    expect(screen.getByText('New Session')).toBeTruthy();
+    expect(screen.getByText('SSH / Telnet')).toBeTruthy();
   });
 
   it('shows two-panel layout with tree and form', () => {
@@ -80,10 +84,27 @@ describe('SessionDialog', () => {
     expect(container.querySelector('.panel-divider')).toBeTruthy();
   });
 
-  it('shows protocol selector', () => {
+  it('offers only SSH and Telnet, as a two-button switch', () => {
     render(<SessionDialog {...defaultProps} />);
-    expect(screen.getByText('Protocol')).toBeTruthy();
-    expect(screen.getByText('SSH')).toBeTruthy();
+    const group = screen.getByRole('group', { name: 'Protocol' });
+    const buttons = Array.from(group.querySelectorAll('button')).map(b => b.textContent);
+    expect(buttons).toEqual(['SSH', 'Telnet']);
+    expect(screen.getByRole('button', { name: 'SSH' }).getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('switching to Telnet sets port 23, and back to SSH sets 22', () => {
+    const { container } = render(<SessionDialog {...defaultProps} />);
+    const port = () => (container.querySelector('input[type="number"]') as HTMLInputElement).value;
+    fireEvent.click(screen.getByRole('button', { name: 'Telnet' }));
+    expect(screen.getByRole('button', { name: 'Telnet' }).getAttribute('aria-pressed')).toBe('true');
+    expect(port()).toBe('23');
+    fireEvent.click(screen.getByRole('button', { name: 'SSH' }));
+    expect(port()).toBe('22');
+  });
+
+  it('shows no tab row: the menu row picked decides the dialog', () => {
+    render(<SessionDialog {...defaultProps} />);
+    expect(screen.queryByRole('tab')).toBeNull();
   });
 
   it('shows Connect button', () => {
@@ -584,14 +605,14 @@ describe('SessionDialog', () => {
       await act(async () => {
         fireEvent.click(screen.getByText('Telnet Box'));
       });
-      expect((container.querySelector('select') as HTMLSelectElement).value).toBe('telnet');
+      expect(screen.getByRole('button', { name: 'Telnet' }).getAttribute('aria-pressed')).toBe('true');
       // Return to New Connection (form not dirty → resets immediately).
       await act(async () => {
         fireEvent.click(screen.getByLabelText('Clear form and start new connection'));
       });
       expect(container.querySelector('.banner-new')).toBeTruthy();
       // A fresh New Connection must be SSH on port 22 — not telnet on 22.
-      expect((container.querySelector('select') as HTMLSelectElement).value).toBe('ssh');
+      expect(screen.getByRole('button', { name: 'SSH' }).getAttribute('aria-pressed')).toBe('true');
       expect((container.querySelector('input[type="number"]') as HTMLInputElement).value).toBe('22');
     });
   });
@@ -777,19 +798,77 @@ describe('SessionDialog', () => {
     });
   });
 
-  describe('Web bookmarks tab', () => {
-    it('switches to the Web tab and shows the bookmark tree', () => {
-      render(<SessionDialog {...defaultProps} />);
-      fireEvent.click(screen.getByRole('tab', { name: 'Web' }));
+  describe('Serial dialog', () => {
+    it('shows the serial form alone, with no host tree and no SSH / Telnet switch', () => {
+      const { container } = render(<SessionDialog {...defaultProps} kind="serial" />);
+      expect(screen.getByText('Serial')).toBeTruthy();
+      expect(screen.getByText('Serial Port')).toBeTruthy();
+      expect(container.querySelector('.hosts-tab-tree')).toBeNull();
+      expect(screen.queryByRole('group', { name: 'Protocol' })).toBeNull();
+      expect(screen.queryByText('Host')).toBeNull();
+    });
+
+    it('connects over serial and names the session after the port', async () => {
+      const onConnect = vi.fn();
+      render(<SessionDialog {...defaultProps} kind="serial" onConnect={onConnect} />);
+      const connect = screen.getByText('Connect') as HTMLButtonElement;
+      expect(connect.disabled).toBe(true);
+      await act(async () => {
+        fireEvent.change(screen.getByPlaceholderText('COM3'), { target: { value: 'COM7' } });
+      });
+      await act(async () => { fireEvent.click(screen.getByText('Connect')); });
+      expect(onConnect).toHaveBeenCalledTimes(1);
+      const payload = onConnect.mock.calls[0][0];
+      expect(payload.protocol).toBe('serial');
+      expect(payload.config.path).toBe('COM7');
+      expect(payload.displayName).toBe('Serial COM7 (9600)');
+      expect(payload.hostNodeId).toBeUndefined();
+    });
+
+    it('leaves the SSH / Telnet form as it was', async () => {
+      const { container, rerender } = render(<SessionDialog {...defaultProps} />);
+      fireEvent.click(screen.getByRole('button', { name: 'Telnet' }));
+      const hostInput = container.querySelector('input[placeholder="example.com"]') as HTMLInputElement;
+      fireEvent.change(hostInput, { target: { value: '192.0.2.30' } });
+      rerender(<SessionDialog {...defaultProps} kind="serial" />);
+      rerender(<SessionDialog {...defaultProps} kind="hosts" />);
+      expect(screen.getByRole('button', { name: 'Telnet' }).getAttribute('aria-pressed')).toBe('true');
+      expect(screen.getByDisplayValue('192.0.2.30')).toBeTruthy();
+    });
+  });
+
+  describe('GCP dialog', () => {
+    it('shows the instance list alone', () => {
+      const { container } = render(<SessionDialog {...defaultProps} kind="gcp" />);
+      expect(screen.getByText('GCP')).toBeTruthy();
+      expect(container.querySelector('.form-panel')).toBeNull();
+      expect(container.querySelector('.hosts-tab-tree')).toBeNull();
+    });
+  });
+
+  describe('Web dialog', () => {
+    it('shows the bookmark tree alone', () => {
+      const { container } = render(<SessionDialog {...defaultProps} kind="web" />);
       expect(screen.getByText(/No bookmarks yet/)).toBeTruthy();
+      expect(container.querySelector('.form-panel')).toBeNull();
+    });
+
+    it('opens the host tree instead while the Web Browser feature is off', () => {
+      const features = useSettingsStore.getState().enabledFeatures;
+      useSettingsStore.setState({ enabledFeatures: { ...features, 'web-browser': false } });
+      try {
+        render(<SessionDialog {...defaultProps} kind="web" />);
+        expect(screen.getByText('SSH / Telnet')).toBeTruthy();
+      } finally {
+        useSettingsStore.setState({ enabledFeatures: features });
+      }
     });
 
     it('double-clicking a bookmark opens it and closes the dialog', () => {
       useBookmarkStore.getState().addBookmark(null, 'Docs', 'http://docs.test');
       const onOpenBookmark = vi.fn();
       const onClose = vi.fn();
-      render(<SessionDialog {...defaultProps} onOpenBookmark={onOpenBookmark} onClose={onClose} />);
-      fireEvent.click(screen.getByRole('tab', { name: 'Web' }));
+      render(<SessionDialog {...defaultProps} kind="web" onOpenBookmark={onOpenBookmark} onClose={onClose} />);
       fireEvent.doubleClick(screen.getByText('Docs'));
       expect(onOpenBookmark).toHaveBeenCalledWith('http://docs.test');
       expect(onClose).toHaveBeenCalled();
@@ -798,8 +877,7 @@ describe('SessionDialog', () => {
     it('the "New Web Browser" entry opens a blank pane and closes the dialog', () => {
       const onOpenBookmark = vi.fn();
       const onClose = vi.fn();
-      render(<SessionDialog {...defaultProps} onOpenBookmark={onOpenBookmark} onClose={onClose} />);
-      fireEvent.click(screen.getByRole('tab', { name: 'Web' }));
+      render(<SessionDialog {...defaultProps} kind="web" onOpenBookmark={onOpenBookmark} onClose={onClose} />);
       fireEvent.click(screen.getByText('New Web Browser'));
       expect(onOpenBookmark).toHaveBeenCalledWith(undefined);
       expect(onClose).toHaveBeenCalled();
@@ -811,7 +889,6 @@ describe('SessionDialog prefill (AI connect request, ADR-AI-007)', () => {
   beforeEach(() => {
     localStorage.clear();
     vi.clearAllMocks();
-    useSidebarLayoutStore.setState({ activeSidebarTab: 'hosts' });
     useBookmarkStore.setState({ tree: [] });
   });
 
@@ -834,13 +911,22 @@ describe('SessionDialog prefill (AI connect request, ADR-AI-007)', () => {
     expect(screen.getByDisplayValue('192.0.2.20')).toBeTruthy();
     expect(screen.getByDisplayValue('23')).toBeTruthy();
   });
+
+  it('SSH or Telnet picked in the New Session menu opens a blank form of it', () => {
+    const pressed = (name: string) => screen.getByRole('button', { name }).getAttribute('aria-pressed');
+    const { rerender } = render(<SessionDialog {...defaultProps} initialProtocol={{ protocol: 'telnet', nonce: 1 }} />);
+    expect(pressed('Telnet')).toBe('true');
+    expect(screen.getByDisplayValue('23')).toBeTruthy();
+    rerender(<SessionDialog {...defaultProps} initialProtocol={{ protocol: 'ssh', nonce: 2 }} />);
+    expect(pressed('SSH')).toBe('true');
+    expect(screen.getByDisplayValue('22')).toBeTruthy();
+  });
 });
 
 describe('SessionDialog — folder details', () => {
   beforeEach(() => {
     localStorage.clear();
     vi.clearAllMocks();
-    useSidebarLayoutStore.setState({ activeSidebarTab: 'hosts' });
     useBookmarkStore.setState({ tree: [] });
   });
 
@@ -862,7 +948,7 @@ describe('SessionDialog — folder details', () => {
       fireEvent.click(screen.getByText('tok Tokyo'));
     });
     // The form is gone...
-    expect(screen.queryByText('Protocol')).toBeNull();
+    expect(screen.queryByRole('group', { name: 'Protocol' })).toBeNull();
     // ...and the folder speaks for itself.
     expect(screen.getByText('IP ranges')).toBeTruthy();
     expect(screen.getByText('10.6.0.0/16')).toBeTruthy();
@@ -888,7 +974,7 @@ describe('SessionDialog — folder details', () => {
     await act(async () => {
       fireEvent.click(screen.getAllByText('web-01')[0]);
     });
-    expect(screen.getByText('Protocol')).toBeTruthy();
+    expect(screen.getByRole('group', { name: 'Protocol' })).toBeTruthy();
     expect(screen.queryByText('IP ranges')).toBeNull();
   });
 
@@ -902,7 +988,7 @@ describe('SessionDialog — folder details', () => {
     await act(async () => {
       fireEvent.click(row);
     });
-    expect(screen.getByText('Protocol')).toBeTruthy();
+    expect(screen.getByRole('group', { name: 'Protocol' })).toBeTruthy();
   });
 });
 
@@ -910,7 +996,6 @@ describe('SessionDialog — a folder row selects, and only selects', () => {
   beforeEach(() => {
     localStorage.clear();
     vi.clearAllMocks();
-    useSidebarLayoutStore.setState({ activeSidebarTab: 'hosts' });
     useBookmarkStore.setState({ tree: [] });
   });
 
@@ -941,6 +1026,6 @@ describe('SessionDialog — a folder row selects, and only selects', () => {
     });
     expect(onConnect).not.toHaveBeenCalled();
     // The click still did its one job.
-    expect(screen.getByText('Protocol')).toBeTruthy();
+    expect(screen.getByRole('group', { name: 'Protocol' })).toBeTruthy();
   });
 });

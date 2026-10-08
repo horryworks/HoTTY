@@ -289,4 +289,39 @@ describe('paneStore', () => {
       expect(usePaneStore.getState().activePaneId).toBe('0');
     });
   });
+
+  it('unplaceSession empties the pane without refilling it', () => {
+    usePaneStore.setState({
+      layoutMode: '1x2',
+      paneAllocations: { '0': 's1', '1': 's2' },
+      sessionOrder: ['s1', 's2', 's3'],
+    });
+    usePaneStore.getState().unplaceSession('s2');
+    const s = usePaneStore.getState();
+    expect(s.paneAllocations['1']).toBeNull();
+    expect(s.sessionOrder).toEqual(['s1', 's2', 's3']);
+  });
+
+  it('closing another tab does not refill a pane the user emptied', () => {
+    usePaneStore.setState({
+      layoutMode: '1x2',
+      paneAllocations: { '0': 's1', '1': null },
+      sessionOrder: ['s1', 's2', 's3'],
+    });
+    // s2 was put away from pane 1; closing hidden s3 must leave pane 1 empty.
+    usePaneStore.getState().removeSession('s3');
+    expect(usePaneStore.getState().paneAllocations['1']).toBeNull();
+    // Closing the tab in pane 0 refills pane 0 only.
+    usePaneStore.getState().removeSession('s1');
+    const s = usePaneStore.getState();
+    expect(s.paneAllocations['0']).toBe('s2');
+    expect(s.paneAllocations['1']).toBeNull();
+  });
+
+  it('unplaceSession leaves state alone for a tab that is already hidden', () => {
+    usePaneStore.setState({ paneAllocations: { '0': 's1' }, sessionOrder: ['s1', 's2'] });
+    const before = usePaneStore.getState().paneAllocations;
+    usePaneStore.getState().unplaceSession('s2');
+    expect(usePaneStore.getState().paneAllocations).toBe(before);
+  });
 });

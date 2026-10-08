@@ -83,31 +83,34 @@ vi.mock('./components/Sidebar/sidebarHelpers', () => ({
   sidebarPaneId: (edge: string) => `bar-${edge}`,
 }));
 
-vi.mock('./components/AppSidebar/AppSidebar', () => ({
-  AppSidebar: ({ onOpenSettings, onOpenHelp }: { onOpenSettings: () => void; onOpenHelp: () => void }) => (
-    <div>
-      <button data-testid="open-settings" onClick={onOpenSettings}>Settings</button>
-      <button data-testid="open-help" onClick={onOpenHelp}>Help</button>
-    </div>
-  ),
-}));
-
-vi.mock('./components/TabBar/TabBar', () => ({
-  TabBar: ({ onNew, onSelect, onClose }: {
-    onNew: () => void;
+// The dock holds both the icon column (settings / help) and the tab list.
+vi.mock('./components/Dock/Dock', () => ({
+  Dock: ({ onOpenSettings, onOpenHelp, onNew, onOpenLocal, onSelect, onClose }: {
+    onOpenSettings: () => void;
+    onOpenHelp: () => void;
+    onNew: (choice: string) => void;
+    onOpenLocal: (choice: { protocol: string }) => void;
     onSelect: (id: string) => void;
     onClose: (id: string) => void;
   }) => (
-    <div data-testid="tab-bar">
-      <button data-testid="new-btn" onClick={onNew}>New</button>
-      <button data-testid="select-btn" onClick={() => onSelect('sess-1')}>Select</button>
-      <button data-testid="close-btn" onClick={() => onClose('sess-1')}>Close</button>
+    <div>
+      <button data-testid="open-settings" onClick={onOpenSettings}>Settings</button>
+      <button data-testid="open-help" onClick={onOpenHelp}>Help</button>
+      <div data-testid="tab-bar">
+        <button data-testid="new-btn" onClick={() => onNew('serial')}>New Serial</button>
+        <button data-testid="new-telnet-btn" onClick={() => onNew('telnet')}>New Telnet</button>
+        <button data-testid="new-gcp-btn" onClick={() => onNew('gcp')}>New GCP</button>
+        <button data-testid="new-cmd-btn" onClick={() => onOpenLocal({ protocol: 'cmd' })}>Command Prompt</button>
+        <button data-testid="select-btn" onClick={() => onSelect('sess-1')}>Select</button>
+        <button data-testid="close-btn" onClick={() => onClose('sess-1')}>Close</button>
+      </div>
     </div>
   ),
 }));
 
 vi.mock('./components/TabBar/tabBarHelpers', () => ({
   buildTabItems: () => [],
+  paneBadge: () => null,
 }));
 
 vi.mock('./components/Terminal/Terminal', () => ({
@@ -123,14 +126,18 @@ vi.mock('./components/PingMonitorPane/PingMonitorPane', () => ({
 }));
 
 vi.mock('./components/SessionDialog/SessionDialog', () => ({
-  SessionDialog: ({ open, onClose, onConnect, onCancelConnect }: {
+  SessionDialog: ({ open, onClose, onConnect, onCancelConnect, kind, initialProtocol }: {
     open: boolean;
+    kind?: string;
+    initialProtocol?: { protocol: string; nonce: number };
     onClose: () => void;
     onConnect: (payload: unknown) => void;
     onCancelConnect?: (sessionId: string) => void;
   }) =>
     open ? (
       <div data-testid="connect-form">
+        <span data-testid="dialog-kind">{kind ?? ''}</span>
+        <span data-testid="initial-protocol">{initialProtocol?.protocol ?? ''}</span>
         <button data-testid="cancel-connect" onClick={onClose}>Cancel</button>
         <button
           data-testid="submit-connect"
@@ -252,6 +259,40 @@ describe('App', () => {
     fireEvent.click(screen.getByTestId('new-btn'));
     expect(await screen.findByTestId('connect-form')).toBeTruthy();
     fireEvent.click(screen.getByTestId('cancel-connect'));
+    expect(screen.queryByTestId('connect-form')).toBeNull();
+  });
+
+  it('drops a protocol picked from New Session once the dialog closes', async () => {
+    render(<App />);
+    fireEvent.click(screen.getByTestId('new-telnet-btn'));
+    expect((await screen.findByTestId('initial-protocol')).textContent).toBe('telnet');
+    fireEvent.click(screen.getByTestId('cancel-connect'));
+    // Another opening (here the serial dialog) must not reset the form to Telnet again.
+    fireEvent.click(screen.getByTestId('new-btn'));
+    expect((await screen.findByTestId('initial-protocol')).textContent).toBe('');
+  });
+
+  it('each New Session row opens its own dialog kind', async () => {
+    render(<App />);
+    fireEvent.click(screen.getByTestId('new-telnet-btn'));
+    expect((await screen.findByTestId('dialog-kind')).textContent).toBe('hosts');
+    fireEvent.click(screen.getByTestId('cancel-connect'));
+    fireEvent.click(screen.getByTestId('new-btn'));
+    expect((await screen.findByTestId('dialog-kind')).textContent).toBe('serial');
+    fireEvent.click(screen.getByTestId('cancel-connect'));
+    fireEvent.click(screen.getByTestId('new-gcp-btn'));
+    expect((await screen.findByTestId('dialog-kind')).textContent).toBe('gcp');
+  });
+
+  it('a local shell from New Session opens a session with no dialog', async () => {
+    render(<App />);
+    fireEvent.click(screen.getByTestId('new-cmd-btn'));
+    await waitFor(() => expect(mockOpenSession).toHaveBeenCalledTimes(1));
+    expect(mockOpenSession).toHaveBeenCalledWith(expect.objectContaining({
+      displayName: 'Command Prompt',
+      protocol: 'cmd',
+      config: expect.objectContaining({ shellType: 'cmd' }),
+    }));
     expect(screen.queryByTestId('connect-form')).toBeNull();
   });
 

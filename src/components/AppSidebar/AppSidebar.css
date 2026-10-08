@@ -1,51 +1,59 @@
-.app-sidebar {
-  width: 50px;
-  background-color: var(--sidebar-bg);
-  border-right: 1px solid var(--border-color);
+/* The dock's icon buttons, in two groups: layout + bar toggles (top), and
+   window / wrap / help / settings (bottom). The Dock decides whether a group
+   runs down a column or along a row; the groups only lay out their buttons. */
+.app-sidebar-group {
   display: flex;
-  flex-direction: column;
-  justify-content: space-between;
   align-items: center;
-  padding: 6px 0;
-  flex-shrink: 0;
-  box-sizing: border-box;
-  z-index: 10;
-}
-
-.app-sidebar-right {
-  border-right: none;
-  border-left: 1px solid var(--border-color);
-}
-
-.app-sidebar-top,
-.app-sidebar-bottom {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  width: 100%;
   gap: 2px;
 }
 
+.dock-vertical .app-sidebar-group {
+  flex-direction: column;
+  width: 100%;
+}
+
+.dock-horizontal .app-sidebar-group {
+  flex-direction: row;
+  height: 100%;
+}
+
 .app-sidebar-btn {
-  background: transparent;
-  border: none;
-  padding: 0;
-  color: var(--sidebar-btn-color);
-  width: 36px;
-  height: 36px;
-  border-radius: 6px;
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--sidebar-btn-color);
   cursor: pointer;
   opacity: 0.5;
-  transition: all 0.2s;
+  transition: opacity 0.1s, background-color 0.1s;
+}
+
+.app-sidebar-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.dock-horizontal .app-sidebar-btn,
+.app-sidebar-menu .app-sidebar-btn {
+  width: 28px;
+  height: 28px;
 }
 
 .app-sidebar-btn:hover {
   opacity: 0.8;
   background-color: var(--sidebar-btn-hover-bg);
   color: var(--sidebar-btn-hover-color);
+}
+
+.app-sidebar-btn:focus-visible {
+  opacity: 1;
+  outline: 1px solid var(--accent-color);
 }
 
 .app-sidebar-btn-active {
@@ -56,9 +64,19 @@
 }
 
 .app-sidebar-separator {
-  width: 24px;
-  height: 1px;
+  flex-shrink: 0;
   background-color: var(--border-color);
   opacity: 0.5;
+}
+
+.dock-vertical .app-sidebar-separator {
+  width: 20px;
+  height: 1px;
   margin: 2px 0;
+}
+
+.dock-horizontal .app-sidebar-separator {
+  width: 1px;
+  height: 18px;
+  margin: 0 3px;
 }

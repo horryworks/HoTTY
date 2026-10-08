@@ -211,3 +211,50 @@ describe('settingsStore v34 migration (NetBox prefix placement)', () => {
     expect(s.fileServerConfig).toBeDefined();
   });
 });
+
+describe('settingsStore v36 migration (dock position)', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it('keeps a right-hand sidebar on the right', async () => {
+    const s = await rehydrateFrom({ language: 'en', sidebarPosition: 'right' }, 35);
+    expect(s.dockPosition).toBe('right');
+  });
+
+  it('puts a left-hand or unset sidebar on the left', async () => {
+    expect((await rehydrateFrom({ language: 'en', sidebarPosition: 'left' }, 35)).dockPosition).toBe('left');
+    localStorage.clear();
+    expect((await rehydrateFrom({ language: 'en' }, 35)).dockPosition).toBe('left');
+  });
+
+  it('starts with the full-size dock and drops the old key', async () => {
+    const s = await rehydrateFrom({ language: 'en', sidebarPosition: 'right' }, 35);
+    expect(s.dockCompact).toBe(false);
+    expect((s as unknown as Record<string, unknown>).sidebarPosition).toBeUndefined();
+  });
+});
+
+describe('settingsStore v37 migration (Ping targets, SNMP devices)', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it('starts Ping Monitor with no targets at 5s', async () => {
+    const s = await rehydrateFrom({ language: 'en' }, 36);
+    expect(s.pingMonitorConfig).toEqual({ targets: [], intervalMs: 5000 });
+  });
+
+  it('folds the old per-pane Interface Traffic entries into one device list and removes them', async () => {
+    localStorage.setItem('hotty_snmp_target_if-a', JSON.stringify({ host: '192.0.2.10', port: 161, version: 'v2c', remember: false }));
+    const s = await rehydrateFrom({ language: 'en' }, 36);
+    expect(s.snmpDevices.map((d) => d.host)).toEqual(['192.0.2.10']);
+    expect(localStorage.getItem('hotty_snmp_target_if-a')).toBeNull();
+  });
+
+  it('keeps a device list that already exists', async () => {
+    const devices = [{ host: '192.0.2.20', port: 161, version: 'v2c', username: '', securityLevel: 'authPriv', authProtocol: 'sha256', privProtocol: 'aes128', contextName: '', intervalMs: 10000, remember: false }];
+    const s = await rehydrateFrom({ language: 'en', snmpDevices: devices }, 36);
+    expect(s.snmpDevices).toEqual(devices);
+  });
+});
