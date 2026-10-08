@@ -1,5 +1,23 @@
 # Release Notes
 
+## v2.1.0-beta11
+
+**An AI command runs only on the terminal its answer was written for.** A command without a `target=` used to go to whichever terminal had the focus when you pressed Run, so switching terminals in between sent it somewhere else. It is now tied to the terminal in focus when the answer arrived, and if that terminal is no longer watched by the tab, Run says it is not connected instead of picking another one. The rest are fixes from testing on real devices.
+
+### Improvements
+
+- **A command you ran says so.** Pressing Run now marks the card "Executed" and the button becomes "Run again", as auto-executed commands already were.
+
+- **Connecting NetBox to an address that is not NetBox says "not a NetBox API".** It used to report "could not find the requested model (HTTP 404)" followed by the site's raw HTML. A real NetBox that answers 404 now says the API path is wrong, and an HTML error page is never shown.
+
+### Bug Fixes
+
+- **Moving AI Chat to its own window and back re-identified the device** on every watched terminal. The record of which terminals have been prepared now travels with the conversation.
+
+- **The log folder asked for approval on every keystroke.** The path is now saved when you leave the field, so you are asked once, for the folder you meant, and an older approval dialog can no longer switch logging off.
+
+- **Esc on the Host Tree's right-click menu closed the whole dialog** around it. It now closes only the menu.
+
 ## v2.1.0-beta10
 
 **AI Chat keeps its conversation and its place.** Moving the AI Chat pane, switching the layout or hiding the sidebar used to throw the conversation away — and with it any reply still arriving — after which the AI started identifying the device all over again. Conversations now live outside the pane, so none of that touches them. Most of this release is fixes from a full review of AI Chat and from a round of testing on real devices: replies that stopped at "Thinking…", a cleared conversation that never answered again, an AI Chat window that would not close, and terminals the AI could not tell apart.
