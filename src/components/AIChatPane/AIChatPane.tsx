@@ -1067,7 +1067,10 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             sid = watched.some((w) => w.sessionId === pinned.sessionId)
                 ? pinned.sessionId
                 : (pinned.bindingKey && watched.find((w) => w.bindingKey === pinned.bindingKey)?.sessionId)
-                    || pinned.sessionId;
+                    || undefined;
+            // No longer watched by this tab (unwatched, or moved to another tab):
+            // still name it on the card, but never run there, however live it is.
+            if (!sid) return { sid: pinned.sessionId, live: false, status: undefined };
         }
         if (!sid) sid = execTargetOf(tab);
         if (!sid) return { sid: undefined, live: false, status: undefined };

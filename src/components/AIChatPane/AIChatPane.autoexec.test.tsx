@@ -279,6 +279,22 @@ describe('AIChatPane auto-execute target= routing (multi-watch)', () => {
             expect(h.onRunCommand).toHaveBeenLastCalledWith('sess-9', 'export PAGER=cat', 't1');
         });
 
+        it('never runs on its terminal once this tab stops watching it, even while it is live', async () => {
+            const { rerender } = render(makePane(props('sess-1', 'connected')));
+            await authenticate();
+            await sendAndComplete('prep', 'Disabling the pager.\n\n```execute\nexport PAGER=cat\n```');
+
+            // Git Bash is still connected, but the tab now watches only Device B.
+            const unwatched = props('sess-2', 'connected');
+            unwatched.chatState.tabs[0].linkedSessions = [{ sessionId: 'sess-2' }];
+            await act(async () => { rerender(makePane(unwatched)); });
+            await act(async () => {
+                fireEvent.click(screen.getByRole('button', { name: /Run in Terminal/i }));
+            });
+            expect(h.onRunCommand).not.toHaveBeenCalled();
+            expect(h.onEnqueuePending).toHaveBeenCalledWith('t1', expect.stringContaining('not connected'));
+        });
+
         it('a command run with Run says so and offers Run again', async () => {
             render(makePane(props('sess-1', 'connected')));
             await authenticate();
