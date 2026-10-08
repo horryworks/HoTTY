@@ -394,18 +394,25 @@ impl<'a> NetboxClient<'a> {
                 http_status: Some(status.as_u16()),
             });
         }
+        // Without NetBox's `API-Version` header the address is not a NetBox
+        // API at all. That is an answer for the settings screen to word, not an
+        // error to pass through: a web server's 404 page used to come back as
+        // "could not find the requested model" with its HTML appended.
         if !status.is_success() {
+            if api_version.is_none() {
+                return Ok(not_netbox(status.as_u16()));
+            }
             let body = read_capped_text(resp).await;
-            return Err(NetboxError::Http(describe_http_error(
-                "NetBox",
-                status.as_u16(),
-                &body,
-            )));
+            return Err(status_error(status.as_u16(), &body));
         }
 
         let bytes = read_capped(resp).await?;
-        let value: serde_json::Value =
-            serde_json::from_slice(&bytes).map_err(|_| NetboxError::Decode)?;
+        let value: serde_json::Value = match serde_json::from_slice(&bytes) {
+            Ok(v) => v,
+            // A web page that answers 200 to any path is not a NetBox either.
+            Err(_) if api_version.is_none() => return Ok(not_netbox(status.as_u16())),
+            Err(_) => return Err(NetboxError::Decode),
+        };
         let netbox_version = value
             .get("netbox-version")
             .and_then(|v| v.as_str())
@@ -550,11 +557,7 @@ impl<'a> NetboxClient<'a> {
                     return Ok(None);
                 }
                 let body = read_capped_text(resp).await;
-                return Err(NetboxError::Http(describe_http_error(
-                    "NetBox",
-                    status.as_u16(),
-                    &body,
-                )));
+                return Err(status_error(status.as_u16(), &body));
             }
             let bytes = read_capped(resp).await?;
             let parsed: Page<T> =
@@ -594,6 +597,35 @@ async fn read_capped(resp: reqwest::Response) -> Result<Vec<u8>, NetboxError> {
         out.extend_from_slice(&chunk);
     }
     Ok(out)
+}
+
+/// Something answered, but not as a NetBox API.
+fn not_netbox(status: u16) -> Probe {
+    Probe {
+        reachable: false,
+        authenticated: false,
+        api_version: None,
+        netbox_version: None,
+        http_status: Some(status),
+    }
+}
+
+/// A failed status from NetBox, as the user should read it. A 404 means a
+/// missing API path here (the shared wording speaks of a missing AI model).
+/// Only a JSON body carries a message worth showing; an HTML error page would
+/// be echoed raw.
+fn status_error(status: u16, body: &str) -> NetboxError {
+    if status == 404 {
+        return NetboxError::Http(
+            "NetBox has no API at that path (HTTP 404). Check the base URL.".to_string(),
+        );
+    }
+    let is_json = serde_json::from_str::<serde_json::Value>(body.trim()).is_ok();
+    NetboxError::Http(describe_http_error(
+        "NetBox",
+        status,
+        if is_json { body } else { "" },
+    ))
 }
 
 /// An error body, for `describe_http_error` to sanitize and cap further.
@@ -656,6 +688,30 @@ mod tests {
             let target = first_page_target(path);
             assert!(!target.contains("brief"), "brief leaked into {target}");
         }
+    }
+
+    #[test]
+    fn something_that_is_not_netbox_is_a_result_with_its_status() {
+        // NetboxTab words `reachable: false` + a status as "not a NetBox API".
+        let p = not_netbox(404);
+        assert!(!p.reachable && !p.authenticated);
+        assert_eq!(p.http_status, Some(404));
+        assert!(p.api_version.is_none());
+    }
+
+    #[test]
+    fn a_netbox_404_speaks_of_the_path_not_a_model() {
+        let text = status_error(404, "").to_string();
+        assert!(text.contains("no API at that path"), "{text}");
+        assert!(!text.contains("model"), "{text}");
+    }
+
+    #[test]
+    fn an_html_error_page_is_not_echoed_but_a_json_message_is() {
+        let html = status_error(500, "<html><body>Server Error</body></html>").to_string();
+        assert!(!html.contains('<'), "{html}");
+        let json = status_error(500, r#"{"detail":"x","message":"db down"}"#).to_string();
+        assert!(json.contains("db down"), "{json}");
     }
 
     #[test]
