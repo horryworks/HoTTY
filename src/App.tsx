@@ -59,7 +59,7 @@ import { useAiWorkerSessions, configForAdopt } from './hooks/useAiWorkerSessions
 import type { AiWorkerSession } from './stores/aiWorkerSessionStore';
 import { useSessionNameShare } from './hooks/useSessionNameShare';
 import { connectDeclinedNote } from './components/AIChatPane/terminalOutputUtils';
-import { usePaneStore, gridPaneIds, AI_WINDOW_PANE_ID } from './stores/paneStore';
+import { usePaneStore, gridPaneIds, visiblePaneIdsInOrder, paneNumber, AI_WINDOW_PANE_ID } from './stores/paneStore';
 import { useSidebarLayoutStore } from './stores/sidebarLayoutStore';
 import { useTabActivity } from './hooks/useTabActivity';
 import { initOverlayWatcher } from './stores/uiOverlayStore';
@@ -669,13 +669,12 @@ function App() {
   // Panes the user can actually see, in visual order: the grid, then the edge
   // bars that are shown. A hidden bar still holds its tab, but that tab is off
   // screen, so it belongs with the hidden tabs (and must not count as shown).
-  const visiblePaneIds: string[] = [
-    ...gridPaneIds(layoutMode),
-    ...(showLeftBar ? [sidebarPaneId('left')] : []),
-    ...(showRightBar ? [sidebarPaneId('right')] : []),
-    ...(showTopBar ? [sidebarPaneId('top')] : []),
-    ...(showBottomBar ? [sidebarPaneId('bottom')] : []),
-  ];
+  const visiblePaneIds: string[] = visiblePaneIdsInOrder(layoutMode, {
+    showLeftSidebar: showLeftBar,
+    showRightSidebar: showRightBar,
+    showTopBar,
+    showBottomBar,
+  });
   const visibleTabIds: string[] = visiblePaneIds
     .map((pid) => paneAllocations[pid])
     .filter((sid): sid is string => !!sid);
@@ -935,6 +934,7 @@ function App() {
     // after the kind of pane it is.
     const featureLabel = featureInfo ? t(FEATURE_LABEL_KEYS[featureInfo.type]) : '';
     const featureName = featureInfo ? tabItems.find((i) => i.id === featureInfo.id)?.displayName : undefined;
+    const number = paneNumber(visiblePaneIds, paneId);
     return (
       <div
         className={`pane${paneId === activePaneId ? ' pane-active' : ''}${isFlashed ? ' pane-flash' : ''}${showHeader ? ' pane-has-header' : ''}`}
@@ -943,6 +943,7 @@ function App() {
         {featureHeader && (
           <PaneHeader
             paneId={paneId}
+            paneNumber={number}
             title={featureLabel}
             detail={featureName && featureName !== featureLabel ? featureName : undefined}
             onClose={() => handleCloseTab(featureInfo.id)}
@@ -951,6 +952,7 @@ function App() {
         {terminalHeader && (
           <TerminalPaneHeader
             paneId={paneId}
+            paneNumber={number}
             session={session}
             watch={(() => {
               const item = tabItems.find((i) => i.id === session.id);
@@ -1124,7 +1126,7 @@ function App() {
             />
           ) : (
             <div className="pane-empty">
-              {/^\d+$/.test(paneId) && <PaneBadge paneId={paneId} variant="large" />}
+              <PaneBadge paneId={paneId} number={number} variant="large" />
               <span className="drop-hint">{t('chrome.pane.dropTabHere')}</span>
             </div>
           )}

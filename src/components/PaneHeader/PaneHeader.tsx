@@ -5,6 +5,8 @@ import './PaneHeader.css';
 
 interface PaneHeaderProps {
   paneId: string;
+  /** The pane's number on screen (`paneNumber` in paneStore). */
+  paneNumber: number | null;
   title: string;
   /** Secondary text after the title (what a terminal is connected to). */
   detail?: string;
@@ -18,11 +20,11 @@ interface PaneHeaderProps {
  * extra buttons, and the close button at the far right. Used by panes that have
  * no toolbar row of their own to carry the mark (terminals, AI Chat).
  */
-export function PaneHeader({ paneId, title, detail, actions, onClose }: PaneHeaderProps) {
+export function PaneHeader({ paneId, paneNumber, title, detail, actions, onClose }: PaneHeaderProps) {
   const { t } = useTranslation();
   return (
     <div className="pane-term-header">
-      <PaneBadge paneId={paneId} />
+      <PaneBadge paneId={paneId} number={paneNumber} />
       <span className="pane-term-name">{title}</span>
       <span className="pane-term-detail">{detail}</span>
       {actions}

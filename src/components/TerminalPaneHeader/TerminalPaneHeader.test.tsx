@@ -11,7 +11,7 @@ const session = {
 
 describe('TerminalPaneHeader', () => {
   it('shows the pane mark, the name and the target in one row, with no state dot', () => {
-    const { container } = render(<TerminalPaneHeader paneId="1" session={session} onClose={() => {}} />);
+    const { container } = render(<TerminalPaneHeader paneId="1" paneNumber={2} session={session} onClose={() => {}} />);
     expect(container.querySelector('.pane-term-header .pane-badge')?.textContent).toBe('2');
     expect(screen.getByText('sw-01')).toBeTruthy();
     expect(screen.getByText('SSH · 192.0.2.10')).toBeTruthy();
@@ -22,7 +22,7 @@ describe('TerminalPaneHeader', () => {
     const onClose = vi.fn();
     const onToggleWatch = vi.fn();
     const { container } = render(
-      <TerminalPaneHeader paneId="0" session={session} onClose={onClose} onToggleWatch={onToggleWatch} />
+      <TerminalPaneHeader paneId="0" paneNumber={1} session={session} onClose={onClose} onToggleWatch={onToggleWatch} />
     );
     const buttons = Array.from(container.querySelectorAll('button')).map((b) => b.className);
     expect(buttons).toEqual(['tab-watch-btn', 'pane-term-close']);
@@ -38,6 +38,7 @@ describe('TerminalPaneHeader', () => {
     const { container } = render(
       <TerminalPaneHeader
         paneId="0"
+        paneNumber={1}
         session={session}
         onClose={() => {}}
         onToggleWatch={onToggleWatch}
@@ -55,7 +56,7 @@ describe('TerminalPaneHeader', () => {
   });
 
   it('without AI Chat there is no AI link button', () => {
-    const { container } = render(<TerminalPaneHeader paneId="0" session={session} onClose={() => {}} />);
+    const { container } = render(<TerminalPaneHeader paneId="0" paneNumber={1} session={session} onClose={() => {}} />);
     expect(container.querySelector('.tab-watch-btn')).toBeNull();
   });
 });

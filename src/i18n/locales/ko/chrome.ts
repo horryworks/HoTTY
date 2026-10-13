@@ -65,12 +65,6 @@ export const chrome = {
     dragHandle: '다른 가장자리로 끌어 이동',
     layoutMenu: '창 배치',
     edgeMenu: '바 표시 전환',
-    edgeBadge: {
-      left: '좌',
-      right: '우',
-      top: '상',
-      bottom: '하',
-    },
   },
   pane: {
     crashed: '창이 충돌했습니다',

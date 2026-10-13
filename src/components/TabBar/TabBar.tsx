@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useTabKeyboardNav } from '../../hooks/useTabKeyboardNav';
 import { useUiOverlayStore } from '../../stores/uiOverlayStore';
 import { useTabActivityStore } from '../../stores/tabActivityStore';
+import { paneNumber } from '../../stores/paneStore';
 import { FEATURE_LABEL_KEYS } from '../../utils/paneTypes';
 import { DockMenu, type DockMenuPlacement } from '../Dock/DockMenu';
 import { groupTabs, hiddenTabsThatFit, type TabItem, type ConversationSummary } from './tabBarHelpers';
@@ -294,6 +295,7 @@ export function TabBar({
         item={item}
         label={tabLabel(item)}
         paneId={paneId}
+        paneNumber={paneId === null ? null : paneNumber(visiblePanes, paneId)}
         isActive={isActive}
         activity={paneId === null ? activity[item.id] : undefined}
         dragOver={dragOver?.id === item.id ? dragOver.where : null}

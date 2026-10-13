@@ -6,7 +6,7 @@ describe('PaneHeader', () => {
   it('shows the pane mark and the title, and the close button sits at the far right', () => {
     const onClose = vi.fn();
     const { container } = render(
-      <PaneHeader paneId="0" title="AI Chat" actions={<button className="extra">x</button>} onClose={onClose} />
+      <PaneHeader paneId="0" paneNumber={1} title="AI Chat" actions={<button className="extra">x</button>} onClose={onClose} />
     );
     expect(container.querySelector('.pane-badge')?.textContent).toBe('1');
     expect(screen.getByText('AI Chat')).toBeTruthy();

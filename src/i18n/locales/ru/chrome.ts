@@ -65,12 +65,6 @@ export const chrome = {
     dragHandle: 'Перетащите к другому краю, чтобы переместить',
     layoutMenu: 'Раскладка панелей',
     edgeMenu: 'Показать или скрыть полосы',
-    edgeBadge: {
-      left: 'Л',
-      right: 'П',
-      top: 'В',
-      bottom: 'Н',
-    },
   },
   pane: {
     crashed: 'Сбой панели',

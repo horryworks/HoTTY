@@ -28,7 +28,7 @@ function renderRow(props: RowProps = {}) {
   };
   const item = props.item ?? makeTabItem('s1');
   const utils = render(
-    <TabRow item={item} label={item.displayName ?? item.id} paneId="0" isActive={false} {...handlers} {...props} />
+    <TabRow item={item} label={item.displayName ?? item.id} paneId="0" paneNumber={1} isActive={false} {...handlers} {...props} />
   );
   const row = utils.container.querySelector<HTMLElement>('.tab[data-session-id]')!;
   return { ...utils, ...handlers, row, item };
@@ -44,11 +44,11 @@ describe('TabRow', () => {
   });
 
   it('marks an on-screen tab with its pane number, and a hidden one with its protocol icon', () => {
-    const { row, unmount } = renderRow({ paneId: '1' });
+    const { row, unmount } = renderRow({ paneId: '1', paneNumber: 2 });
     expect(row.querySelector('[data-pane-badge="1"]')?.textContent).toContain('2');
     unmount();
 
-    const hidden = renderRow({ paneId: null });
+    const hidden = renderRow({ paneId: null, paneNumber: null });
     expect(hidden.row.querySelector('.pane-badge')).toBeNull();
     expect(hidden.row.querySelector('.tab-lead svg')).not.toBeNull();
     expect(Array.from(hidden.row.classList)).toEqual(expect.arrayContaining(['hidden-tab']));
@@ -81,7 +81,7 @@ describe('TabRow', () => {
   });
 
   it('shows how much output arrived while hidden, with the newest line as the second line', () => {
-    const { row } = renderRow({ paneId: null, activity: { lines: 12, lastLine: 'sw-01# show version' } });
+    const { row } = renderRow({ paneId: null, paneNumber: null, activity: { lines: 12, lastLine: 'sw-01# show version' } });
     expect(row.querySelector('.tab-unread-count')?.textContent).toContain('+12');
     expect(row.querySelector('.tab-detail')?.textContent).toContain('sw-01# show version');
     expect(Array.from(row.querySelector('.tab-detail')?.classList ?? [])).toEqual(expect.arrayContaining(['unread']));

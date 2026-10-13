@@ -65,12 +65,6 @@ export const chrome = {
     dragHandle: '拖到其他边缘以移动',
     layoutMenu: '窗格布局',
     edgeMenu: '切换边栏',
-    edgeBadge: {
-      left: '左',
-      right: '右',
-      top: '上',
-      bottom: '下',
-    },
   },
   pane: {
     crashed: '窗格已崩溃',

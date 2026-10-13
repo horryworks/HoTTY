@@ -65,12 +65,6 @@ export const chrome = {
     dragHandle: 'Faire glisser vers un autre bord pour déplacer',
     layoutMenu: 'Disposition des volets',
     edgeMenu: 'Afficher/masquer les barres',
-    edgeBadge: {
-      left: 'G',
-      right: 'D',
-      top: 'H',
-      bottom: 'B',
-    },
   },
   pane: {
     crashed: 'Le volet a planté',

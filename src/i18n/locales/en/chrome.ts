@@ -65,12 +65,6 @@ export const chrome = {
     dragHandle: 'Drag to another edge to move',
     layoutMenu: 'Pane layout',
     edgeMenu: 'Toggle bars',
-    edgeBadge: {
-      left: 'L',
-      right: 'R',
-      top: 'T',
-      bottom: 'B',
-    },
   },
   pane: {
     crashed: 'Pane crashed',

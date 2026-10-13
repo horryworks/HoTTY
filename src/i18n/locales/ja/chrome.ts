@@ -64,12 +64,6 @@ export const chrome = {
     dragHandle: 'ドラッグして別の辺へ移動',
     layoutMenu: '画面の割り方',
     edgeMenu: 'バーを切り替え',
-    edgeBadge: {
-      left: '左',
-      right: '右',
-      top: '上',
-      bottom: '下',
-    },
   },
   pane: {
     crashed: 'ペインがクラッシュしました',

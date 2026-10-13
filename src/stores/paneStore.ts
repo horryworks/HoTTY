@@ -54,47 +54,48 @@ interface PaneActions {
   unplaceSession: (sessionId: string) => void;
 }
 
-function findEmptyGridPane(
-  allocations: Record<string, string | null>,
-  mode: LayoutMode
-): string | null {
-  for (const id of gridPaneIds(mode)) {
-    if (!allocations[id]) return id;
-  }
-  return null;
-}
-
-function visibleSidebarPaneIdsInOrder(): SidebarPaneId[] {
-  const s = useSidebarLayoutStore.getState();
-  const order: Array<[SidebarPaneId, boolean]> = [
-    ['bar-left', s.showLeftSidebar],
-    ['bar-right', s.showRightSidebar],
-    ['bar-top', s.showTopBar],
-    ['bar-bottom', s.showBottomBar],
-  ];
-  return order.filter(([, v]) => v).map(([id]) => id);
-}
+/** Which edge bars are shown — the four flags of the sidebar layout store. */
+type EdgeBarsShown = Readonly<{
+  showLeftSidebar: boolean;
+  showRightSidebar: boolean;
+  showTopBar: boolean;
+  showBottomBar: boolean;
+}>;
 
 /**
  * All currently-visible panes in a stable visual order: grid cells first
  * (row-major, matching the layout), then visible sidebar panes (left, right,
- * top, bottom). Used by Ctrl+Tab / Ctrl+Shift+Tab pane cycling. Includes empty
+ * top, bottom). This is the one place the order is defined: Ctrl+Tab cycling,
+ * the on-screen tab list and the pane numbers all follow it. Includes empty
  * panes — cycling targets every visible cell, not only the occupied ones.
+ * `bars` defaults to the store's current flags; a component passes the flags
+ * it subscribed to, so it re-renders when they change.
  */
-export function visiblePaneIdsInOrder(mode: LayoutMode): string[] {
-  return [...gridPaneIds(mode), ...visibleSidebarPaneIdsInOrder()];
+export function visiblePaneIdsInOrder(
+  mode: LayoutMode,
+  bars: EdgeBarsShown = useSidebarLayoutStore.getState()
+): string[] {
+  const edges: Array<[SidebarPaneId, boolean]> = [
+    ['bar-left', bars.showLeftSidebar],
+    ['bar-right', bars.showRightSidebar],
+    ['bar-top', bars.showTopBar],
+    ['bar-bottom', bars.showBottomBar],
+  ];
+  return [...gridPaneIds(mode), ...edges.filter(([, v]) => v).map(([id]) => id)];
+}
+
+/** The number a visible pane carries (1-based, in the order above); null when
+ *  the pane is not on screen. */
+export function paneNumber(visiblePanes: readonly string[], paneId: string): number | null {
+  const i = visiblePanes.indexOf(paneId);
+  return i < 0 ? null : i + 1;
 }
 
 function findEmptyPane(
   allocations: Record<string, string | null>,
   mode: LayoutMode
 ): string | null {
-  const grid = findEmptyGridPane(allocations, mode);
-  if (grid) return grid;
-  for (const id of visibleSidebarPaneIdsInOrder()) {
-    if (!allocations[id]) return id;
-  }
-  return null;
+  return visiblePaneIdsInOrder(mode).find((id) => !allocations[id]) ?? null;
 }
 
 export const usePaneStore = create<PaneState & PaneActions>()(

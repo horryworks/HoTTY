@@ -3,6 +3,7 @@ import {
   usePaneStore,
   gridPaneIds,
   visiblePaneIdsInOrder,
+  paneNumber,
 } from './paneStore';
 import { useSidebarLayoutStore } from './sidebarLayoutStore';
 
@@ -239,6 +240,24 @@ describe('paneStore', () => {
         showBottomBar: false,
       });
       expect(visiblePaneIdsInOrder('1x2')).toEqual(['0', '1', 'bar-left', 'bar-top']);
+    });
+
+    it('uses the edge-bar flags it is given instead of the store', () => {
+      const bars = { showLeftSidebar: false, showRightSidebar: true, showTopBar: false, showBottomBar: true };
+      expect(visiblePaneIdsInOrder('2x2', bars)).toEqual(['0', '1', '2', '3', 'bar-right', 'bar-bottom']);
+    });
+  });
+
+  describe('paneNumber', () => {
+    it('numbers visible panes from 1 in visual order, edge bars after the grid', () => {
+      const order = ['0', '1', '2', '3', 'bar-right', 'bar-bottom'];
+      expect(paneNumber(order, '0')).toBe(1);
+      expect(paneNumber(order, 'bar-right')).toBe(5);
+      expect(paneNumber(order, 'bar-bottom')).toBe(6);
+    });
+
+    it('gives a pane that is not on screen no number', () => {
+      expect(paneNumber(['0', '1'], 'bar-left')).toBeNull();
     });
   });
 

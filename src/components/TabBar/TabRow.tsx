@@ -13,6 +13,8 @@ export interface TabRowProps {
   label: string;
   /** The pane showing this tab; null when the tab is hidden. */
   paneId: string | null;
+  /** That pane's number on screen; null when the tab is hidden. */
+  paneNumber: number | null;
   isActive: boolean;
   /** Output that arrived while hidden (hidden tabs only). */
   activity?: TabActivity;
@@ -35,6 +37,7 @@ export const TabRow = forwardRef<HTMLDivElement, TabRowProps>(function TabRow(
     item,
     label,
     paneId,
+    paneNumber,
     isActive,
     activity,
     dragOver,
@@ -118,7 +121,7 @@ export const TabRow = forwardRef<HTMLDivElement, TabRowProps>(function TabRow(
     >
       <span className="tab-lead">
         {paneId !== null ? (
-          <PaneBadge paneId={paneId} />
+          <PaneBadge paneId={paneId} number={paneNumber} />
         ) : item.kind === 'feature' && item.featureType ? (
           <FeatureIcon type={item.featureType} />
         ) : (

@@ -6,6 +6,7 @@ import { useWatchPicker } from '../TabBar/useWatchPicker';
 
 interface TerminalPaneHeaderProps {
   paneId: string;
+  paneNumber: number | null;
   session: Pick<SessionRecord, 'id' | 'displayName' | 'protocol' | 'connectionConfig'>;
   /** The AI Chat conversation watching this terminal, if any. */
   watch?: { colorIndex?: number; ownerTabId?: string };
@@ -24,6 +25,7 @@ interface TerminalPaneHeaderProps {
  */
 export function TerminalPaneHeader({
   paneId,
+  paneNumber,
   session,
   watch,
   onClose,
@@ -36,6 +38,7 @@ export function TerminalPaneHeader({
     <>
       <PaneHeader
         paneId={paneId}
+        paneNumber={paneNumber}
         title={session.displayName}
         detail={sessionDetail(session)}
         actions={

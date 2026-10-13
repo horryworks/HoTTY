@@ -64,12 +64,6 @@ export const chrome = {
     dragHandle: 'Arrastra a otro borde para moverlo',
     layoutMenu: 'Diseño de paneles',
     edgeMenu: 'Mostrar u ocultar barras',
-    edgeBadge: {
-      left: 'I',
-      right: 'D',
-      top: 'A',
-      bottom: 'B',
-    },
   },
   pane: {
     crashed: 'El panel falló',
