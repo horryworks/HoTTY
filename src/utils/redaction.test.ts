@@ -202,3 +202,30 @@ describe('redactSecrets — PEM private keys', () => {
     expect(redactSecrets(pub)).toBe(pub);
   });
 });
+
+// FortiOS writes stored secrets as `ENC <value>`. For non-admin secrets that
+// value is reversible with a known key, so it must not reach the AI provider.
+describe('redactSecrets — FortiOS ENC secrets', () => {
+  it('redacts the value after ENC, not the ENC marker', () => {
+    const out = redactSecrets('    set password ENC SH2aBcDeFgHiJkLmNoP=');
+    expect(out).not.toContain('SH2aBcDeFgHiJkLmNoP');
+    expect(out).toContain('set password ENC <redacted>');
+  });
+
+  it('redacts the one-word FortiOS secret keys', () => {
+    for (const line of [
+      '    set passwd ENC Zm9vYmFyYmF6cXV4',
+      '    set psksecret ENC Zm9vYmFyYmF6cXV4',
+      '    set sso-password ENC Zm9vYmFyYmF6cXV4',
+      '    set key ENC Zm9vYmFyYmF6cXV4',
+      '    set secret ENC Zm9vYmFyYmF6cXV4',
+    ]) {
+      expect(redactSecrets(line), line).not.toContain('Zm9vYmFyYmF6cXV4');
+    }
+  });
+
+  it('keeps ordinary prose about secrets', () => {
+    const prose = 'the secret is to restart the service';
+    expect(redactSecrets(prose)).toBe(prose);
+  });
+});

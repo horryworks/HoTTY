@@ -33,10 +33,6 @@ import { comparePrefixes, formatPrefix, parseCidr } from './cidr';
  * | every `type: 'host'` node, anywhere     | user   | never touched                          |
  */
 
-/** The only configurable server today. Mirrored in Rust as `DEFAULT_SERVER_KEY`
- *  (`src-tauri/src/services/netbox/mod.rs`) — the two must agree. */
-export const NETBOX_DEFAULT_SERVER = 'default';
-
 /** Name given to the container folder WHEN IT IS CREATED. Not translated: the
  *  tree is persisted, and a translated default would rename itself under the
  *  user when they switch language. Afterwards the name is the user's. */

@@ -4,6 +4,7 @@
 export const sessionDialog = {
   defaultSessionName: '{{protocol}} 工作階段',
   tabs: {
+    serial: '序列埠',
     gcp: 'GCP',
     web: '網頁',
   },
@@ -89,6 +90,7 @@ export const sessionDialog = {
     authenticating: '正在驗證…',
   },
   connectFailed: '連線失敗',
+  serialTabName: '序列埠 {{path}} ({{baud}})',
   connectFailedGeneric: '連線失敗。',
   browseKeyTitle: '選取私密金鑰檔案',
   validation: {

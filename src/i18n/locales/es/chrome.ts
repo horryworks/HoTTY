@@ -2,6 +2,8 @@
 // a nivel de aplicación (botones de diseño / borde / utilidades).
 export const chrome = {
   tabBar: {
+    protocolSerial: 'Serie',
+    protocolCmd: 'Símbolo del sistema',
     fileServer: 'Servidor de archivos',
     newSession: 'Nueva sesión',
     notInstalled: 'No instalado',

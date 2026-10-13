@@ -20,8 +20,14 @@ export function useWatchPicker({ conversations, onToggleWatch, onWatchInConversa
   const onWatchClick = onToggleWatch
     ? (e: MouseEvent, sessionId: string, ownerTabId?: string) => {
         if (conversations.length >= 2 && onWatchInConversation) {
-          const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-          setMenu({ sessionId, ownerTabId, x: r.left, y: r.bottom + 2, anchorTop: r.top });
+          const anchor = e.currentTarget as HTMLElement;
+          // A second press on the button that opened the picker closes it.
+          if (menu?.anchor === anchor) {
+            setMenu(null);
+            return;
+          }
+          const r = anchor.getBoundingClientRect();
+          setMenu({ sessionId, ownerTabId, x: r.left, y: r.bottom + 2, anchorTop: r.top, anchor });
         } else {
           onToggleWatch(sessionId);
         }

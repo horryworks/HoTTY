@@ -19,7 +19,7 @@ import {
   operStatusKey,
 } from '../../utils/trafficFormat';
 import { defaultAscending, filterRows, sortRows, type SortKey } from './interfaceTrafficHelpers';
-import { LineSparkline, RunButton, RunStatus, Segmented } from '../PaneTools/PaneTools';
+import { LineSparkline, RunButton, RunStatus, Segmented, StartButton } from '../PaneTools/PaneTools';
 import type {
   SnmpAuthProtocol,
   SnmpConfig,
@@ -39,8 +39,12 @@ interface InterfaceTrafficPaneProps {
 // deliberately higher than the Ping Monitor's 1s.
 const INTERVAL_OPTIONS = [5000, 10000, 30000, 60000].map((value) => ({ value, label: `${value / 1000}s` }));
 
-const AUTH_PROTOCOLS: SnmpAuthProtocol[] = ['md5', 'sha1', 'sha224', 'sha256', 'sha384', 'sha512'];
-const PRIV_PROTOCOLS: SnmpPrivProtocol[] = ['des', 'aes128', 'aes192', 'aes256'];
+const AUTH_PROTOCOLS = (['md5', 'sha1', 'sha224', 'sha256', 'sha384', 'sha512'] as const satisfies readonly SnmpAuthProtocol[])
+  .map((value) => ({ value, label: value.toUpperCase() }));
+const PRIV_PROTOCOLS = (['des', 'aes128', 'aes192', 'aes256'] as const satisfies readonly SnmpPrivProtocol[])
+  .map((value) => ({ value, label: value.toUpperCase() }));
+const SECURITY_LEVELS = (['noAuthNoPriv', 'authNoPriv', 'authPriv'] as const satisfies readonly SnmpSecurityLevel[])
+  .map((value) => ({ value, label: value }));
 const VERSION_OPTIONS = [
   { value: 'v2c' as const, label: 'v2c' },
   { value: 'v3' as const, label: 'v3' },
@@ -379,18 +383,15 @@ export function InterfaceTrafficPane({ paneId, active }: InterfaceTrafficPanePro
                   autoComplete="off"
                 />
               </label>
-              <label className="itw-field itw-field-grow">
+              <div className="itw-field">
                 <span className="itw-field-label">{t('panes.interfaceTraffic.securityLevel')}</span>
-                <select
-                  className="itw-input"
+                <Segmented
+                  options={SECURITY_LEVELS}
                   value={form.securityLevel}
-                  onChange={(e) => updateForm({ securityLevel: e.target.value as SnmpSecurityLevel })}
-                >
-                  <option value="noAuthNoPriv">noAuthNoPriv</option>
-                  <option value="authNoPriv">authNoPriv</option>
-                  <option value="authPriv">authPriv</option>
-                </select>
-              </label>
+                  onChange={(securityLevel: SnmpSecurityLevel) => updateForm({ securityLevel })}
+                  ariaLabel={t('panes.interfaceTraffic.securityLevel')}
+                />
+              </div>
             </div>
 
             {form.securityLevel === 'noAuthNoPriv' && (
@@ -399,16 +400,15 @@ export function InterfaceTrafficPane({ paneId, active }: InterfaceTrafficPanePro
 
             {showAuthFields && (
               <div className="itw-field-row">
-                <label className="itw-field itw-field-proto">
+                <div className="itw-field itw-field-proto">
                   <span className="itw-field-label">{t('panes.interfaceTraffic.authProtocol')}</span>
-                  <select
-                    className="itw-input"
+                  <Segmented
+                    options={AUTH_PROTOCOLS}
                     value={form.authProtocol}
-                    onChange={(e) => updateForm({ authProtocol: e.target.value as SnmpAuthProtocol })}
-                  >
-                    {AUTH_PROTOCOLS.map((p) => <option key={p} value={p}>{p.toUpperCase()}</option>)}
-                  </select>
-                </label>
+                    onChange={(authProtocol: SnmpAuthProtocol) => updateForm({ authProtocol })}
+                    ariaLabel={t('panes.interfaceTraffic.authProtocol')}
+                  />
+                </div>
                 <label className="itw-field itw-field-grow">
                   <span className="itw-field-label">{t('panes.interfaceTraffic.authPassword')}</span>
                   <input
@@ -424,16 +424,15 @@ export function InterfaceTrafficPane({ paneId, active }: InterfaceTrafficPanePro
 
             {showPrivFields && (
               <div className="itw-field-row">
-                <label className="itw-field itw-field-proto">
+                <div className="itw-field itw-field-proto">
                   <span className="itw-field-label">{t('panes.interfaceTraffic.privProtocol')}</span>
-                  <select
-                    className="itw-input"
+                  <Segmented
+                    options={PRIV_PROTOCOLS}
                     value={form.privProtocol}
-                    onChange={(e) => updateForm({ privProtocol: e.target.value as SnmpPrivProtocol })}
-                  >
-                    {PRIV_PROTOCOLS.map((p) => <option key={p} value={p}>{p.toUpperCase()}</option>)}
-                  </select>
-                </label>
+                    onChange={(privProtocol: SnmpPrivProtocol) => updateForm({ privProtocol })}
+                    ariaLabel={t('panes.interfaceTraffic.privProtocol')}
+                  />
+                </div>
                 <label className="itw-field itw-field-grow">
                   <span className="itw-field-label">{t('panes.interfaceTraffic.privPassword')}</span>
                   <input
@@ -469,10 +468,7 @@ export function InterfaceTrafficPane({ paneId, active }: InterfaceTrafficPanePro
           {t('panes.interfaceTraffic.rememberSecrets')}
         </label>
 
-        <button type="submit" className="pt-run-btn start itw-connect-btn">
-          {t('panes.interfaceTraffic.connect')}
-          <svg width="9" height="9" viewBox="0 0 10 10" fill="currentColor" aria-hidden="true"><polygon points="0,0 10,5 0,10" /></svg>
-        </button>
+        <StartButton submit className="itw-connect-btn" label={t('panes.interfaceTraffic.connect')} />
       </form>
     </div>
   );

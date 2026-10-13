@@ -185,8 +185,6 @@ pub const LEGACY_SLOW_COLUMNS: &[ColumnDef] = &[
 pub const SYS_UPTIME_OID: &[u64] = &[1, 3, 6, 1, 2, 1, 1, 3, 0];
 /// `sysName.0`
 pub const SYS_NAME_OID: &[u64] = &[1, 3, 6, 1, 2, 1, 1, 5, 0];
-/// `sysDescr.0`
-pub const SYS_DESCR_OID: &[u64] = &[1, 3, 6, 1, 2, 1, 1, 1, 0];
 
 /// Extract the ifIndex instance from a walked OID, or `None` if the OID has left
 /// the column subtree.

@@ -7,8 +7,6 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import { useLocalShells } from '../../hooks/useLocalShells';
 import type { LocalShellChoice, NewSessionChoice, ProtocolId } from '../../types/appTypes';
 
-const label = (p: ProtocolId) => PROTOCOLS.find((x) => x.value === p)?.label ?? p;
-
 export interface NewSessionMenuProps {
   placement: DockMenuPlacement;
   /** Open the dialog for this row: SSH / Telnet, Serial, GCP or Web. */
@@ -42,6 +40,11 @@ export function NewSessionMenu({
   onNewAiChat,
 }: NewSessionMenuProps) {
   const { t } = useTranslation();
+  const label = (p: ProtocolId) => {
+    const entry = PROTOCOLS.find((x) => x.value === p);
+    if (!entry) return p;
+    return entry.labelKey ? t(entry.labelKey) : entry.label;
+  };
   const [open, setOpen] = useState(false);
   const [wslOpen, setWslOpen] = useState(false);
   const anchorRef = useRef<HTMLButtonElement>(null);

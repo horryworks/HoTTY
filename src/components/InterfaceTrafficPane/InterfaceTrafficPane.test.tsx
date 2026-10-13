@@ -8,7 +8,6 @@ import type { SnmpDataPayload, SnmpIfRow } from '../../types/appTypes';
 vi.mock('../../services/tauriService', () => ({
   isEncrypted: (v: string) => v.startsWith('[SAFE]') || v.startsWith('[DPAPI]'),
   tauriService: {
-    snmpListInterfaces: vi.fn(),
     snmpWatcherStart: vi.fn(),
     snmpWatcherStop: vi.fn(),
     snmpWatcherUpdateInterval: vi.fn(),
@@ -118,8 +117,19 @@ describe('InterfaceTrafficPane', () => {
   it('hides the privacy fields at authNoPriv', () => {
     render(<InterfaceTrafficPane paneId="if-1" active />);
     fireEvent.click(screen.getByRole('button', { name: 'v3' }));
-    fireEvent.change(screen.getByDisplayValue('authPriv'), { target: { value: 'authNoPriv' } });
+    fireEvent.click(screen.getByRole('button', { name: 'authNoPriv' }));
     expect(document.querySelectorAll('input[type="password"]')).toHaveLength(1);
+  });
+
+  it('offers the v3 choices as buttons and marks the chosen one', () => {
+    render(<InterfaceTrafficPane paneId="if-1" active />);
+    fireEvent.click(screen.getByRole('button', { name: 'v3' }));
+    expect(document.querySelector('select')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'SHA512' }));
+    fireEvent.click(screen.getByRole('button', { name: 'AES256' }));
+    expect(screen.getByRole('button', { name: 'SHA512' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: 'SHA256' }).getAttribute('aria-pressed')).toBe('false');
+    expect(screen.getByRole('button', { name: 'AES256' }).getAttribute('aria-pressed')).toBe('true');
   });
 
   it('folds the form into one line naming the device while monitoring', async () => {

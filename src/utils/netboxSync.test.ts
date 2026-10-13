@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { HostTreeNode, NetboxNodeLink, NetboxSnapshot } from '../types/appTypes';
 import {
-    NETBOX_DEFAULT_SERVER,
     isNetboxNamed,
     netboxRef,
     reconcileNetboxTree,
@@ -10,7 +9,8 @@ import {
 
 // ── fixtures ───────────────────────────────────────────────────────────────
 
-const SERVER = NETBOX_DEFAULT_SERVER;
+// The backend's `DEFAULT_SERVER_KEY`, which every snapshot carries as `serverKey`.
+const SERVER = 'default';
 const NOW = '2026-01-02T03:04:05.000Z';
 
 /** Deterministic ids, so a created folder can be asserted on by name AND id. */

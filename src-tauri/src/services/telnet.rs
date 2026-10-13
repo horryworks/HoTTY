@@ -112,14 +112,10 @@ enum LoginState {
 /// - We WILL: NAWS, SGA
 /// - We DO:   ECHO (server-side echo), SGA
 /// - Everything else is declined (WONT / DONT).
-pub fn process_iac(data: &[u8], naws: (u16, u16)) -> (Vec<u8>, Vec<u8>) {
-    let (out, resp, _) = process_iac_partial(data, naws);
-    (out, resp)
-}
-
-/// `process_iac` that also returns how many bytes it consumed. A command cut
-/// off by the end of `data` is left unconsumed (the count stops at its IAC), so
-/// the caller can retry it once the rest has arrived.
+///
+/// Also returns how many bytes it consumed. A command cut off by the end of
+/// `data` is left unconsumed (the count stops at its IAC), so the caller can
+/// retry it once the rest has arrived.
 fn process_iac_partial(data: &[u8], naws: (u16, u16)) -> (Vec<u8>, Vec<u8>, usize) {
     let mut out = Vec::with_capacity(data.len());
     let mut resp: Vec<u8> = Vec::new();
@@ -728,6 +724,12 @@ impl Drop for TelnetSession {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `process_iac_partial` without the consumed count: `(clean_data, response)`.
+    fn process_iac(data: &[u8], naws: (u16, u16)) -> (Vec<u8>, Vec<u8>) {
+        let (out, resp, _) = process_iac_partial(data, naws);
+        (out, resp)
+    }
 
     /// Test-only convenience over `process_iac`: returns just the cleaned
     /// data half, so these cases exercise the production IAC parser directly.

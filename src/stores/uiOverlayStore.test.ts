@@ -49,7 +49,7 @@ describe('uiOverlayStore', () => {
   // panes, so a Web Browser page must hide while one is open.
   it('treats a dock menu and the watch picker as overlays', async () => {
     initOverlayWatcher();
-    for (const cls of ['dock-menu new-session-menu', 'tab-watch-menu']) {
+    for (const cls of ['dock-menu new-session-menu', 'tab-watch-menu', 'dock-drop-zone hot']) {
       const el = document.createElement('div');
       el.className = cls;
       document.body.appendChild(el);

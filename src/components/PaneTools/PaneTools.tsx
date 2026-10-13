@@ -34,9 +34,31 @@ export function RunButton({ running, startLabel, stopLabel, onStart, onStop, dis
       {stopLabel}
     </button>
   ) : (
-    <button type="button" className="pt-run-btn start" onClick={onStart} disabled={disabled}>
+    <StartButton label={startLabel} onClick={onStart} disabled={disabled} />
+  );
+}
+
+interface StartButtonProps {
+  label: string;
+  /** Omit with `submit`: the form's own submit handler does the starting. */
+  onClick?: () => void;
+  /** Submit the surrounding form instead of acting on its own. */
+  submit?: boolean;
+  disabled?: boolean;
+  className?: string;
+}
+
+/** The start half of `RunButton`, for a form whose submit starts the tool. */
+export function StartButton({ label, onClick, submit, disabled, className }: StartButtonProps) {
+  return (
+    <button
+      type={submit ? 'submit' : 'button'}
+      className={`pt-run-btn start${className ? ` ${className}` : ''}`}
+      onClick={onClick}
+      disabled={disabled}
+    >
       <svg width="9" height="9" viewBox="0 0 10 10" fill="currentColor" aria-hidden="true"><polygon points="0,0 10,5 0,10" /></svg>
-      {startLabel}
+      {label}
     </button>
   );
 }

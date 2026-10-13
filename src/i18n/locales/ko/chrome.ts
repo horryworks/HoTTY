@@ -3,6 +3,8 @@
 // truth; values are byte-identical to the in-component literals they replace.
 export const chrome = {
   tabBar: {
+    protocolSerial: '시리얼',
+    protocolCmd: '명령 프롬프트',
     fileServer: '파일 서버',
     newSession: '새 세션',
     notInstalled: '설치되지 않음',

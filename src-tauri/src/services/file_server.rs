@@ -289,6 +289,16 @@ pub fn ct_eq(a: &[u8], b: &[u8]) -> bool {
     diff == 0
 }
 
+/// Why a root directory could not be opened, without the raw OS text
+/// (`… (os error 2)`) that `canonicalize` carries.
+fn root_dir_error(err: &std::io::Error) -> String {
+    match humanize_file_error(err).as_str() {
+        "file or folder not found" => "Root directory not found".to_string(),
+        "access denied" => "Root directory: access denied".to_string(),
+        _ => "Root directory cannot be opened".to_string(),
+    }
+}
+
 /// Validate a user-chosen root directory before binding a server to it.
 /// Returns the canonical root or a human-readable error.
 pub fn validate_root_dir(root: &str) -> Result<PathBuf, String> {
@@ -300,7 +310,7 @@ pub fn validate_root_dir(root: &str) -> Result<PathBuf, String> {
     }
     let resolved = Path::new(root)
         .canonicalize()
-        .map_err(|e| format!("Invalid root directory: {e}"))?;
+        .map_err(|e| root_dir_error(&e))?;
     if !resolved.is_dir() {
         return Err("Root path is not a directory".into());
     }
@@ -1199,6 +1209,26 @@ mod tests {
     #[test]
     fn validate_root_rejects_empty() {
         assert!(validate_root_dir("").is_err());
+    }
+
+    #[test]
+    fn validate_root_names_a_missing_dir_without_the_os_text() {
+        let dir = std::env::temp_dir().join("hotty_fs_test_validate_missing");
+        let _ = fs::remove_dir_all(&dir);
+        assert_eq!(
+            validate_root_dir(dir.to_str().unwrap()).unwrap_err(),
+            "Root directory not found"
+        );
+    }
+
+    #[test]
+    fn root_dir_error_hides_raw_os_text() {
+        assert_eq!(
+            root_dir_error(&std::io::Error::from(std::io::ErrorKind::PermissionDenied)),
+            "Root directory: access denied"
+        );
+        let other = root_dir_error(&std::io::Error::other("gremlins (os error 999)"));
+        assert!(!other.contains("os error"), "raw OS code leaked: {other}");
     }
 
     #[test]

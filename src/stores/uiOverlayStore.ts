@@ -55,6 +55,7 @@ const OVERLAY_SELECTOR = [
   // the webview slot) rather than hiding it, so the page stays visible while
   // they are open.
   '.dock-menu', // dock menus: New Session, More, layout / bar pickers
+  '.dock-drop-zone', // where the dock can land while its grip is dragged (ADR-025)
   '.tab-context-menu',
   '.tab-watch-menu', // the tab's 'Watch in' conversation picker
   '.context-menu', // HostTree / BookmarkTree right-click menu

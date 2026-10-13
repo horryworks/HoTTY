@@ -53,16 +53,6 @@ export function formatCount(value: number | null | undefined): string {
   return value.toLocaleString('en-US');
 }
 
-/**
- * Per-poll increment. Zero is rendered as `0` rather than an em-dash: "no new
- * errors this poll" is a real, reassuring answer, whereas the em-dash means
- * "we could not measure".
- */
-export function formatDelta(value: number | null | undefined): string {
-  if (value === null || value === undefined || !Number.isFinite(value)) return NO_VALUE;
-  return value === 0 ? '0' : `+${value.toLocaleString('en-US')}`;
-}
-
 /** IF-MIB `ifOperStatus` / `ifAdminStatus` enum → i18n key suffix. */
 export function operStatusKey(status: number | null | undefined): string {
   switch (status) {

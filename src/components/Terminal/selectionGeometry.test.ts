@@ -114,8 +114,8 @@ describe('isRightClickOverSelection', () => {
   });
 
   it('accounts for the viewport scroll offset (viewportY) when computing the buffer row', () => {
-    // Selection is on absolute buffer row 10; the viewport is scrolled so that
-    // row 10 is the first visible row. A click on the top visible row must map
+    // Selection is on absolute buffer line 10; the viewport is scrolled so that
+    // buffer line 10 is the first visible row. A click on the top visible row must map
     // to absRow 10 and hit the selection.
     const pos: SelectionRange = { start: { x: 0, y: 10 }, end: { x: 3, y: 10 } };
     const term = makeTerm({ pos, cell: { width: 8, height: 16 }, viewportY: 10 });

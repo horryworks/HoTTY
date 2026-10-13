@@ -78,6 +78,7 @@ HoTTY is a multi-protocol terminal emulator for Windows that supports SSH, Telne
 - Debug log management
 - In-app version switching (Settings → Versions) — install any published release, forward or back, verified against the checksum published by GitHub
 - Third-Party Licenses viewer (Settings → About)
+- Dialogs move by their title bar and resize from any edge or corner, like windows; sizes are remembered
 
 ## Installation
 

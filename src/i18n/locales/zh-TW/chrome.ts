@@ -2,6 +2,8 @@
 // 工具按鈕）。每個外框區域對應一個鍵區塊。
 export const chrome = {
   tabBar: {
+    protocolSerial: '序列埠',
+    protocolCmd: '命令提示字元',
     fileServer: '檔案伺服器',
     newSession: '新工作階段',
     notInstalled: '未安裝',

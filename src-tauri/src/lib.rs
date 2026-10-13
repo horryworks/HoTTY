@@ -38,9 +38,7 @@ use commands::session::{
     adopt_sessions, connect_session, disconnect_session, list_all_sessions, send_input,
     ssh_host_key_response, term_resize, update_session_logging, SessionState,
 };
-use commands::snmp_watcher::{
-    snmp_list_interfaces, snmp_watcher_start, snmp_watcher_stop, snmp_watcher_update_interval,
-};
+use commands::snmp_watcher::{snmp_watcher_start, snmp_watcher_stop, snmp_watcher_update_interval};
 use commands::ssh_algorithms::{get_ssh_algorithms, save_ssh_algorithms};
 use commands::ssh_keys::{
     delete_ssh_key, export_ssh_public_key, generate_ssh_key, list_ssh_keys, open_ssh_key_folder,
@@ -438,7 +436,6 @@ pub fn run() {
             ping_monitor_update_targets,
             ping_monitor_update_interval,
             // Interface traffic watcher (SNMP)
-            snmp_list_interfaces,
             snmp_watcher_start,
             snmp_watcher_stop,
             snmp_watcher_update_interval,

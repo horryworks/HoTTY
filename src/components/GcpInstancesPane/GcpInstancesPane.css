@@ -368,6 +368,7 @@
   border-radius: 4px;
   padding: 1px 6px;
   cursor: pointer;
+  font-family: var(--ui-font-family);
   font-size: calc(var(--font-size-base) - 3px);
   line-height: 1;
   transition: background 0.15s, border-color 0.15s;

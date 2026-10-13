@@ -46,7 +46,6 @@ import type {
   PingLogFilePayload,
   SnmpConfig,
   SnmpDataPayload,
-  SnmpDiscovery,
   SnmpStatusPayload,
   FileServerEvent,
   FileServerProtocol,
@@ -578,11 +577,6 @@ export const tauriService = {
   // -----------------------------------------------------------------------
   // Interface traffic watcher (SNMP)
   // -----------------------------------------------------------------------
-
-  /** One-shot connection test + interface listing. */
-  async snmpListInterfaces(config: SnmpConfig): Promise<SnmpDiscovery> {
-    return await invoke<SnmpDiscovery>('snmp_list_interfaces', { config });
-  },
 
   /** Start (or restart) polling. Calling it again for the same pane replaces
    *  the running watcher, which is also how the target device is changed. */

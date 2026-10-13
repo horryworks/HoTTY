@@ -2,6 +2,8 @@
 // ユーティリティボタン）。リージョンごとにキーブロックを分けています。
 export const chrome = {
   tabBar: {
+    protocolSerial: 'シリアル',
+    protocolCmd: 'コマンド プロンプト',
     fileServer: 'ファイルサーバー',
     newSession: '新規セッション',
     notInstalled: '未インストール',

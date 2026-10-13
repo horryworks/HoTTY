@@ -12,7 +12,7 @@ use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 
 use crate::services::snmp::{
-    clamp_interval, is_valid_pane_id, poller, stop_watcher, validate, SnmpConfigDto, SnmpDiscovery,
+    clamp_interval, is_valid_pane_id, poller, stop_watcher, validate, SnmpConfigDto,
     SnmpWatcherState, WatcherHandle,
 };
 
@@ -111,14 +111,6 @@ pub async fn snmp_watcher_update_interval(
     let watchers = state.watchers.lock().await;
     retune_interval(&watchers, &pane_id, interval_ms).await;
     Ok(())
-}
-
-/// One-shot connection test and interface listing. Spawns nothing and is bounded
-/// by its own budget, so it needs no lifecycle management.
-#[tauri::command]
-pub async fn snmp_list_interfaces(config: SnmpConfigDto) -> Result<SnmpDiscovery, String> {
-    let target = validate(config)?;
-    poller::discover(target).await
 }
 
 #[cfg(test)]

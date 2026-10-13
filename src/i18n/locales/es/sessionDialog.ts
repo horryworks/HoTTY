@@ -4,6 +4,7 @@
 export const sessionDialog = {
   defaultSessionName: 'Sesión {{protocol}}',
   tabs: {
+    serial: 'Serie',
     gcp: 'GCP',
     web: 'Web',
   },
@@ -89,6 +90,7 @@ export const sessionDialog = {
     authenticating: 'Autenticando…',
   },
   connectFailed: 'Error de conexión',
+  serialTabName: 'Serie {{path}} ({{baud}})',
   connectFailedGeneric: 'Error de conexión.',
   browseKeyTitle: 'Seleccionar archivo de clave privada',
   validation: {

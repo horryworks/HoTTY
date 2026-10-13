@@ -22,9 +22,9 @@ pub mod url;
 pub use client::NetboxClient;
 pub use store::NetboxState;
 
-/// The only configurable server today. Mirrored in TypeScript as
-/// `NETBOX_DEFAULT_SERVER` (`src/utils/netboxSync.ts`) — the two must agree, and
-/// no compiler checks that, so change them together.
+/// The only configurable server today. Sent to the frontend as each snapshot's
+/// `serverKey` and stored on every NetBox folder marker in the user's tree, so
+/// changing it orphans those markers.
 pub const DEFAULT_SERVER_KEY: &str = "default";
 
 #[derive(Debug, thiserror::Error)]
@@ -79,9 +79,8 @@ pub enum NetboxError {
 mod tests {
     use super::*;
 
-    /// Mirrored in TypeScript as `NETBOX_DEFAULT_SERVER`. Nothing checks the two
-    /// agree, so pin the literal on this side; a silent divergence would orphan
-    /// every folder marker in the user's tree.
+    /// Folder markers already saved in users' trees carry this literal, so pin
+    /// it; a silent change would orphan every one of them.
     #[test]
     fn the_default_server_key_is_the_one_typescript_writes() {
         assert_eq!(DEFAULT_SERVER_KEY, "default");

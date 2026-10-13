@@ -12,9 +12,9 @@ use crate::services::timefmt::format_timestamp;
 use super::config::{SnmpAuth, SnmpTarget};
 use super::oids::{
     ColumnId, DISCONTINUITY_COLUMN, HC_COUNTER_COLUMNS, LEGACY_COUNTER_COLUMNS,
-    LEGACY_SLOW_COLUMNS, SLOW_COLUMNS, STATUS_COLUMNS, SYS_DESCR_OID, SYS_NAME_OID, SYS_UPTIME_OID,
+    LEGACY_SLOW_COLUMNS, SLOW_COLUMNS, STATUS_COLUMNS, SYS_NAME_OID, SYS_UPTIME_OID,
 };
-use super::payload::{IfRow, SnmpDataPayload, SnmpDiscovery, SnmpInterfaceInfo, SnmpStatusPayload};
+use super::payload::{IfRow, SnmpDataPayload, SnmpStatusPayload};
 use super::rates::{CounterWidth, IfCounters, SampleStore};
 use super::session::{
     connect, get_scalar, humanize_snmp_error_for, probe_column, walk_columns, OwnedVal, SnmpError,
@@ -44,8 +44,6 @@ const MAX_BACKOFF_MULT: u32 = 6;
 /// Whole-cycle ceiling, so one wedged device cannot stall the loop forever.
 const MIN_CYCLE_BUDGET: Duration = Duration::from_secs(10);
 const MAX_CYCLE_BUDGET: Duration = Duration::from_secs(120);
-/// Upper bound on the one-shot discovery command.
-const DISCOVERY_BUDGET: Duration = Duration::from_secs(20);
 /// Batch size for the connect-time counter-width probe. One GETBULK is enough to
 /// tell a populated column from an empty one.
 const PROBE_REPETITIONS: u32 = 10;
@@ -700,116 +698,6 @@ fn emit_status(app: &AppHandle, pane_id: &str, state: &'static str, message: Opt
     if let Err(e) = app.emit(STATUS_EVENT, payload) {
         log::warn!("snmp: failed to emit {STATUS_EVENT}: {e}");
     }
-}
-
-/// One-shot connection test + interface listing, used by the pane's
-/// "list interfaces" button. Spawns nothing and holds no state.
-pub async fn discover(target: SnmpTarget) -> Result<SnmpDiscovery, String> {
-    let humanize = |e: &SnmpError| {
-        let message = describe(e, &target);
-        // Discovery used to fail silently as far as the log was concerned, which
-        // left a failed "List interfaces" with no trace to diagnose from.
-        log::warn!(
-            "snmp: listing interfaces on {}:{} ({}) failed: {message}",
-            target.host,
-            target.port,
-            target.auth.label()
-        );
-        message
-    };
-
-    log::info!(
-        "snmp: listing interfaces on {}:{} ({})",
-        target.host,
-        target.port,
-        target.auth.label()
-    );
-
-    tokio::time::timeout(DISCOVERY_BUDGET, async {
-        let mut session = connect(&target).await.map_err(|e| humanize(&e))?;
-        let width = decide_counter_width(&mut session, &target)
-            .await
-            .map_err(|e| humanize(&e))?;
-
-        let sys_name = get_scalar(&mut session, &target, SYS_NAME_OID)
-            .await
-            .ok()
-            .flatten()
-            .and_then(|v| v.as_text().map(str::to_string));
-        let sys_descr = get_scalar(&mut session, &target, SYS_DESCR_OID)
-            .await
-            .ok()
-            .flatten()
-            .and_then(|v| v.as_text().map(str::to_string));
-        let sys_uptime_secs = get_scalar(&mut session, &target, SYS_UPTIME_OID)
-            .await
-            .ok()
-            .flatten()
-            .and_then(|v| v.as_u32())
-            .map(|t| u64::from(t) / 100);
-
-        let slow_columns = if width == CounterWidth::Bits64 {
-            SLOW_COLUMNS
-        } else {
-            LEGACY_SLOW_COLUMNS
-        };
-        let mut statics = HashMap::new();
-        let walked = walk_columns(
-            &mut session,
-            &target,
-            slow_columns,
-            BULK_MAX_REPETITIONS_STRING,
-        )
-        .await
-        .map_err(|e| humanize(&e))?;
-        apply_statics(&mut statics, &walked, width == CounterWidth::Bits32);
-
-        let oper_walk = walk_columns(
-            &mut session,
-            &target,
-            &STATUS_COLUMNS[5..6], // ifOperStatus
-            BULK_MAX_REPETITIONS,
-        )
-        .await
-        .unwrap_or_default();
-        let oper: HashMap<u32, u8> = oper_walk
-            .into_iter()
-            .filter_map(|(_, ix, v)| v.as_u8().map(|s| (ix, s)))
-            .collect();
-
-        let mut indexes: Vec<u32> = statics.keys().copied().collect();
-        indexes.sort_unstable();
-        let interfaces = indexes
-            .into_iter()
-            .take(MAX_ROWS)
-            .map(|if_index| {
-                let stat = statics.get(&if_index).cloned().unwrap_or_default();
-                SnmpInterfaceInfo {
-                    if_index,
-                    name: stat.name,
-                    descr: stat.descr,
-                    alias: stat.alias,
-                    speed_mbps: stat.speed_mbps,
-                    oper_status: oper.get(&if_index).copied(),
-                }
-            })
-            .collect();
-
-        Ok::<SnmpDiscovery, String>(SnmpDiscovery {
-            sys_name,
-            sys_descr,
-            sys_uptime_secs,
-            counter_width: width.as_str(),
-            interfaces,
-        })
-    })
-    .await
-    .map_err(|_| {
-        format!(
-            "Listing interfaces on {}:{} took too long",
-            target.host, target.port
-        )
-    })?
 }
 
 #[cfg(test)]

@@ -98,13 +98,7 @@ impl From<SnmpLibError> for SnmpError {
 ///
 /// Single translation point, mirroring `humanize_io_error`'s policy: no category
 /// prefixes, no raw OS error codes, and — asserted by a test — never any part of
-/// a credential.
-pub fn humanize_snmp_error(err: &SnmpError, host: &str, port: u16, timeout_ms: u64) -> String {
-    humanize_snmp_error_for(err, host, port, timeout_ms, false)
-}
-
-/// As [`humanize_snmp_error`], but able to tailor the message to the SNMP
-/// version in use.
+/// a credential. It can tailor the message to the SNMP version in use.
 ///
 /// This matters for one case in particular: on v2c a **wrong community string is
 /// silent**. The agent simply drops the request, so it reaches us as a plain
@@ -666,6 +660,12 @@ async fn walk_chunk(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The message for a user-based (v3) target, where a timeout says nothing
+    /// about the credential.
+    fn humanize_snmp_error(err: &SnmpError, host: &str, port: u16, timeout_ms: u64) -> String {
+        humanize_snmp_error_for(err, host, port, timeout_ms, false)
+    }
     use crate::services::snmp::config::{validate, SecurityLevel, SnmpConfigDto, SnmpVersionTag};
 
     #[test]

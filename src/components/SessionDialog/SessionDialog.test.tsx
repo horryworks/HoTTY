@@ -137,6 +137,28 @@ describe('SessionDialog', () => {
     expect(screen.getByText('Password')).toBeTruthy();
   });
 
+  it('shows a form mistake in the dialog itself, not in a browser alert', async () => {
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+    const onConnect = vi.fn();
+    const { container } = render(<SessionDialog {...defaultProps} onConnect={onConnect} />);
+    const hostInput = container.querySelector('input[placeholder="example.com"]') as HTMLInputElement;
+    await act(async () => {
+      fireEvent.change(hostInput, { target: { value: 'sw 01' } });
+    });
+    const usernameInput = container.querySelectorAll('.form-panel input[type="text"]')[1] as HTMLInputElement;
+    await act(async () => {
+      fireEvent.change(usernameInput, { target: { value: 'bob' } });
+    });
+    expect((screen.getByText('Connect') as HTMLButtonElement).disabled).toBe(false);
+    await act(async () => {
+      fireEvent.click(screen.getByText('Connect'));
+    });
+    expect(onConnect).not.toHaveBeenCalled();
+    expect(alertSpy).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert').textContent).toContain('Host contains invalid whitespace');
+    alertSpy.mockRestore();
+  });
+
   it('shows Private Key Path for SSH protocol', () => {
     render(<SessionDialog {...defaultProps} />);
     expect(screen.getByText('Private Key Path (optional)')).toBeTruthy();

@@ -39,7 +39,7 @@
   gap: 6px;
   min-width: 0;
   max-width: 60%;
-  padding: 3px 10px;
+  padding: 3px 8px;
   border: 1px solid var(--border-color);
   border-radius: 4px;
   background: var(--input-bg);
@@ -52,6 +52,11 @@
 
 .log-viewer-folder-btn:hover:not(:disabled) {
   background: var(--hover-bg);
+}
+
+.log-viewer-folder-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .log-viewer-folder-btn.empty {
@@ -268,6 +273,16 @@
   cursor: pointer;
   white-space: nowrap;
   flex-shrink: 0;
+  transition: background-color 0.1s, border-color 0.1s;
+}
+
+.log-viewer-follow:hover:not(:disabled) {
+  background: var(--hover-bg);
+}
+
+.log-viewer-follow:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .log-viewer-follow.on {

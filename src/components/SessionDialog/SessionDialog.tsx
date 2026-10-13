@@ -1012,8 +1012,9 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
             return null;
         })();
         if (validationError) {
-            // Surface inline; keep modal open so the user can correct.
-            window.alert(validationError);
+            // Shown in the dialog's status line (the same place a failed connect
+            // reports); the dialog stays open so the user can correct it.
+            setConnectError(validationError);
             return;
         }
 
@@ -1093,7 +1094,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                     return `${protocol.toUpperCase()} ${u ? u + '@' : ''}${host.trim()}:${port}`;
                 }
                 case 'serial':
-                    return `Serial ${serialPath} (${baudRate})`;
+                    return t('sessionDialog.serialTabName', { path: serialPath, baud: baudRate });
             }
         };
 
@@ -1520,7 +1521,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
         </form>
     );
 
-    const title = kind === 'serial' ? 'Serial'
+    const title = kind === 'serial' ? t('sessionDialog.tabs.serial')
         : kind === 'gcp' ? t('sessionDialog.tabs.gcp')
         : kind === 'web' ? t('sessionDialog.tabs.web')
         : 'SSH / Telnet';

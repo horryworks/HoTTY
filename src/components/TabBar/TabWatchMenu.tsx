@@ -14,6 +14,10 @@ export interface TabWatchMenuState {
   /** Top of the button that opened it: the menu flips above it when there is
    *  no room below (a dock at the bottom edge). */
   anchorTop?: number;
+  /** The button that opened it. It counts as inside the menu, so pressing it
+   *  again closes the menu instead of closing it on mousedown and reopening it
+   *  on click. */
+  anchor?: HTMLElement;
 }
 
 const MARGIN = 4;
@@ -29,7 +33,7 @@ interface TabWatchMenuProps {
 export function TabWatchMenu({ menu, conversations, onWatchInConversation, onClose }: TabWatchMenuProps) {
   const { t } = useTranslation();
   const ref = useRef<HTMLDivElement>(null);
-  useMenuDismiss(true, [ref], onClose);
+  useMenuDismiss(true, [ref, { current: menu.anchor ?? null }], onClose);
 
   // Keep the whole menu on screen: the button may sit at the window's right
   // edge (a pane header's AI link) or at its bottom (a dock on the bottom edge).

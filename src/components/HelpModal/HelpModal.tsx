@@ -354,7 +354,7 @@ export function HelpModal({ open, onClose }: HelpModalProps) {
               </p>
               <ul className="shortcuts-list">
                 <li><Trans i18nKey="help.interfaceTraffic.connect" components={[<strong key="0" />, <strong key="1" />, <strong key="2" />]} /></li>
-                <li><Trans i18nKey="help.interfaceTraffic.discover" components={[<strong key="0" />, <strong key="1" />]} /></li>
+                <li><Trans i18nKey="help.interfaceTraffic.monitoring" components={[<strong key="0" />, <strong key="1" />]} /></li>
                 <li><Trans i18nKey="help.interfaceTraffic.columns" components={[<strong key="0" />, <strong key="1" />, <strong key="2" />, <strong key="3" />]} /></li>
                 <li><Trans i18nKey="help.interfaceTraffic.v3" components={[<strong key="0" />, <strong key="1" />, <strong key="2" />, <strong key="3" />]} /></li>
                 <li><Trans i18nKey="help.interfaceTraffic.counters" components={[<strong key="0" />, <code key="1" />]} /></li>

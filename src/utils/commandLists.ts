@@ -73,7 +73,9 @@ export const DEFAULT_WHITELIST: string[] = [
     'file', 'stat', 'wc', 'md5sum', 'sha256sum',
     'find', 'locate', 'which', 'whereis', 'type', 'tree',
 
-    // Text search / processing (redirections are blocked structurally)
+    // Text search / processing (redirections are blocked structurally; the
+    // options that run a program or write a file — `rg --pre`, `sort -o`,
+    // `uniq IN OUT`, `tree -o` — are rejected by DANGEROUS_FLAGS)
     'grep', 'egrep', 'fgrep', 'rg',
     'awk', 'sed',
     'sort', 'uniq', 'cut', 'tr', 'diff', 'comm', 'strings',
@@ -91,7 +93,10 @@ export const DEFAULT_WHITELIST: string[] = [
     // their write subcommands are rejected by DANGEROUS_FLAGS in
     // commandClassifier.ts (e.g. `ip route del`, `ifconfig eth0 down`).
     'ping', 'ping6', 'traceroute', 'tracert', 'tracepath', 'mtr',
-    'dig', 'nslookup', 'host', 'whois',
+    // dig / nslookup / host / ping auto-run only through the configured resolver
+    // and with a default payload (DANGEROUS_FLAGS). `whois` is not here: it sends
+    // free text to any host, so the network-egress floor always stops it.
+    'dig', 'nslookup', 'host',
     'ip', 'ifconfig', 'route',
     'netstat', 'ss', 'arp',
     // NOTE: curl / wget / nmap are intentionally NOT whitelisted. They are

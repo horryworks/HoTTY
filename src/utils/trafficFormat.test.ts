@@ -4,7 +4,6 @@ import {
   adminStatusKey,
   formatBps,
   formatCount,
-  formatDelta,
   formatPps,
   formatSpeed,
   formatUptime,
@@ -81,24 +80,6 @@ describe('trafficFormat', () => {
 
     it('renders missing values as an em-dash', () => {
       expect(formatCount(undefined)).toBe(NO_VALUE);
-    });
-  });
-
-  describe('formatDelta', () => {
-    // Zero and "unknown" are genuinely different answers here: 0 means the
-    // counter did not move this poll, the em-dash means we could not measure.
-    it('shows zero as 0, not as an em-dash', () => {
-      expect(formatDelta(0)).toBe('0');
-    });
-
-    it('signs a non-zero increment', () => {
-      expect(formatDelta(7)).toBe('+7');
-      expect(formatDelta(12345)).toBe('+12,345');
-    });
-
-    it('renders an unmeasurable delta as an em-dash', () => {
-      expect(formatDelta(undefined)).toBe(NO_VALUE);
-      expect(formatDelta(null)).toBe(NO_VALUE);
     });
   });
 

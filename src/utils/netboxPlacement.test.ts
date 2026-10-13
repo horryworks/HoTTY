@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import type { HostTreeNode, NetboxNodeLink } from '../types/appTypes';
-import { NETBOX_DEFAULT_SERVER } from './netboxSync';
 import {
     collectPrefixFolders,
     findParentFolderId,
@@ -8,7 +7,8 @@ import {
     suggestFolderForHost,
 } from './netboxPlacement';
 
-const SERVER = NETBOX_DEFAULT_SERVER;
+// The backend's `DEFAULT_SERVER_KEY`, which every snapshot carries as `serverKey`.
+const SERVER = 'default';
 
 const host = (id: string, name: string, address: string): HostTreeNode => ({
     id,

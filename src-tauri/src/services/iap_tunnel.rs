@@ -2091,6 +2091,13 @@ impl GcloudCacheState {
         }
         log::info!("gcp-vm-action: {action:?} registered for {}", target.key);
 
+        // Deliberately app-scoped, not window-scoped (the ADR-011 exception): the
+        // registry is shared by every window (`gce_iap_list_vm_actions`, an
+        // app-wide `gcp-vm-action` emit), and the start/stop keeps running on GCP
+        // whatever happens here. Stopping the tracker when the window that pressed
+        // Start closes would strand the entry as "in progress" in every other
+        // window. It talks to GCP's API, not to customer equipment, and ends by
+        // itself within `VM_ACTION_MAX_SECS`.
         let this = Arc::clone(self);
         tauri::async_runtime::spawn(async move {
             this.track_vm_action(app, target, action).await;

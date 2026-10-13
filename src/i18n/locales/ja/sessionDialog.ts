@@ -4,6 +4,7 @@
 export const sessionDialog = {
   defaultSessionName: '{{protocol}} セッション',
   tabs: {
+    serial: 'シリアル',
     gcp: 'GCP',
     web: 'Web',
   },
@@ -89,6 +90,7 @@ export const sessionDialog = {
     authenticating: '認証中…',
   },
   connectFailed: '接続に失敗しました',
+  serialTabName: 'シリアル {{path}} ({{baud}})',
   connectFailedGeneric: '接続に失敗しました。',
   browseKeyTitle: '秘密鍵ファイルを選択',
   validation: {

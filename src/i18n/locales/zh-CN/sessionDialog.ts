@@ -4,6 +4,7 @@
 export const sessionDialog = {
   defaultSessionName: '{{protocol}} 会话',
   tabs: {
+    serial: '串口',
     gcp: 'GCP',
     web: '网页',
   },
@@ -89,6 +90,7 @@ export const sessionDialog = {
     authenticating: '正在验证…',
   },
   connectFailed: '连接失败',
+  serialTabName: '串口 {{path}} ({{baud}})',
   connectFailedGeneric: '连接失败。',
   browseKeyTitle: '选择私钥文件',
   validation: {

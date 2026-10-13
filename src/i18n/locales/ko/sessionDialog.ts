@@ -4,6 +4,7 @@
 export const sessionDialog = {
   defaultSessionName: '{{protocol}} 세션',
   tabs: {
+    serial: '시리얼',
     gcp: 'GCP',
     web: '웹',
   },
@@ -89,6 +90,7 @@ export const sessionDialog = {
     authenticating: '인증 중…',
   },
   connectFailed: '연결 실패',
+  serialTabName: '시리얼 {{path}} ({{baud}})',
   connectFailedGeneric: '연결에 실패했습니다.',
   browseKeyTitle: '개인 키 파일 선택',
   validation: {

@@ -63,7 +63,7 @@
 .fs-root-btn {
   min-width: 0;
   max-width: 360px;
-  padding: 3px 10px;
+  padding: 3px 8px;
   border: 1px solid var(--border-color);
   border-radius: 4px;
   background: var(--input-bg);

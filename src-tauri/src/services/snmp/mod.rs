@@ -29,7 +29,6 @@ use tokio_util::sync::CancellationToken;
 use crate::services::session_service::{join_or_abort, POLLER_STOP_GRACE_MS};
 
 pub use config::{clamp_interval, is_valid_pane_id, validate, SnmpConfigDto, SnmpTarget};
-pub use payload::SnmpDiscovery;
 
 /// A running watcher.
 pub struct WatcherHandle {

@@ -4,6 +4,7 @@
 export const sessionDialog = {
   defaultSessionName: 'Сеанс {{protocol}}',
   tabs: {
+    serial: 'Последовательный порт',
     gcp: 'GCP',
     web: 'Веб',
   },
@@ -89,6 +90,7 @@ export const sessionDialog = {
     authenticating: 'Аутентификация…',
   },
   connectFailed: 'Ошибка подключения',
+  serialTabName: 'Последовательный порт {{path}} ({{baud}})',
   connectFailedGeneric: 'Не удалось подключиться.',
   browseKeyTitle: 'Выбрать файл закрытого ключа',
   validation: {

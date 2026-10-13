@@ -478,24 +478,6 @@ export interface SnmpStatusPayload {
   timestamp: string;
 }
 
-export interface SnmpInterfaceInfo {
-  ifIndex: number;
-  name?: string;
-  descr?: string;
-  alias?: string;
-  speedMbps?: number;
-  operStatus?: number;
-}
-
-/** Result of the one-shot connection test / interface listing. */
-export interface SnmpDiscovery {
-  sysName?: string;
-  sysDescr?: string;
-  sysUptimeSecs?: number;
-  counterWidth: SnmpCounterWidth;
-  interfaces: SnmpInterfaceInfo[];
-}
-
 // ---------------------------------------------------------------------------
 // File Server (TFTP / SFTP)
 // ---------------------------------------------------------------------------
@@ -708,7 +690,8 @@ export type NetboxObjectKind = 'root' | 'region' | 'site';
  */
 export interface NetboxNodeLink {
   /** Which configured NetBox this folder came from. Exactly one server is
-   *  configurable today (always `NETBOX_DEFAULT_SERVER`); the field exists so a
+   *  configurable today (the backend's `DEFAULT_SERVER_KEY`, read from each
+   *  snapshot's `serverKey`); the field exists so a
    *  second server could never silently claim another server's folders. */
   server: string;
   kind: NetboxObjectKind;

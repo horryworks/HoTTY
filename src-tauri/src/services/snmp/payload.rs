@@ -112,37 +112,6 @@ pub struct SnmpStatusPayload {
     pub timestamp: String,
 }
 
-/// One entry in the discovery listing.
-#[derive(Debug, Clone, Serialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct SnmpInterfaceInfo {
-    pub if_index: u32,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub descr: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub alias: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub speed_mbps: Option<u32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub oper_status: Option<u8>,
-}
-
-/// Result of the one-shot "list interfaces" / connection test.
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SnmpDiscovery {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub sys_name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub sys_descr: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub sys_uptime_secs: Option<u64>,
-    pub counter_width: &'static str,
-    pub interfaces: Vec<SnmpInterfaceInfo>,
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -239,28 +208,5 @@ mod tests {
         let json = serde_json::to_value(&payload).unwrap();
         assert_eq!(json["paneId"], "if-abc");
         assert_eq!(json["state"], "connecting");
-    }
-
-    #[test]
-    fn discovery_serializes() {
-        let discovery = SnmpDiscovery {
-            sys_name: Some("switch-01".into()),
-            sys_descr: Some("Example NOS 1.0".into()),
-            sys_uptime_secs: Some(60),
-            counter_width: "hc",
-            interfaces: vec![SnmpInterfaceInfo {
-                if_index: 1,
-                name: Some("Gi0/1".into()),
-                descr: Some("GigabitEthernet0/1".into()),
-                alias: None,
-                speed_mbps: Some(1000),
-                oper_status: Some(1),
-            }],
-        };
-        let json = serde_json::to_value(&discovery).unwrap();
-        assert_eq!(json["sysName"], "switch-01");
-        assert_eq!(json["counterWidth"], "hc");
-        assert_eq!(json["interfaces"][0]["speedMbps"], 1000);
-        assert!(json["interfaces"][0].get("alias").is_none());
     }
 }

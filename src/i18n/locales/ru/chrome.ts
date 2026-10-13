@@ -3,6 +3,8 @@
 // каркаса. Источник истины — английский.
 export const chrome = {
   tabBar: {
+    protocolSerial: 'Последовательный порт',
+    protocolCmd: 'Командная строка',
     fileServer: 'Файловый сервер',
     newSession: 'Новая сессия',
     notInstalled: 'Не установлено',
