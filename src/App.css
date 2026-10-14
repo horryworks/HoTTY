@@ -130,13 +130,28 @@
 
 .pane-empty {
   flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* PaneBadge.css lays the mark beside the hint when this is short. */
+  container: pane-empty / size;
+  color: var(--accent-color);
+  background: transparent;
+}
+
+.pane-empty-body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
   gap: 10px;
-  color: var(--accent-color);
-  background: transparent;
+}
+
+@container pane-empty (max-height: 80px) {
+  .pane-empty-body {
+    flex-direction: row;
+    gap: 8px;
+  }
 }
 
 .pane-empty .drop-hint {

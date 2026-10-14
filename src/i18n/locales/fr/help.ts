@@ -98,7 +98,7 @@ export const help = {
     resizing:
       '<0>Redimensionnement :</0> redimensionnez tout en faisant glisser les séparateurs ou le <1>point d\'intersection 2D</1> (là où 4 volets se rejoignent).',
     emptyPaneHints:
-      '<0>Indices des volets vides :</0> les cellules de grille vides affichent leur numéro de volet et une invite « Déposer l\'onglet ici » pour que vous sachiez où déposer un onglet.',
+      '<0>Indices des volets vides :</0> les volets vides (cellules de grille et barres latérales) affichent leur numéro de volet et une invite « Déposer l\'onglet ici » pour que vous sachiez où déposer un onglet.',
     lineWrap:
       '<0>Bascule du retour à la ligne :</0> désactivez <1>Paramètres → Apparence → Retour à la ligne</1> pour activer une barre de défilement horizontale sur les volets de terminal. La vue défile automatiquement pour garder le curseur visible lorsque vous tapez au-delà du bord droit, et revient à la colonne 0 sur Entrée. La barre de défilement verticale et le marqueur de prompt restent ancrés au bord droit du volet quelle que soit la position de défilement horizontal.',
     fixedTerminalSize:

@@ -21,3 +21,14 @@
   border-radius: 8px;
   font-size: calc(var(--font-size-base) * 1.8);
 }
+
+/* A top or bottom bar pulled thin is too short for the large mark: it drops to
+ * the tab-row size and sits beside the hint (App.css), so neither is cut off. */
+@container pane-empty (max-height: 80px) {
+  .pane-badge.pane-badge-large {
+    width: 16px;
+    height: 16px;
+    border-radius: 3px;
+    font-size: calc(var(--font-size-base) - 3px);
+  }
+}

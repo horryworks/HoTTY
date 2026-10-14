@@ -98,7 +98,7 @@ export const help = {
     resizing:
       '<0>Redimensionar:</0> redimensione todo arrastrando los divisores o el <1>punto de intersección 2D</1> (donde se encuentran 4 paneles).',
     emptyPaneHints:
-      '<0>Sugerencias de paneles vacíos:</0> las celdas de cuadrícula vacías muestran su número de panel y un mensaje "Soltar pestaña aquí" para que sepa dónde soltar una pestaña.',
+      '<0>Sugerencias de paneles vacíos:</0> los paneles vacíos (celdas de cuadrícula y barras laterales) muestran su número de panel y un mensaje "Soltar pestaña aquí" para que sepa dónde soltar una pestaña.',
     lineWrap:
       '<0>Alternar ajuste de línea:</0> desactive <1>Configuración → Apariencia → Ajuste de línea</1> para activar una barra de desplazamiento horizontal en los paneles del terminal. La vista se desplaza automáticamente para mantener el cursor a la vista mientras escribe más allá del borde derecho, y vuelve a la columna 0 al pulsar Enter. La barra de desplazamiento vertical y el marcador de prompt permanecen anclados al borde derecho del panel independientemente de la posición de desplazamiento horizontal.',
     fixedTerminalSize:

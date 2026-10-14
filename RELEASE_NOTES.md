@@ -1,5 +1,14 @@
 # Release Notes
 
+## v2.1.1
+
+**Edge bars are numbered after the grid.** Every pane on screen now carries a number, edge bars included, in the order Ctrl+Tab moves through them.
+
+### Improvements
+
+- **Edge bars carry a number instead of a letter.** A left, right, top or bottom bar is numbered after the grid cells (left, right, top, bottom), so the mark in the dock's tab list, in the pane header and the Ctrl+Tab order all agree. With a 2×2 grid and the right bar shown, the right bar is 5.
+- **Empty edge bars show their number** above "Drop Tab Here", as empty grid cells already did. When a pane is too short for the large mark — a top or bottom bar pulled thin — the number shrinks and sits beside the hint instead of being cut off.
+
 ## v2.1.0
 
 **The v2.1.0 stable release, consolidating the v2.1.0 beta series: a new layout, an AI that can open its own terminals, NetBox in the host tree, and in-app version switching.** The tab bar is gone — tabs now live in a dock that sits on any edge of the window together with the icon column, and every New Session entry opens only what it needs. The four tool panes (Ping Monitor, Interface Traffic, File Server, Log Viewer) were rebuilt so that their state and Start/Stop sit in one place. The AI can now ask to open a PC shell or an SSH/Telnet session for itself, approved from a card in the chat, and AI Chat can move into a window of its own. The host tree can mirror NetBox's Regions and Sites and sort hosts into them by IP range; HoTTY can generate and manage SSH keys; and Settings → Versions installs any published release, forward or back. **If you use the Web Browser pane or AI auto-execute, read Security below** — this release closes holes in both.

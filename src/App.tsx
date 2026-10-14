@@ -1126,8 +1126,10 @@ function App() {
             />
           ) : (
             <div className="pane-empty">
-              <PaneBadge paneId={paneId} number={number} variant="large" />
-              <span className="drop-hint">{t('chrome.pane.dropTabHere')}</span>
+              <div className="pane-empty-body">
+                <PaneBadge paneId={paneId} number={number} variant="large" />
+                <span className="drop-hint">{t('chrome.pane.dropTabHere')}</span>
+              </div>
             </div>
           )}
           </Suspense>

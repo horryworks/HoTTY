@@ -132,11 +132,11 @@ describe('sessionDetail', () => {
 });
 
 describe('paneBadge', () => {
-  it('numbers grid cells and names edge bars', () => {
+  it('tells a grid cell from an edge bar', () => {
     expect(paneBadge('0')).toEqual({ kind: 'grid', index: 0 });
     expect(paneBadge('5')).toEqual({ kind: 'grid', index: 5 });
-    expect(paneBadge('bar-left')).toEqual({ kind: 'edge', edge: 'left' });
-    expect(paneBadge('bar-bottom')).toEqual({ kind: 'edge', edge: 'bottom' });
+    expect(paneBadge('bar-left')).toEqual({ kind: 'edge' });
+    expect(paneBadge('bar-bottom')).toEqual({ kind: 'edge' });
     expect(paneBadge('nonsense')).toBeNull();
   });
 });

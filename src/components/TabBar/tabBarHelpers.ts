@@ -1,7 +1,6 @@
 import type { SessionRecord } from '../../hooks/useSessionManager';
 import type { ProtocolId } from '../../types/appTypes';
 import type { FeaturePaneInfo, FeaturePaneType } from '../../utils/paneTypes';
-import type { SidebarEdge } from '../../stores/sidebarLayoutStore';
 
 export interface TabItem {
   id: string;
@@ -133,18 +132,16 @@ export function sessionDetail(rec: Pick<SessionRecord, 'protocol' | 'connectionC
   }
 }
 
-/** The mark a pane carries in the tab list and in its own corner: a grid cell
- *  is numbered 1..6, an edge bar is named by its edge. */
-export type PaneBadge =
-  | { kind: 'grid'; index: number }
-  | { kind: 'edge'; edge: SidebarEdge };
+/** What kind of pane carries a mark, which sets the mark's color: a grid cell
+ *  (its own color) or an edge bar (the edge color). The number itself comes
+ *  from `paneNumber` in paneStore. */
+export type PaneBadge = { kind: 'grid'; index: number } | { kind: 'edge' };
 
 const EDGE_PANE = /^bar-(left|right|top|bottom)$/;
 
 export function paneBadge(paneId: string): PaneBadge | null {
   if (/^\d+$/.test(paneId)) return { kind: 'grid', index: Number(paneId) };
-  const m = EDGE_PANE.exec(paneId);
-  return m ? { kind: 'edge', edge: m[1] as SidebarEdge } : null;
+  return EDGE_PANE.test(paneId) ? { kind: 'edge' } : null;
 }
 
 export interface PlacedTab {

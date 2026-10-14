@@ -98,7 +98,7 @@ export const help = {
     resizing:
       '<0>Resizing:</0> Resize everything by dragging the dividers or the <1>2D intersection point</1> (where 4 panes meet).',
     emptyPaneHints:
-      '<0>Empty pane hints:</0> Empty grid cells show their pane number and a "Drop Tab Here" prompt so you know where to drop a tab.',
+      '<0>Empty pane hints:</0> Empty panes — grid cells and edge bars — show their pane number and a "Drop Tab Here" prompt so you know where to drop a tab.',
     lineWrap:
       '<0>Line Wrap toggle:</0> Disable <1>Settings → Appearance → Line Wrap</1> to enable a horizontal scrollbar on terminal panes. The view auto-scrolls to keep the cursor in sight as you type past the right edge, and snaps back to column 0 on Enter. The vertical scrollbar and prompt marker stay anchored to the pane\'s right edge regardless of horizontal scroll position.',
     fixedTerminalSize:

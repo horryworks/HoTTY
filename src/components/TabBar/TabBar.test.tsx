@@ -731,6 +731,21 @@ describe('TabBar — groups, unread output and moving tabs', () => {
     expect(screen.getByText('SSH · 192.0.2.2')).toBeTruthy();
   });
 
+  it('numbers a tab in an edge bar after the grid', () => {
+    const { container } = render(
+      <Bar
+        {...defaultProps}
+        tabItems={items}
+        visiblePanes={['0', '1', 'bar-right', 'bar-bottom']}
+        paneAllocations={{ '0': 'a', '1': null, 'bar-right': 'c', 'bar-bottom': 'b' }}
+      />
+    );
+    const shown = container.querySelector('.tab-group-shown')!;
+    expect(shown.querySelector('[data-pane-badge="0"]')?.textContent).toBe('1');
+    expect(shown.querySelector('[data-pane-badge="bar-right"]')?.textContent).toBe('3');
+    expect(shown.querySelector('[data-pane-badge="bar-bottom"]')?.textContent).toBe('4');
+  });
+
   it('a hidden tab with new output shows the count and the newest line', () => {
     useTabActivityStore.setState({ activity: { b: { lines: 3, lastLine: '%LINK-3-UPDOWN: Gi0 up' } } });
     const { container } = render(<Bar {...defaultProps} tabItems={items} visibleTabIds={['a']} />);
