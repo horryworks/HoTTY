@@ -51,6 +51,13 @@ describe('WatchButton', () => {
     expect(onParentClick).not.toHaveBeenCalled();
   });
 
+  it('shows an "AI" mark that screen readers skip', () => {
+    render(<WatchButton isWatching={false} onClick={() => {}} />);
+    const mark = screen.getByRole('button').querySelector('.tab-watch-mark');
+    expect(mark?.textContent?.trim()).toBe('AI');
+    expect(mark?.getAttribute('aria-hidden')).toBe('true');
+  });
+
   it('is a plain button, so it never submits a surrounding form', () => {
     render(<WatchButton isWatching={false} onClick={() => {}} />);
     expect(screen.getByRole('button').getAttribute('type')).toBe('button');

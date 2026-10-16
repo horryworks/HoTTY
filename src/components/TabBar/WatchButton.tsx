@@ -32,22 +32,9 @@ export function WatchButton({ isWatching, colorIndex, onClick }: WatchButtonProp
       }}
       aria-label={isWatching ? t('chrome.tabBar.aiMonitorStopAria') : t('chrome.tabBar.aiMonitorStartAria')}
     >
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <circle
-          cx="12"
-          cy="12"
-          r="10"
-          fill={isWatching ? 'var(--tab-watch-color, var(--success-color))' : 'currentColor'}
-          opacity={isWatching ? 1 : 0.7}
-        />
-        <circle
-          cx="12"
-          cy="12"
-          r="6"
-          fill={isWatching ? 'var(--tab-watch-color, var(--accent-light))' : 'currentColor'}
-          opacity={isWatching ? 0.9 : 0.45}
-        />
-      </svg>
+      <span className="tab-watch-mark" aria-hidden="true">
+        AI
+      </span>
     </button>
   );
 }

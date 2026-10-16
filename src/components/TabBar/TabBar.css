@@ -339,8 +339,33 @@
   display: none !important;
 }
 
+/* "AI" in a rounded frame, so the button says what it links to. */
+.tab-watch-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 12px;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  font-family: var(--ui-font-family);
+  font-size: calc(var(--font-size-base) - 6px);
+  font-weight: 700;
+  letter-spacing: -0.2px;
+  line-height: 1;
+}
+
+.tab-watch-btn:hover {
+  color: var(--text-primary);
+}
+
 .tab-watch-btn.watching {
+  color: var(--tab-watch-color, var(--success-color));
   animation: ai-glow-pulse 1.5s infinite ease-in-out;
+}
+
+.tab-watch-btn.watching .tab-watch-mark {
+  background: color-mix(in srgb, var(--tab-watch-color, var(--success-color)) 18%, transparent);
 }
 
 /* Pulse color follows the owning conversation (--tab-watch-color, set inline
