@@ -87,11 +87,33 @@ describe('AIChatPane link control (state-dependent)', () => {
         expect(chips.length).toBe(1);
         expect(chips[0].textContent).toContain('Local USG');
         // No "+" picker: no OTHER sessions to add (linkableSessions omitted).
-        expect(screen.queryByRole('combobox', { name: 'Watch a terminal' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Watch a terminal' })).toBeNull();
 
         // Removing the chip detaches via onRemoveLink(id).
         await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Stop watching Local USG' })); });
         expect(onRemoveLink).toHaveBeenCalledWith('sess-1');
+    });
+
+    it('marks a watched terminal with the number of the pane showing it, and nothing when it is off screen', async () => {
+        render(makePane({
+            chatState: {
+                selectedModel: 'gemini-pro',
+                systemInstruction: 'x',
+                activeTabId: 't1',
+                tabs: [{ id: 't1', title: 'Local USG', ordinal: 1, linkedSessions: [{ sessionId: 'sess-1' }, { sessionId: 'sess-2' }] }],
+            },
+            sessions: new Map([
+                ['sess-1', { id: 'sess-1', displayName: 'Local USG', status: 'connected' }],
+                ['sess-2', { id: 'sess-2', displayName: 'Core SW', status: 'connected' }],
+            ]),
+            // sess-1 is in grid pane "1" (shown as number 2); sess-2 is a hidden tab.
+            paneOfSession: (sid: string) => (sid === 'sess-1' ? { paneId: '1', number: 2 } : null),
+        }));
+        await act(async () => { useAiAuthStore.setState({ isAuthenticated: true }); });
+
+        const chips = Array.from(document.querySelectorAll('.ai-chat-linked-chip'));
+        expect(chips[0].querySelector('.pane-badge')?.textContent).toBe('2');
+        expect(chips[1].querySelector('.pane-badge')).toBeNull();
     });
 
     it('shows the "+" picker (excluding watched); choosing a session calls onAddLink(id)', async () => {
@@ -112,15 +134,16 @@ describe('AIChatPane link control (state-dependent)', () => {
         }));
         await act(async () => { useAiAuthStore.setState({ isAuthenticated: true }); });
 
-        const picker = screen.getByRole('combobox', { name: 'Watch a terminal' }) as HTMLSelectElement;
-        expect(picker).toBeTruthy();
+        // The "+" opens a menu of terminals that can be watched.
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Watch a terminal' })); });
+        const items = screen.getAllByRole('menuitem').map((el) => el.textContent);
         // The already-watched sess-1 is excluded; only sess-2 is offered.
-        const values = Array.from(picker.querySelectorAll('option')).map((o) => (o as HTMLOptionElement).value);
-        expect(values).toContain('sess-2');
-        expect(values).not.toContain('sess-1');
+        expect(items).toEqual(['Core SW']);
 
-        await act(async () => { fireEvent.change(picker, { target: { value: 'sess-2' } }); });
+        await act(async () => { fireEvent.click(screen.getByRole('menuitem', { name: 'Core SW' })); });
         expect(onAddLink).toHaveBeenCalledWith('sess-2');
+        // Choosing closes the menu.
+        expect(screen.queryByRole('menuitem')).toBeNull();
     });
 });
 

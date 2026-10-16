@@ -130,7 +130,7 @@ describe('AIChatPane model-select hint', () => {
         await act(async () => { await Promise.resolve(); });
 
         // Model auto-selected → normal placeholder, no hint.
-        expect(screen.getByPlaceholderText('Type a message...')).toBeTruthy();
+        expect(screen.getByPlaceholderText(/^(Type a message\.\.\.|Ask about .+)$/)).toBeTruthy();
         expect(screen.queryByText(HINT)).toBeNull();
     });
 

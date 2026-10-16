@@ -1,8 +1,9 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ChatTab } from '../../hooks/useAiChat';
 import { useTabKeyboardNav } from '../../hooks/useTabKeyboardNav';
 import { ScrollStrip } from '../ScrollStrip/ScrollStrip';
+import { DockMenu } from '../Dock/DockMenu';
 import { conversationColorIndex, conversationColorVar } from '../../utils/conversationColor';
 import './TabStrip.css';
 
@@ -15,11 +16,18 @@ interface TabStripProps {
     /** Tabs with an in-flight AI response — shown with a spinner so a background
      *  conversation streaming in parallel is visible without switching to it. */
     streamingTabIds?: ReadonlySet<string>;
+    /** Clear a conversation (right-click menu). Omitted → no Clear item. */
+    onClear?: (tabId: string) => void;
+    /** Whether a conversation has anything to clear. */
+    canClear?: (tabId: string) => boolean;
 }
 
-export const TabStrip: React.FC<TabStripProps> = ({ tabs, activeTabId, onSelect, onClose, onAdd, streamingTabIds }) => {
+export const TabStrip: React.FC<TabStripProps> = ({ tabs, activeTabId, onSelect, onClose, onAdd, streamingTabIds, onClear, canClear }) => {
     const { t } = useTranslation();
     const activeTabRef = useRef<HTMLDivElement | null>(null);
+    // Right-click menu: which tab it is for, and that tab's element to sit under.
+    const [menuTabId, setMenuTabId] = useState<string | null>(null);
+    const menuAnchorRef = useRef<HTMLElement | null>(null);
     const { onKeyDown } = useTabKeyboardNav({
         ids: tabs.map((tab) => tab.id),
         activeId: activeTabId,
@@ -56,6 +64,11 @@ export const TabStrip: React.FC<TabStripProps> = ({ tabs, activeTabId, onSelect,
                             className={`ai-chat-tab${active ? ' active' : ''}${streaming ? ' streaming' : ''}`}
                             style={{ '--conv-color': convColor } as React.CSSProperties}
                             onClick={() => onSelect(tab.id)}
+                            onContextMenu={(e) => {
+                                e.preventDefault();
+                                menuAnchorRef.current = e.currentTarget;
+                                setMenuTabId(tab.id);
+                            }}
                             onKeyDown={(e) => {
                                 if (e.key === 'Enter' || e.key === ' ') {
                                     e.preventDefault();
@@ -96,6 +109,35 @@ export const TabStrip: React.FC<TabStripProps> = ({ tabs, activeTabId, onSelect,
                     +
                 </button>
             </ScrollStrip>
+            <DockMenu
+                open={menuTabId !== null}
+                onClose={() => setMenuTabId(null)}
+                anchorRef={menuAnchorRef}
+                placement="down"
+                aria-label={t('aiChat.tabStrip.ariaLabel')}
+            >
+                {menuTabId !== null && onClear && (
+                    <button
+                        type="button"
+                        role="menuitem"
+                        className="dock-menu-item"
+                        disabled={canClear ? !canClear(menuTabId) : false}
+                        onClick={() => { const id = menuTabId; setMenuTabId(null); onClear(id); }}
+                    >
+                        {t('aiChat.pane.clearConversation')}
+                    </button>
+                )}
+                {menuTabId !== null && (
+                    <button
+                        type="button"
+                        role="menuitem"
+                        className="dock-menu-item"
+                        onClick={() => { const id = menuTabId; setMenuTabId(null); onClose(id); }}
+                    >
+                        {t('aiChat.tabStrip.closeMenuItem')}
+                    </button>
+                )}
+            </DockMenu>
         </div>
     );
 };

@@ -134,7 +134,7 @@ async function authenticate() {
 }
 
 async function sendAndComplete(text: string, content: string = MODEL_CONTENT) {
-    const textarea = screen.getByPlaceholderText('Type a message...');
+    const textarea = screen.getByPlaceholderText(/^(Type a message\.\.\.|Ask about .+)$/);
     await act(async () => {
         fireEvent.change(textarea, { target: { value: text } });
     });
@@ -168,8 +168,9 @@ describe('AIChatPane auto-execute after Clear Conversation', () => {
         expect(h.onRunCommand).toHaveBeenLastCalledWith('sess-1', 'display version', 't1');
 
         // Clear the conversation (messages exist → confirm dialog), then confirm.
+        await act(async () => { fireEvent.contextMenu(screen.getByRole('tab', { selected: true })); });
         await act(async () => {
-            fireEvent.click(screen.getByRole('button', { name: 'Clear this conversation' }));
+            fireEvent.click(screen.getByRole('menuitem', { name: 'Clear Conversation' }));
         });
         await act(async () => {
             fireEvent.click(screen.getByText('Clear conversation'));
@@ -258,9 +259,9 @@ describe('AIChatPane auto-execute target= routing (multi-watch)', () => {
             await sendAndComplete('prep', 'Disabling the pager.\n\n```execute\nexport PAGER=cat\n```');
 
             await act(async () => { rerender(makePane(props('sess-2', 'disconnected'))); });
-            expect(screen.getByText(/Git Bash/, { selector: '.ai-run-target-stale' })).toBeTruthy();
+            expect(screen.getByText(/Git Bash/, { selector: '.ai-run-target-stale .ai-run-target-text' })).toBeTruthy();
             await act(async () => {
-                fireEvent.click(screen.getByRole('button', { name: /Run in Terminal/i }));
+                fireEvent.click(screen.getByRole('button', { name: /^Run$/ }));
             });
             expect(h.onRunCommand).not.toHaveBeenCalled();
             expect(h.onEnqueuePending).toHaveBeenCalledWith('t1', expect.stringContaining('not connected'));
@@ -274,7 +275,7 @@ describe('AIChatPane auto-execute target= routing (multi-watch)', () => {
             // The shell came back under a new session id, and the focus is elsewhere.
             await act(async () => { rerender(makePane(props('sess-2', 'connected', 'sess-9'))); });
             await act(async () => {
-                fireEvent.click(screen.getByRole('button', { name: /Run in Terminal/i }));
+                fireEvent.click(screen.getByRole('button', { name: /^Run$/ }));
             });
             expect(h.onRunCommand).toHaveBeenLastCalledWith('sess-9', 'export PAGER=cat', 't1');
         });
@@ -289,7 +290,7 @@ describe('AIChatPane auto-execute target= routing (multi-watch)', () => {
             unwatched.chatState.tabs[0].linkedSessions = [{ sessionId: 'sess-2' }];
             await act(async () => { rerender(makePane(unwatched)); });
             await act(async () => {
-                fireEvent.click(screen.getByRole('button', { name: /Run in Terminal/i }));
+                fireEvent.click(screen.getByRole('button', { name: /^Run$/ }));
             });
             expect(h.onRunCommand).not.toHaveBeenCalled();
             expect(h.onEnqueuePending).toHaveBeenCalledWith('t1', expect.stringContaining('not connected'));
@@ -300,12 +301,12 @@ describe('AIChatPane auto-execute target= routing (multi-watch)', () => {
             await authenticate();
             await sendAndComplete('prep', 'Disabling the pager.\n\n```execute\nexport PAGER=cat\n```');
             await act(async () => {
-                fireEvent.click(screen.getByRole('button', { name: /Run in Terminal/i }));
+                fireEvent.click(screen.getByRole('button', { name: /^Run$/ }));
             });
             expect(h.onRunCommand).toHaveBeenLastCalledWith('sess-1', 'export PAGER=cat', 't1');
             expect(screen.getByText('Executed')).toBeTruthy();
             expect(screen.getByRole('button', { name: /Run again/i })).toBeTruthy();
-            expect(screen.queryByRole('button', { name: /Don't Execute/i })).toBeNull();
+            expect(screen.queryByRole('button', { name: /^Skip$/ })).toBeNull();
         });
     });
 });
@@ -347,7 +348,7 @@ describe('AIChatPane auto-execute when the linked terminal is not live', () => {
             await sendAndComplete('check quic');
 
             await act(async () => {
-                fireEvent.click(screen.getByRole('button', { name: /Run in Terminal/i }));
+                fireEvent.click(screen.getByRole('button', { name: /^Run$/ }));
             });
 
             expect(h.onRunCommand).not.toHaveBeenCalled();
@@ -804,7 +805,7 @@ describe('AIChatPane "Don\'t Execute" (decline)', () => {
 
             // The decline button sits next to Run in Terminal.
             await act(async () => {
-                fireEvent.click(screen.getByRole('button', { name: /Don't Execute/i }));
+                fireEvent.click(screen.getByRole('button', { name: /^Skip$/ }));
             });
 
             // App side: never sent to the terminal…
@@ -816,8 +817,8 @@ describe('AIChatPane "Don\'t Execute" (decline)', () => {
             );
             // The block now shows the Declined badge; Run/Decline buttons are gone.
             expect(screen.getByText('Declined')).toBeTruthy();
-            expect(screen.queryByRole('button', { name: /Run in Terminal/i })).toBeNull();
-            expect(screen.queryByRole('button', { name: /Don't Execute/i })).toBeNull();
+            expect(screen.queryByRole('button', { name: /^Run$/ })).toBeNull();
+            expect(screen.queryByRole('button', { name: /^Skip$/ })).toBeNull();
         } finally {
             h.settings.commandExecutionMode = 'auto-execute-safe';
         }
@@ -835,7 +836,7 @@ describe('AIChatPane "Don\'t Execute" (decline)', () => {
 
         // Decline while classification is still pending.
         await act(async () => {
-            fireEvent.click(screen.getByRole('button', { name: /Don't Execute/i }));
+            fireEvent.click(screen.getByRole('button', { name: /^Skip$/ }));
         });
 
         // Classification resolves read-only — which WOULD auto-run, but the decline guard wins.
@@ -866,7 +867,7 @@ describe('AIChatPane send while a response is streaming', () => {
         renderPane({ onRunCommand: h.onRunCommand });
         await authenticate();
 
-        const textarea = screen.getByPlaceholderText('Type a message...') as HTMLTextAreaElement;
+        const textarea = screen.getByPlaceholderText(/^(Type a message\.\.\.|Ask about .+)$/) as HTMLTextAreaElement;
 
         // First send — starts streaming. No `done` is fired, so the stream stays live.
         await act(async () => { fireEvent.change(textarea, { target: { value: 'first question' } }); });
@@ -915,7 +916,7 @@ describe('AIChatPane send while a response is streaming', () => {
         renderPane({ onRunCommand: h.onRunCommand });
         await authenticate();
 
-        const textarea = screen.getByPlaceholderText('Type a message...') as HTMLTextAreaElement;
+        const textarea = screen.getByPlaceholderText(/^(Type a message\.\.\.|Ask about .+)$/) as HTMLTextAreaElement;
         await act(async () => { fireEvent.change(textarea, { target: { value: 'hello' } }); });
         await act(async () => { fireEvent.keyDown(textarea, { key: 'Enter' }); });
         await act(async () => { await Promise.resolve(); await Promise.resolve(); });
@@ -1036,7 +1037,7 @@ describe('AIChatPane cancel never leaks machine text into the human prompt texta
         await act(async () => { fireEvent.click(stop!); });
 
         // The human prompt textarea must stay empty — no terminal output leaked in.
-        const textarea = screen.getByPlaceholderText('Type a message...') as HTMLTextAreaElement;
+        const textarea = screen.getByPlaceholderText(/^(Type a message\.\.\.|Ask about .+)$/) as HTMLTextAreaElement;
         expect(textarea.value).toBe('');
     });
 
@@ -1051,7 +1052,7 @@ describe('AIChatPane cancel never leaks machine text into the human prompt texta
         await authenticate();
         await act(async () => { await Promise.resolve(); });
 
-        const textarea = screen.getByPlaceholderText('Type a message...') as HTMLTextAreaElement;
+        const textarea = screen.getByPlaceholderText(/^(Type a message\.\.\.|Ask about .+)$/) as HTMLTextAreaElement;
         await act(async () => { fireEvent.change(textarea, { target: { value: 'show me the routes' } }); });
         await act(async () => { fireEvent.keyDown(textarea, { key: 'Enter' }); });
 
@@ -1086,7 +1087,7 @@ describe('AIChatPane routes per-tab (paneId::tabId) response events', () => {
         await act(async () => { await Promise.resolve(); });
 
         // Send a message so tab t1 is streaming (tracked per-tab in streamingTabIds).
-        const textarea = screen.getByPlaceholderText('Type a message...');
+        const textarea = screen.getByPlaceholderText(/^(Type a message\.\.\.|Ask about .+)$/);
         await act(async () => { fireEvent.change(textarea, { target: { value: 'hello' } }); });
         await act(async () => { fireEvent.keyDown(textarea, { key: 'Enter' }); });
 
@@ -1136,7 +1137,7 @@ describe('AIChatPane image attachments', () => {
     it('pastes an image → shows a thumbnail → sends it as an image-only message', async () => {
         renderPane({});
         await authenticate();
-        const textarea = screen.getByPlaceholderText('Type a message...');
+        const textarea = screen.getByPlaceholderText(/^(Type a message\.\.\.|Ask about .+)$/);
 
         await pasteImage(textarea, makePng());
         // The pending-attachment thumbnail is rendered.
@@ -1157,7 +1158,7 @@ describe('AIChatPane image attachments', () => {
     it('removes a pending image via its × button before sending', async () => {
         renderPane({});
         await authenticate();
-        const textarea = screen.getByPlaceholderText('Type a message...');
+        const textarea = screen.getByPlaceholderText(/^(Type a message\.\.\.|Ask about .+)$/);
 
         await pasteImage(textarea, makePng());
         expect(document.querySelector('.ai-chat-thumb-img')).toBeTruthy();
@@ -1171,7 +1172,7 @@ describe('AIChatPane image attachments', () => {
     it('queues the attached image when a send happens while streaming', async () => {
         renderPane({});
         await authenticate();
-        const textarea = screen.getByPlaceholderText('Type a message...');
+        const textarea = screen.getByPlaceholderText(/^(Type a message\.\.\.|Ask about .+)$/);
 
         // Start a stream (no `done`, so it stays live).
         await act(async () => { fireEvent.change(textarea, { target: { value: 'first' } }); });

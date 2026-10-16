@@ -1072,6 +1072,10 @@ function App() {
               onClosePane={() => handleCloseTab(featureInfo.id)}
               onSelectTab={(tabId) => setActiveTab(featureInfo.id, tabId)}
               onFlashSessionPane={flashSessionPane}
+              paneOfSession={(sid) => {
+                const pid = visiblePaneIds.find((p) => paneAllocations[p] === sid);
+                return pid ? { paneId: pid, number: paneNumber(visiblePaneIds, pid) } : null;
+              }}
               sessions={sessions}
               onRunCommand={(targetId, cmd, originatingTabId) =>
                 aiOrch.onRunCommand(targetId, cmd, originatingTabId, featureInfo.id)

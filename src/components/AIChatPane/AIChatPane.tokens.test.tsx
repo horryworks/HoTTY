@@ -91,7 +91,7 @@ describe('AIChatPane per-tab token accounting (2.5c)', () => {
         await act(async () => { useAiAuthStore.setState({ isAuthenticated: true }); });
 
         // Send on t1 and complete with usage.
-        const textarea = screen.getByPlaceholderText('Type a message...');
+        const textarea = screen.getByPlaceholderText(/^(Type a message\.\.\.|Ask about .+)$/);
         await act(async () => { fireEvent.change(textarea, { target: { value: 'hi' } }); });
         await act(async () => { fireEvent.keyDown(textarea, { key: 'Enter' }); });
         await act(async () => {
@@ -105,18 +105,18 @@ describe('AIChatPane per-tab token accounting (2.5c)', () => {
         await act(async () => { await Promise.resolve(); });
 
         // t1 shows its running total.
-        expect(screen.getByText('120 in / 30 out tokens')).toBeTruthy();
+        expect(screen.getByTitle('120 in / 30 out tokens')).toBeTruthy();
 
         // Switch to t2 (no tokens) → the t1 total must NOT be shown.
         await act(async () => {
             rerender(makePane({ chatState: { ...twoTabState, activeTabId: 't2' } }));
         });
-        expect(screen.queryByText('120 in / 30 out tokens')).toBeNull();
+        expect(screen.queryByTitle('120 in / 30 out tokens')).toBeNull();
 
         // Back to t1 → the total is still there (per-tab, not lost).
         await act(async () => {
             rerender(makePane({ chatState: { ...twoTabState, activeTabId: 't1' } }));
         });
-        expect(screen.getByText('120 in / 30 out tokens')).toBeTruthy();
+        expect(screen.getByTitle('120 in / 30 out tokens')).toBeTruthy();
     });
 });

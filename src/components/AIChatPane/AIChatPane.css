@@ -7,120 +7,58 @@
     overflow: hidden;
 }
 
-/* ── Header ── */
-.ai-chat-header {
+/* ── Toolbar ── */
+/* The pane toolbar every tool pane has (36px, header background): watched
+   terminals on the left, execution mode and window buttons at the right end. */
+.ai-chat-toolbar {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    /* Keeps the scrolling chip row off the right-hand action in a narrow pane. */
     gap: 8px;
-    padding: 0 12px;
+    min-height: 36px;
+    padding: 6px 10px;
     background: var(--ai-header-bg);
     border-bottom: 1px solid var(--border-color);
-    height: 48px;
-    min-height: 48px;
     box-sizing: border-box;
+    flex-shrink: 0;
 }
 
-.ai-chat-header-left {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    min-width: 0;
-}
-
-/* Phase 2: a single-line row of watched-terminal chips followed by the "+" add
-   picker. Scrolls horizontally within the fixed-height header when many terminals
-   are watched, so the 48px header stays intact (the terminal remains the star). */
+/* The watched-terminal chips and the "+" picker. Takes the free width and
+   scrolls sideways when many terminals are watched, so the right-hand controls
+   never move. */
 .ai-chat-link-row {
     display: flex;
     align-items: center;
     gap: 6px;
     min-width: 0;
-    flex: 0 1 auto;
+    flex: 1 1 auto;
     overflow-x: auto;
     overflow-y: hidden;
+    scrollbar-width: none;
 }
 
 .ai-chat-link-row > * {
     flex-shrink: 0;
 }
 
-.ai-chat-link-row::-webkit-scrollbar {
-    height: 4px;
-}
-
-.ai-chat-link-row::-webkit-scrollbar-thumb {
-    background: var(--border-color);
-    border-radius: 2px;
-}
-
-.ai-chat-logo {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-/* The header's single action group (clear conversation), pinned right so the
-   watched-terminal chips keep the whole left side to scroll in. */
-.ai-chat-header-right {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    flex-shrink: 0;
-}
-
-/* Clear-conversation pill. Hover is danger-toned, not accent: the accent blue is
-   reserved for run/send actions (Run in Terminal, Send, the active tab). */
-.ai-chat-new-chat-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 4px 10px;
-    background: var(--bg-secondary);
-    color: var(--text-secondary);
-    border: 1px solid var(--border-color);
-    border-radius: 999px;
-    cursor: pointer;
-    white-space: nowrap;
-    font-size: calc(var(--font-size-base) - 1px);
-    font-family: var(--ui-font-family);
-    transition: background-color 0.1s, border-color 0.1s, color 0.1s;
-}
-
-.ai-chat-new-chat-btn:hover:not(:disabled) {
-    background-color: var(--color-danger-bg);
-    border-color: var(--color-danger-border);
-    color: var(--color-danger);
-}
-
-.ai-chat-new-chat-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-
-/* Move-between-windows and pin-on-top pills. Same shape as the clear pill, but
-   a neutral hover: neither action is destructive, and the accent blue stays
-   reserved for run/send. The "on" state reuses the sidebar's active-toggle tint
-   so every toggle in the app reads the same way. */
+/* Icon-only window buttons (move to another window, keep on top). */
 .ai-chat-window-btn {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    padding: 4px 10px;
-    background: var(--bg-secondary);
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    background: transparent;
     color: var(--text-secondary);
-    border: 1px solid var(--border-color);
-    border-radius: 999px;
+    border: 1px solid transparent;
+    border-radius: 4px;
     cursor: pointer;
-    white-space: nowrap;
-    font-size: calc(var(--font-size-base) - 1px);
-    font-family: var(--ui-font-family);
-    transition: background-color 0.1s, border-color 0.1s, color 0.1s;
+    flex-shrink: 0;
+    transition: background-color 0.1s, color 0.1s;
 }
 
 .ai-chat-window-btn:hover:not(:disabled) {
-    background-color: var(--btn-secondary-hover-bg);
+    background-color: var(--hover-bg);
     color: var(--text-primary);
 }
 
@@ -135,65 +73,57 @@
     cursor: not-allowed;
 }
 
-.ai-chat-header-divider {
-    width: 1px;
-    height: 22px;
-    background: var(--border-color);
-    margin: 0 6px;
-    flex-shrink: 0;
-}
-
-/* Unified link control: one accent pill holding the terminal name (click = jump to
-   terminal) and a caret that opens the re-link picker (a transparent <select>
-   overlaid on it). Replaces the old separate chip + link <select>. */
+/* One watched terminal: [pane number] name, then × to stop watching. Square
+   corners like every other control in the app. */
 .ai-chat-link {
     display: inline-flex;
     align-items: center;
     max-width: 220px;
     min-width: 0;
-    background: color-mix(in srgb, var(--accent-color) 10%, transparent);
-    color: var(--accent-color);
-    border: 1px solid color-mix(in srgb, var(--accent-color) 40%, transparent);
-    border-radius: 999px;
+    background: var(--input-bg);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    /* The conversation's color on the left edge, the same color its watched
+       terminals carry in the dock, so ownership reads across the window. */
+    border-left: 3px solid var(--conv-color, var(--border-color));
+    border-radius: 0 4px 4px 0;
     font-family: var(--ui-font-family);
     font-size: calc(var(--font-size-base) - 2px);
-    transition: background-color 0.1s, border-color 0.1s;
+    transition: border-color 0.1s;
 }
 
 .ai-chat-link:hover {
-    background: color-mix(in srgb, var(--accent-color) 20%, transparent);
-    border-color: var(--accent-color);
+    border-top-color: var(--accent-color);
+    border-right-color: var(--accent-color);
+    border-bottom-color: var(--accent-color);
 }
 
 /* Stale link: the watched terminal is disconnected / reconnecting / gone. */
 .ai-chat-link-stale {
-    background: color-mix(in srgb, var(--color-warning) 12%, transparent);
     color: var(--color-warning);
-    border-color: color-mix(in srgb, var(--color-warning) 45%, transparent);
+    border-top-color: color-mix(in srgb, var(--color-warning) 45%, transparent);
+    border-right-color: color-mix(in srgb, var(--color-warning) 45%, transparent);
+    border-bottom-color: color-mix(in srgb, var(--color-warning) 45%, transparent);
 }
 
 .ai-chat-link-stale:hover {
-    background: color-mix(in srgb, var(--color-warning) 22%, transparent);
-    border-color: var(--color-warning);
+    border-top-color: var(--color-warning);
+    border-right-color: var(--color-warning);
+    border-bottom-color: var(--color-warning);
 }
 
-/* Name (click = jump to terminal), borderless so it blends into the pill.
-   `.ai-chat-linked-chip` keeps its name for reuse/tests. */
+/* Name (click = jump to that terminal's pane). */
 .ai-chat-linked-chip {
     display: inline-flex;
     align-items: center;
     gap: 5px;
     min-width: 0;
-    padding: 3px 4px 3px 10px;
+    padding: 2px 4px 2px 6px;
     background: none;
     border: none;
     color: inherit;
     font: inherit;
     cursor: pointer;
-}
-
-.ai-chat-linked-chip:hover {
-    filter: brightness(1.15);
 }
 
 .ai-chat-linked-chip-name {
@@ -203,82 +133,74 @@
     max-width: 140px;
 }
 
-/* Explicit "unlink" (broken-chain) button on the linked pill. Muted by default;
-   turns warning-coloured on hover to signal it detaches the terminal. */
+/* × (stop watching) and the worker chip's open-as-tab. Faint until the chip is
+   hovered, so the chip reads as the terminal, not as a pair of buttons. */
 .ai-chat-link-unlink {
     display: inline-flex;
     align-items: center;
-    padding: 3px 9px 3px 6px;
+    justify-content: center;
+    min-width: 18px;
+    height: 20px;
+    padding: 0 4px;
     background: none;
     border: none;
-    border-left: 1px solid color-mix(in srgb, currentColor 25%, transparent);
     color: inherit;
+    font-family: var(--ui-font-family);
+    font-size: var(--font-size-base);
+    line-height: 1;
     cursor: pointer;
-    opacity: 0.6;
+    opacity: 0.35;
     transition: opacity 0.1s, color 0.1s;
 }
 
-.ai-chat-link-unlink:hover {
+.ai-chat-link:hover .ai-chat-link-unlink,
+.ai-chat-link-unlink:focus-visible {
+    opacity: 0.8;
+}
+
+.ai-chat-link-unlink:hover:not(:disabled) {
     opacity: 1;
     color: var(--color-warning);
+}
+
+.ai-chat-link-unlink:disabled {
+    cursor: not-allowed;
 }
 
 .ai-chat-link-unlink svg {
     pointer-events: none;
 }
 
-/* Unlinked tab: a dashed "Link a terminal" pill whose whole area is the picker
-   (a transparent native <select> overlaid), so a "+"-opened blank tab can be
-   attached to a terminal (this window or another). */
-.ai-chat-link-attach {
-    position: relative;
+/* "+" — opens the menu of terminals that can be watched. Carries its label
+   while nothing is watched yet. */
+.ai-chat-link-add-btn {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
-    max-width: 180px;
-    padding: 3px 8px 3px 10px;
+    gap: 4px;
+    height: 22px;
+    padding: 0 6px;
+    background: transparent;
     color: var(--text-secondary);
-    background: var(--bg-tertiary);
     border: 1px dashed var(--border-color);
-    border-radius: 999px;
+    border-radius: 4px;
     cursor: pointer;
     font-family: var(--ui-font-family);
     font-size: calc(var(--font-size-base) - 2px);
+    white-space: nowrap;
     transition: color 0.1s, border-color 0.1s;
 }
 
-.ai-chat-link-attach:hover {
+.ai-chat-link-add-btn:hover,
+.ai-chat-link-add-btn.open {
     color: var(--accent-color);
     border-color: var(--accent-color);
 }
 
-/* Compact "+" add affordance sitting after the watched-terminal chips. */
-.ai-chat-link-add {
-    max-width: 160px;
-}
-
-.ai-chat-link-attach-label {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.ai-chat-link-attach svg {
-    pointer-events: none;
-    flex-shrink: 0;
-}
-
-.ai-chat-link-select {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    margin: 0;
-    padding: 0;
-    border: none;
-    opacity: 0;
-    cursor: pointer;
-    appearance: none;
+/* Group heading inside the "+" menu (this window / another window). */
+.ai-chat-link-menu-heading {
+    padding: 4px 8px 2px;
+    color: var(--text-secondary);
+    font-size: calc(var(--font-size-base) - 3px);
 }
 
 /* ── Not-signed-in state (sign-in lives in Settings → AI) ── */
@@ -320,34 +242,9 @@
     background: var(--accent-hover);
 }
 
-.ai-chat-model-select {
-    background-color: var(--input-bg);
-    color: var(--text-primary);
-    border: 1px solid var(--border-color);
-    border-radius: 4px;
-    padding: 2px 6px;
-    font-size: calc(var(--font-size-base) - 1px);
-    height: 26px;
-    outline: none;
-    cursor: pointer;
-    transition: border-color 0.2s;
-    line-height: normal;
-    display: flex;
-    align-items: center;
-}
 
-.ai-chat-model-select:hover {
-    border-color: var(--accent-color);
-}
 
-.ai-chat-model-select:focus {
-    border-color: var(--accent-color);
-}
 
-.ai-chat-model-select option {
-    background-color: var(--bg-secondary);
-    color: var(--text-primary);
-}
 
 /* Inline error banner (model-list load failure). The auth forms themselves
    moved to Settings → AI (see SettingsModal.css .settings-ai-auth-*). */
@@ -403,31 +300,26 @@
     }
 }
 
-.ai-chat-message-avatar {
-    width: 1.5em;
-    height: 1.3em;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    margin-top: 0;
-    border-radius: 4px;
-}
 
-.ai-chat-message-user .ai-chat-message-avatar {
-    background-color: var(--chat-msg-user-bg);
-    color: var(--chat-msg-user-text);
-}
 
-.ai-chat-message-model .ai-chat-message-avatar {
-    background: var(--bg-secondary);
-    color: var(--accent-color);
-    border: 1px solid var(--border-color);
-}
 
 .ai-chat-message-content {
     flex: 1;
     min-width: 0;
+}
+
+/* Who is speaking reads from the layout: your messages sit on the right in a
+   tinted box, the AI's replies run the full width. */
+.ai-chat-message-user {
+    justify-content: flex-end;
+}
+
+.ai-chat-message-user .ai-chat-message-content {
+    flex: 0 1 auto;
+    max-width: 85%;
+    padding: 6px 10px;
+    background: var(--chat-msg-user-bg);
+    border-radius: 6px;
 }
 
 /* Per-message copy button — revealed on hover/focus of a model message. */
@@ -505,19 +397,17 @@
     display: flex;
     flex-direction: column;
     gap: 4px;
-    width: 70%;
-    margin: 2px auto 4px;
-    padding: 8px 8px 6px 12px;
+    margin: 2px 10px 8px;
+    padding: 6px 8px 6px 10px;
     background-color: var(--input-bg);
     border: 1px solid var(--border-color);
-    border-radius: 12px;
+    border-radius: 6px;
     flex-shrink: 0;
-    transition: border-color 0.15s, box-shadow 0.15s;
+    transition: border-color 0.2s;
 }
 
 .ai-chat-input-area:focus-within {
     border-color: var(--accent-color);
-    box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-color) 30%, transparent);
 }
 
 /* Small badge shown while the user has messages queued to send after the
@@ -545,21 +435,14 @@
     flex: 1;
 }
 
-.ai-token-status {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 2px 16px 6px;
-    background-color: transparent;
-    font-size: var(--ai-token-font-size, 0.78em);
-    color: var(--text-secondary);
-    opacity: 0.7;
-    flex-shrink: 0;
+/* What this conversation has cost so far; the token counts are in its title. */
+.ai-chat-cost {
+    color: var(--text-tertiary);
+    font-size: calc(var(--font-size-base) - 3px);
+    white-space: nowrap;
 }
 
-.ai-token-status-sep {
-    opacity: 0.4;
-}
+
 
 /* ── Animated Thinking dots ── */
 .ai-chat-thinking {
@@ -721,23 +604,22 @@
     opacity: 0.5;
 }
 
+/* Send and Stop: one round arrow / square button at the composer's right end,
+   the same size so Stop takes Send's place without the row moving. */
 .ai-chat-send-btn,
 .ai-chat-cancel-btn {
-    width: 28px;
-    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
     padding: 0;
     background-color: var(--accent-color);
     color: var(--text-on-accent);
     border: none;
     border-radius: 50%;
     cursor: pointer;
-    font-size: calc(var(--font-size-base) - 1px);
-    font-family: inherit;
-    line-height: 1;
-    transition: opacity 0.15s, background-color 0.15s, transform 0.1s;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
+    transition: background-color 0.1s, color 0.1s;
     box-sizing: border-box;
     flex-shrink: 0;
 }
@@ -746,18 +628,21 @@
     background-color: var(--accent-hover);
 }
 
+/* Nothing to send yet: a quiet grey disc, not the half-transparent accent the
+   app-wide disabled rule would give — that read as a broken button here. */
 .ai-chat-send-btn:disabled {
-    opacity: 0.5;
+    background-color: var(--bg-tertiary);
+    color: var(--text-tertiary);
     cursor: not-allowed;
 }
 
 .ai-chat-cancel-btn {
-    background-color: var(--color-danger-bg);
-    color: var(--color-danger);
+    background-color: var(--btn-secondary-bg);
+    color: var(--text-primary);
 }
 
 .ai-chat-cancel-btn:hover {
-    background-color: var(--color-danger-bg-hover);
+    background-color: var(--btn-secondary-hover-bg);
 }
 
 /* ── Image attachments ── */
@@ -769,7 +654,7 @@
     background: transparent;
     color: var(--text-secondary);
     border: 1px solid transparent;
-    border-radius: 50%;
+    border-radius: 4px;
     cursor: pointer;
     display: inline-flex;
     align-items: center;
@@ -879,11 +764,11 @@
     align-items: center;
     gap: 6px;
     max-width: 240px;
-    padding: 3px 10px 3px 8px;
+    padding: 3px 8px;
     background: transparent;
     color: var(--text-secondary);
-    border: 1px solid transparent;
-    border-radius: 999px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
     cursor: pointer;
     font-family: var(--ui-font-family);
     font-size: calc(var(--font-size-base) - 2px);
@@ -895,6 +780,11 @@
     background: var(--bg-tertiary);
     color: var(--text-primary);
     border-color: var(--border-color);
+}
+
+.ai-chat-settings-btn-caret {
+    flex-shrink: 0;
+    opacity: 0.7;
 }
 
 .ai-chat-settings-btn-label {
@@ -993,11 +883,47 @@
 
 /* ── Execute Block (Run in Terminal) ── */
 .ai-execute-block {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
     margin: 8px 0;
     border: 1px solid var(--border-color);
-    border-radius: 8px;
+    border-radius: 6px;
     background-color: var(--code-bg);
     overflow: hidden;
+}
+
+/* The connect card shares the frame but keeps its own top-to-bottom order. */
+.ai-execute-block.ai-connect-block {
+    display: block;
+}
+
+.ai-execute-block:not(.ai-connect-block) > * {
+    flex-basis: 100%;
+    order: 5;
+}
+
+.ai-execute-block:not(.ai-connect-block) > .ai-run-target {
+    order: 1;
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 6px 10px 4px 12px;
+}
+
+.ai-execute-block:not(.ai-connect-block) > .ai-execute-verdict-toggle,
+.ai-execute-block:not(.ai-connect-block) > .ai-execute-verdict-checking {
+    order: 2;
+    flex: 0 0 auto;
+    margin: 6px 10px 4px 0;
+    padding: 0;
+}
+
+.ai-execute-block:not(.ai-connect-block) > pre {
+    order: 3;
+}
+
+.ai-execute-block:not(.ai-connect-block) > .ai-execute-actions {
+    order: 4;
 }
 
 .ai-execute-block pre {
@@ -1014,9 +940,8 @@
 .ai-execute-actions {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 8px;
     padding: 6px 10px;
-    background-color: color-mix(in srgb, var(--text-primary) 15%, transparent);
 }
 
 .ai-run-btn {
@@ -1089,9 +1014,16 @@
 }
 
 .ai-run-target {
-    font-size: calc(var(--font-size-base) - 3px);
-    color: var(--text-secondary);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--ui-font-family);
+    font-size: calc(var(--font-size-base) - 2px);
+    color: var(--text-primary);
     white-space: nowrap;
+}
+
+.ai-run-target-text {
     overflow: hidden;
     text-overflow: ellipsis;
 }
@@ -1161,12 +1093,6 @@
     height: 14px;
 }
 
-.ai-execute-unsafe-note {
-    padding: 4px 12px 6px;
-    font-size: calc(var(--font-size-base) - 3px);
-    color: var(--text-tertiary);
-    font-style: italic;
-}
 
 .ai-execute-paused-banner {
     padding: 4px 12px 6px;
@@ -1199,7 +1125,7 @@
     padding: 0;
     background: none;
     border: none;
-    color: var(--text-tertiary);
+    color: var(--text-secondary);
     cursor: pointer;
     font-family: var(--ui-font-family);
     font-size: calc(var(--font-size-base) - 3px);

@@ -132,7 +132,7 @@ async function authenticate() {
 }
 
 async function sendAndComplete(text: string, content: string = MODEL_CONTENT) {
-    const textarea = screen.getByPlaceholderText('Type a message...');
+    const textarea = screen.getByPlaceholderText(/^(Type a message\.\.\.|Ask about .+)$/);
     await act(async () => {
         fireEvent.change(textarea, { target: { value: text } });
     });
@@ -196,7 +196,7 @@ describe('AIChatPane auto-execute safety guards', () => {
         const classify = deferredClassify();
         await sendAndComplete('check', GRAY_CONTENT);
 
-        await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Run in Terminal/i })); });
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: /^Run$/ })); });
         expect(h.onRunCommand).toHaveBeenCalledTimes(1);
 
         // The verdict arrives safe afterwards: it must not run the block again.
@@ -232,7 +232,8 @@ describe('AIChatPane Network Expert kickoff bookkeeping', () => {
         // A conversation happens, then the user clears it: the backend history is
         // gone too, so the model no longer knows the device → identify it again.
         await sendAndComplete('what is this box?', 'A router.');
-        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Clear this conversation' })); });
+        await act(async () => { fireEvent.contextMenu(screen.getByRole('tab', { selected: true })); });
+        await act(async () => { fireEvent.click(screen.getByRole('menuitem', { name: 'Clear Conversation' })); });
         await act(async () => { fireEvent.click(screen.getByText('Clear conversation')); });
 
         expect(h.onEnqueuePending).toHaveBeenCalledTimes(2);
@@ -306,7 +307,7 @@ describe('AIChatPane Network Expert prep ordering', () => {
 
         // A turn that ends without any answer (cancelled before the first word):
         // nothing was identified, so B must not be told "the platform you identified".
-        const textarea = screen.getByPlaceholderText('Type a message...');
+        const textarea = screen.getByPlaceholderText(/^(Type a message\.\.\.|Ask about .+)$/);
         await act(async () => { fireEvent.change(textarea, { target: { value: 'hi' } }); });
         await act(async () => { fireEvent.keyDown(textarea, { key: 'Enter' }); });
         await act(async () => {
@@ -400,7 +401,8 @@ describe('AIChatPane Network Expert prep ordering', () => {
         await sendAndComplete('what is this box?', 'A router.');
         vi.mocked(tauriService.aiChatSend).mockClear();
 
-        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Clear this conversation' })); });
+        await act(async () => { fireEvent.contextMenu(screen.getByRole('tab', { selected: true })); });
+        await act(async () => { fireEvent.click(screen.getByRole('menuitem', { name: 'Clear Conversation' })); });
         await act(async () => { fireEvent.click(screen.getByText('Clear conversation')); });
 
         // The kickoff is queued right away, but must not go out yet.
@@ -444,7 +446,8 @@ describe('AIChatPane discards stale work with the conversation', () => {
         await authenticate();
         await sendAndComplete('q', 'a');
 
-        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Clear this conversation' })); });
+        await act(async () => { fireEvent.contextMenu(screen.getByRole('tab', { selected: true })); });
+        await act(async () => { fireEvent.click(screen.getByRole('menuitem', { name: 'Clear Conversation' })); });
         await act(async () => { fireEvent.click(screen.getByText('Clear conversation')); });
 
         expect(onCancelRuns).toHaveBeenCalledWith('t1');
@@ -460,7 +463,7 @@ describe('AIChatPane discards stale work with the conversation', () => {
             },
         });
         await authenticate();
-        await act(async () => { fireEvent.click(screen.getByTestId('execution-mode-bar').querySelector('button')!); });
+        await act(async () => { fireEvent.click(screen.getByTestId('execution-mode-bar').querySelector('.execution-mode-limit')!); });
         await act(async () => { fireEvent.click(screen.getByText('Pause auto-execution')); });
 
         expect(h.onUpdateTabById).toHaveBeenCalledWith('t1', { sleepDelay: null });

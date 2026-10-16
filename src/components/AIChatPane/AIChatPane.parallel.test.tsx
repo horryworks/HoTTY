@@ -160,7 +160,7 @@ describe('AIChatPane parallel streaming', () => {
         });
 
         // Active tab is t1; press Stop.
-        const stop = screen.getByLabelText('Stop');
+        const stop = screen.getByRole('button', { name: 'Stop' });
         await act(async () => { stop.click(); });
 
         expect(tauriService.aiChatCancel).toHaveBeenCalledWith('ai-1::t1');

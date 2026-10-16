@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { Segmented } from '../PaneTools/PaneTools';
 import './ExecutionModeBar.css';
 
 interface ExecutionModeBarProps {
@@ -10,8 +11,16 @@ interface ExecutionModeBarProps {
     onOpenSettings?: () => void;
 }
 
+type ExecutionMode = 'ask-before-execute' | 'auto-execute-safe';
+
 const DEFAULT_MAX_WHEN_LIMITED = 5;
 
+/**
+ * How AI-proposed commands run, at the right end of the AI Chat toolbar — where
+ * the tool panes show whether they are running. The mode is a `Segmented` pair
+ * that takes effect at once. In auto mode a second button carries the run limit
+ * (or "Paused") and opens the limit, pause and safety-settings controls.
+ */
 export const ExecutionModeBar: React.FC<ExecutionModeBarProps> = ({ paused, onPausedChange, onOpenSettings }) => {
     const { t } = useTranslation();
     const commandExecutionMode = useSettingsStore(s => s.commandExecutionMode);
@@ -43,7 +52,9 @@ export const ExecutionModeBar: React.FC<ExecutionModeBarProps> = ({ paused, onPa
         };
     }, [popoverOpen]);
 
-    const setMode = (mode: 'ask-before-execute' | 'auto-execute-safe') => {
+    const setMode = (mode: ExecutionMode) => {
+        // Leaving auto mode leaves nothing for the limit popover to hold.
+        if (mode !== 'auto-execute-safe') setPopoverOpen(false);
         useSettingsStore.getState().update('commandExecutionMode', mode);
     };
 
@@ -52,144 +63,95 @@ export const ExecutionModeBar: React.FC<ExecutionModeBarProps> = ({ paused, onPa
         useSettingsStore.getState().update('maxConsecutiveAutoExecutions', clamped);
     };
 
-    const handleUnlimitedChange = (checked: boolean) => {
-        setMax(checked ? 0 : DEFAULT_MAX_WHEN_LIMITED);
-    };
-
-    const handlePauseToggle = () => {
-        onPausedChange(!paused);
-    };
-
-    const chipLabel = isAuto
-        ? t('aiChat.executionMode.chipAuto', { max: isUnlimited ? '∞' : maxConsecutiveAutoExecutions })
-        : t('aiChat.executionMode.chipAskBeforeExecute');
-
-    const chipClass = [
-        'execution-mode-chip',
-        isAuto ? 'auto' : 'ask',
-        paused ? 'paused' : '',
-    ].filter(Boolean).join(' ');
+    const limitLabel = paused
+        ? t('aiChat.executionMode.chipPausedTag')
+        : t('aiChat.executionMode.limitButton', { max: isUnlimited ? '∞' : maxConsecutiveAutoExecutions });
 
     return (
-        <div className="execution-mode-chip-wrap" data-testid="execution-mode-bar">
-            <button
-                ref={triggerRef}
-                type="button"
-                className={chipClass}
-                onClick={() => setPopoverOpen(o => !o)}
-                aria-haspopup="dialog"
-                aria-expanded={popoverOpen}
-                aria-label={paused
-                    ? t('aiChat.executionMode.chipAriaLabelPaused', { label: chipLabel })
-                    : t('aiChat.executionMode.chipAriaLabel', { label: chipLabel })}
-                title={t('aiChat.executionMode.chipTitle')}
-            >
-                {isAuto ? (
-                    <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true">
-                        <path d="M7 2v11h3v9l7-12h-4l4-8z" />
+        <div className="execution-mode-bar" data-testid="execution-mode-bar">
+            <Segmented<ExecutionMode>
+                options={[
+                    { value: 'ask-before-execute', label: t('aiChat.executionMode.modeAsk') },
+                    { value: 'auto-execute-safe', label: t('aiChat.executionMode.modeAuto') },
+                ]}
+                value={commandExecutionMode}
+                onChange={setMode}
+                ariaLabel={t('aiChat.executionMode.chipTitle')}
+            />
+            {isAuto && (
+                <button
+                    ref={triggerRef}
+                    type="button"
+                    className={`execution-mode-limit${paused ? ' paused' : ''}${popoverOpen ? ' open' : ''}`}
+                    onClick={() => setPopoverOpen(o => !o)}
+                    aria-haspopup="dialog"
+                    aria-expanded={popoverOpen}
+                    title={t('aiChat.executionMode.popoverAriaLabel')}
+                >
+                    {paused && (
+                        <svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor" aria-hidden="true">
+                            <path d="M6 5h4v14H6zM14 5h4v14h-4z" />
+                        </svg>
+                    )}
+                    <span>{limitLabel}</span>
+                    <svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor" aria-hidden="true">
+                        <path d="M6 9l6 6 6-6z" />
                     </svg>
-                ) : (
-                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                        <circle cx="12" cy="12" r="10" />
-                        <line x1="12" y1="8" x2="12" y2="12" />
-                        <line x1="12" y1="16" x2="12.01" y2="16" />
-                    </svg>
-                )}
-                <span className="execution-mode-chip-label">{chipLabel}</span>
-                {paused && <span className="execution-mode-chip-paused-tag">{t('aiChat.executionMode.chipPausedTag')}</span>}
-            </button>
+                </button>
+            )}
 
-            {popoverOpen && (
+            {popoverOpen && isAuto && (
                 <div
                     ref={popoverRef}
                     className="execution-mode-popover"
                     role="dialog"
                     aria-label={t('aiChat.executionMode.popoverAriaLabel')}
                 >
-                    <div className="execution-mode-popover-title">{t('aiChat.executionMode.popoverTitle')}</div>
-
-                    <button
-                        type="button"
-                        className={`execution-mode-popover-option${!isAuto ? ' selected' : ''}`}
-                        role="radio"
-                        aria-checked={!isAuto}
-                        onClick={() => setMode('ask-before-execute')}
-                    >
-                        <span className={`execution-mode-popover-radio${!isAuto ? ' selected' : ''}`} />
-                        <span className="execution-mode-popover-option-text">
-                            <span className="execution-mode-popover-option-title">{t('aiChat.executionMode.askOptionTitle')}</span>
-                            <span className="execution-mode-popover-option-desc">{t('aiChat.executionMode.askOptionDesc')}</span>
-                        </span>
-                    </button>
-
-                    <button
-                        type="button"
-                        className={`execution-mode-popover-option${isAuto ? ' selected' : ''}`}
-                        role="radio"
-                        aria-checked={isAuto}
-                        onClick={() => setMode('auto-execute-safe')}
-                    >
-                        <span className={`execution-mode-popover-radio${isAuto ? ' selected' : ''}`} />
-                        <span className="execution-mode-popover-option-text">
-                            <span className="execution-mode-popover-option-title">{t('aiChat.executionMode.autoOptionTitle')}</span>
-                            <span className="execution-mode-popover-option-desc">{t('aiChat.executionMode.autoOptionDesc')}</span>
-                        </span>
-                    </button>
-
-                    {isAuto && (
-                        <>
-                            <div className="execution-mode-popover-divider" />
-                            <label className="execution-mode-popover-label">
-                                <span>{t('aiChat.executionMode.maxConsecutiveRuns')}</span>
-                                <span className="execution-mode-popover-max-row">
-                                    <input
-                                        type="number"
-                                        min={0}
-                                        max={100}
-                                        step={1}
-                                        value={maxConsecutiveAutoExecutions}
-                                        onChange={(e) => setMax(parseInt(e.target.value, 10))}
-                                        disabled={isUnlimited}
-                                        aria-label={t('aiChat.executionMode.maxConsecutiveRuns')}
-                                    />
-                                    <label className="execution-mode-popover-checkbox">
-                                        <input
-                                            type="checkbox"
-                                            checked={isUnlimited}
-                                            onChange={(e) => handleUnlimitedChange(e.target.checked)}
-                                        />
-                                        <span>∞</span>
-                                    </label>
-                                </span>
+                    <label className="execution-mode-popover-label">
+                        <span>{t('aiChat.executionMode.maxConsecutiveRuns')}</span>
+                        <span className="execution-mode-popover-max-row">
+                            <input
+                                type="number"
+                                min={0}
+                                max={100}
+                                step={1}
+                                value={maxConsecutiveAutoExecutions}
+                                onChange={(e) => setMax(parseInt(e.target.value, 10))}
+                                disabled={isUnlimited}
+                                aria-label={t('aiChat.executionMode.maxConsecutiveRuns')}
+                            />
+                            <label className="execution-mode-popover-checkbox">
+                                <input
+                                    type="checkbox"
+                                    checked={isUnlimited}
+                                    onChange={(e) => setMax(e.target.checked ? 0 : DEFAULT_MAX_WHEN_LIMITED)}
+                                />
+                                <span>∞</span>
                             </label>
-                            <p className="execution-mode-popover-hint">
-                                {t('aiChat.executionMode.maxConsecutiveRunsHint')}
-                            </p>
-                            <div className="execution-mode-popover-divider" />
-                            <button
-                                type="button"
-                                className={`execution-mode-popover-pause${paused ? ' paused' : ''}`}
-                                onClick={handlePauseToggle}
-                            >
-                                {paused ? (
-                                    <>
-                                        <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden="true">
-                                            <path d="M8 5v14l11-7z" />
-                                        </svg>
-                                        <span>{t('aiChat.executionMode.resumeAutoExecution')}</span>
-                                    </>
-                                ) : (
-                                    <>
-                                        <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden="true">
-                                            <path d="M6 5h4v14H6zM14 5h4v14h-4z" />
-                                        </svg>
-                                        <span>{t('aiChat.executionMode.pauseAutoExecution')}</span>
-                                    </>
-                                )}
-                            </button>
-                        </>
-                    )}
-
+                        </span>
+                    </label>
+                    <div className="execution-mode-popover-divider" />
+                    <button
+                        type="button"
+                        className={`execution-mode-popover-pause${paused ? ' paused' : ''}`}
+                        onClick={() => onPausedChange(!paused)}
+                    >
+                        {paused ? (
+                            <>
+                                <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden="true">
+                                    <path d="M8 5v14l11-7z" />
+                                </svg>
+                                <span>{t('aiChat.executionMode.resumeAutoExecution')}</span>
+                            </>
+                        ) : (
+                            <>
+                                <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden="true">
+                                    <path d="M6 5h4v14H6zM14 5h4v14h-4z" />
+                                </svg>
+                                <span>{t('aiChat.executionMode.pauseAutoExecution')}</span>
+                            </>
+                        )}
+                    </button>
                     {onOpenSettings && (
                         <>
                             <div className="execution-mode-popover-divider" />

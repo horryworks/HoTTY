@@ -90,7 +90,7 @@ async function authenticate() {
 }
 
 async function sendAndComplete(text: string, content: string = MODEL_CONTENT) {
-    const textarea = screen.getByPlaceholderText('Type a message...');
+    const textarea = screen.getByPlaceholderText(/^(Type a message\.\.\.|Ask about .+)$/);
     await act(async () => { fireEvent.change(textarea, { target: { value: text } }); });
     await act(async () => { fireEvent.keyDown(textarea, { key: 'Enter' }); });
     await act(async () => {
@@ -125,7 +125,7 @@ describe('AIChatPane auto-run countdown (2.7b)', () => {
             // The command is scheduled (countdown ticking), not yet sent.
             expect(h.onRunCommand).not.toHaveBeenCalled();
             expect(screen.getByRole('button', { name: 'Cancel' })).toBeTruthy();
-            expect(screen.queryByRole('button', { name: /Run in Terminal/i })).toBeNull();
+            expect(screen.queryByRole('button', { name: /^Run$/ })).toBeNull();
 
             // Advance past the 2s grace period → it auto-runs.
             await act(async () => { vi.advanceTimersByTime(2000); });
@@ -148,7 +148,7 @@ describe('AIChatPane auto-run countdown (2.7b)', () => {
             // Even past the would-be deadline, nothing runs; the block is manual again.
             await act(async () => { vi.advanceTimersByTime(5000); });
             expect(h.onRunCommand).not.toHaveBeenCalled();
-            expect(screen.getByRole('button', { name: /Run in Terminal/i })).toBeTruthy();
+            expect(screen.getByRole('button', { name: /^Run$/ })).toBeTruthy();
         } finally {
             vi.useRealTimers();
         }

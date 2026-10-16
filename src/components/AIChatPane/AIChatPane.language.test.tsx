@@ -98,7 +98,7 @@ async function openSettings() {
 }
 
 async function typeAndSend(text: string) {
-    const textarea = screen.getByPlaceholderText('Type a message...');
+    const textarea = screen.getByPlaceholderText(/^(Type a message\.\.\.|Ask about .+)$/);
     await act(async () => {
         fireEvent.change(textarea, { target: { value: text } });
     });

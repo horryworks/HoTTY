@@ -130,7 +130,7 @@ async function authenticate() {
 }
 
 async function sendAndComplete(text: string, content: string) {
-    const textarea = screen.getByPlaceholderText('Type a message...');
+    const textarea = screen.getByPlaceholderText(/^(Type a message\.\.\.|Ask about .+)$/);
     await act(async () => { fireEvent.change(textarea, { target: { value: text } }); });
     await act(async () => { fireEvent.keyDown(textarea, { key: 'Enter' }); });
     await act(async () => {
@@ -354,6 +354,6 @@ describe('AIChatPane connect — tray and target safety', () => {
         await authenticate();
         await sendAndComplete('check', `On it.\n\n${F}execute target=sw-01\nshow clock\n${F}`);
         expect(h.onRunCommand).toHaveBeenCalledWith('h-1', 'show clock', 't1');
-        expect(screen.getByText('Target: sw-01 (AI session)')).toBeTruthy();
+        expect(screen.getByText('Runs on sw-01 (AI session)')).toBeTruthy();
     });
 });

@@ -128,7 +128,7 @@ async function authenticate() {
 
 /** Send `text` and stream `chunks` without finishing (no `done`). */
 async function sendAndStream(text: string, chunks: string[]) {
-    const textarea = screen.getByPlaceholderText('Type a message...');
+    const textarea = screen.getByPlaceholderText(/^(Type a message\.\.\.|Ask about .+)$/);
     await act(async () => { fireEvent.change(textarea, { target: { value: text } }); });
     await act(async () => { fireEvent.keyDown(textarea, { key: 'Enter' }); });
     for (const content of chunks) {
@@ -156,30 +156,30 @@ describe('AIChatPane Stop (■)', () => {
         // model was still talking when the user stopped it.
         await sendAndStream('check', ['Identifying.\n\n```execute\ndisplay version\n```\nand then']);
 
-        await act(async () => { fireEvent.click(screen.getByLabelText('Stop')); });
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Stop' })); });
         await act(async () => { await Promise.resolve(); });
 
         expect(tauriService.aiChatCancel).toHaveBeenCalledWith('ai-1::t1');
         expect(h.onRunCommand).not.toHaveBeenCalled();
         // The block stays, with its manual Run button.
-        expect(screen.getByRole('button', { name: /Run in Terminal/i })).toBeTruthy();
+        expect(screen.getByRole('button', { name: /^Run$/ })).toBeTruthy();
     });
 
     it('keeps a draft typed during the stream; restores the sent text only into an empty box', async () => {
         renderPane({});
         await authenticate();
         await sendAndStream('first question', ['thinking']);
-        const textarea = screen.getByPlaceholderText('Type a message...') as HTMLTextAreaElement;
+        const textarea = screen.getByPlaceholderText(/^(Type a message\.\.\.|Ask about .+)$/) as HTMLTextAreaElement;
         await act(async () => { fireEvent.change(textarea, { target: { value: 'my draft' } }); });
 
-        await act(async () => { fireEvent.click(screen.getByLabelText('Stop')); });
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Stop' })); });
         expect(textarea.value).toBe('my draft');
 
         // Empty box → the stopped question comes back for editing.
         await act(async () => { fireEvent.change(textarea, { target: { value: '' } }); });
         await act(async () => { fireEvent.keyDown(textarea, { key: 'Enter' }); }); // nothing to send
         await sendAndStream('second question', []);
-        await act(async () => { fireEvent.click(screen.getByLabelText('Stop')); });
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Stop' })); });
         expect(textarea.value).toBe('second question');
     });
 

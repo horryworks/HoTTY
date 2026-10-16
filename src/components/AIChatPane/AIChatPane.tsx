@@ -24,6 +24,8 @@ import { formatAICost } from '../../constants/aiPricing';
 import { buildExecutionRules, languageDirective, resolveAiLanguage, languageSwitchNotice, AUTO_LANGUAGE, NETWORK_EXPERT_KICKOFF, NETWORK_EXPERT_RECONNECT_PREP, NETWORK_EXPERT_SAME_DEVICE_PREP, buildWatchTargetsBlock, withTargetDirective, buildConnectCapabilityBlock, buildNoTerminalBlock, withPromptHint } from '../../constants/aiPrompts';
 import { SUPPORTED_LANGUAGES } from '../../i18n';
 import { ExecutionModeBar } from './ExecutionModeBar';
+import { PaneBadge } from '../PaneBadge/PaneBadge';
+import { DockMenu } from '../Dock/DockMenu';
 import { TerminalOutputBlock } from './TerminalOutputBlock';
 import {
     parseTerminalOutputMessage, notConnectedNote, declinedNote, unknownTargetNote, waitCancelledNote,
@@ -156,6 +158,9 @@ interface AIChatPaneProps {
     onClosePane?: () => void;
     onSelectTab?: (tabId: string) => void;
     onFlashSessionPane?: (sessionId: string) => void;
+    /** Where a session is on screen: its pane and that pane's number. Null when hidden
+     *  or in another window; omitted in the AI Chat window, which has no panes. */
+    paneOfSession?: (sessionId: string) => { paneId: string; number: number | null } | null;
     sessions?: Map<string, SessionRecord>;
     onRunCommand?: (sessionId: string, command: string, originatingTabId: string) => void;
     /** Stop every command poll and sleep delay a tab has in flight, silently
@@ -385,6 +390,8 @@ const MessageContent: React.FC<{
      *  so the label under each block shows the AUTO-DETECTED target (Phase 2). When
      *  omitted, the block falls back to the single targetTitle/targetId/targetLive. */
     resolveBlockTarget?: (alias?: string) => { title?: string; id?: string; live: boolean; headless?: boolean };
+    /** The number mark of the pane showing a session (nothing when it is not on screen). */
+    paneMarkFor?: (sessionId: string) => React.ReactNode;
     /** AI connect requests in this message (ADR-AI-007): transient state keyed by request key. */
     connectBlocks?: ReadonlyMap<string, ConnectBlock>;
     /** Final outcomes for this message's connect requests, derived from later transcript envelopes. */
@@ -412,7 +419,7 @@ const MessageContent: React.FC<{
     /** Cancel the client-side `sleep` wait shown on a block (the rest is not run). */
     onCancelSleep?: () => void;
 }> = ({
-    content, onRun, onDecline, onHoverTarget, targetTitle, targetId, targetLive = true, resolveBlockTarget,
+    content, onRun, onDecline, onHoverTarget, targetTitle, targetId, targetLive = true, resolveBlockTarget, paneMarkFor,
     connectBlocks, connectOutcomes, connectPolicyOff, localShellType = 'powershell',
     onOpenConnect, onOpenConnectInDialog, onDeclineConnect, onCancelConnectSchedule, onOpenWorkerAsTab, isWorkerAlias,
     autoExecutedCommands, ranManuallyCommands, declinedCommands, scheduledCommands, onCancelScheduled, verdictByCommand, classifyingCommands, limitReached, sleepDelay, onCancelSleep,
@@ -429,8 +436,8 @@ const MessageContent: React.FC<{
         const bt = resolveBlockTarget ? resolveBlockTarget(blockTarget) : { title: targetTitle, id: targetId, live: targetLive };
         return bt.id
             ? (bt.live
-                ? <span className={`ai-run-target${bt.headless ? ' ai-run-target-headless' : ''}`}>{t(bt.headless ? 'aiChat.message.targetHeadless' : 'aiChat.message.target', { title: bt.title || t('aiChat.message.unnamedTerminal') })}</span>
-                : <span className="ai-run-target ai-run-target-stale">{t('aiChat.message.targetStale', { title: bt.title || t('aiChat.message.unnamedTerminal') })}</span>)
+                ? <span className={`ai-run-target${bt.headless ? ' ai-run-target-headless' : ''}`}>{paneMarkFor?.(bt.id)}<span className="ai-run-target-text">{t(bt.headless ? 'aiChat.message.targetHeadless' : 'aiChat.message.target', { title: bt.title || t('aiChat.message.unnamedTerminal') })}</span></span>
+                : <span className="ai-run-target ai-run-target-stale">{paneMarkFor?.(bt.id)}<span className="ai-run-target-text">{t('aiChat.message.targetStale', { title: bt.title || t('aiChat.message.unnamedTerminal') })}</span></span>)
             : <span className="ai-run-target no-target">{t('aiChat.message.noTarget')}</span>;
     };
 
@@ -465,6 +472,7 @@ const MessageContent: React.FC<{
                     // button so it updates in place (no jump) when the closing fence arrives.
                     return (
                         <div key={part.key} className="ai-execute-block">
+                            {renderTargetLabel(part.target)}
                             <pre><code>{part.command}</code></pre>
                             <div className="ai-execute-actions">
                                 <button className="ai-run-btn" disabled>
@@ -473,7 +481,6 @@ const MessageContent: React.FC<{
                                     </svg>
                                     {t('aiChat.message.runInTerminal')}
                                 </button>
-                                {renderTargetLabel(part.target)}
                             </div>
                         </div>
                     );
@@ -498,6 +505,7 @@ const MessageContent: React.FC<{
                         : undefined;
                     return (
                         <div key={part.key} className={`ai-execute-block${wasAutoExecuted ? ' ai-execute-auto' : ''}${wasDeclined ? ' ai-execute-declined' : ''}${isScheduled ? ' ai-execute-scheduled' : ''}${tone ? ` ai-execute-tone-${tone}` : ''}`}>
+                            {renderTargetLabel(part.target)}
                             <pre><code>{command}</code></pre>
                             <div className="ai-execute-actions">
                                 {wasDeclined ? (
@@ -560,7 +568,6 @@ const MessageContent: React.FC<{
                                         )}
                                     </>
                                 )}
-                                {renderTargetLabel(part.target)}
                             </div>
                             {!wasDeclined && (
                                 isScheduled ? (
@@ -629,6 +636,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     onClosePane,
     onSelectTab,
     onFlashSessionPane,
+    paneOfSession,
     sessions,
     onRunCommand,
     onCancelRuns,
@@ -943,6 +951,17 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     const watchedNamesLabel = watchedTerminals
         .map((w) => watchedLabels.get(w.sessionId) || t('aiChat.pane.terminalFallback'))
         .join(', ');
+
+    // The "+" watch picker (a dock-style menu under the button).
+    const [addLinkOpen, setAddLinkOpen] = useState(false);
+    const addLinkBtnRef = useRef<HTMLButtonElement | null>(null);
+    // The number of the pane showing a session, as the grid and the dock show it,
+    // so a chip or a run target can be matched to its pane without reading names.
+    // Nothing when the session is not on screen (a hidden tab, another window).
+    const paneMark = (sessionId: string) => {
+        const at = paneOfSession?.(sessionId);
+        return at ? <PaneBadge paneId={at.paneId} number={at.number} /> : null;
+    };
 
     // Execute-target info derived from the active tab: the ONE terminal an AI
     // command runs on (execTargetOf — last-focused, else first watched). Drives the
@@ -2466,14 +2485,6 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             .finally(() => { if (clearedTab) markClearing(clearedTab, false); });
     };
 
-    const handleClearChatClick = () => {
-        if (messages.length > 0 || streamingContent) {
-            setShowClearChatConfirm(true);
-        } else {
-            performClearChat();
-        }
-    };
-
     useEffect(() => {
         if (!settingsOpen) return;
         const onMouseDown = (e: MouseEvent) => {
@@ -2555,6 +2566,14 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                     }}
                     onAdd={() => onAddTab?.()}
                     streamingTabIds={streamingTabIds}
+                    // Clearing lives on the tab it clears (right-click). A tab
+                    // other than the open one is opened first, so the confirm
+                    // and the clear act on the conversation the user sees.
+                    onClear={(id) => {
+                        if (id !== chatState.activeTabId) onSelectTab?.(id);
+                        setShowClearChatConfirm(true);
+                    }}
+                    canClear={(id) => (messagesByTab.get(id)?.length ?? 0) > 0 || (id === chatState.activeTabId && !!streamingContent)}
                 />
             )}
             {modelLoadError && (
@@ -2563,238 +2582,237 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                     <button onClick={() => setModelLoadError(false)} style={{ marginLeft: 8, cursor: 'pointer', background: 'none', border: 'none', color: 'inherit', textDecoration: 'underline' }}>{t('aiChat.pane.dismiss')}</button>
                 </div>
             )}
-            <div className="ai-chat-header">
-                <div className="ai-chat-header-left">
-                    <div className="ai-chat-logo">
-                        <AIIcon size={24} provider={activeAiProvider} />
-                    </div>
-                    {/* Watched-terminal control (Phase 2): a wrapping ROW of chips —
-                        one per watched terminal (click = jump to it, × = remove,
-                        greyed when disconnected) — followed by a "+" picker to watch
-                        another terminal (this window or another), excluding those
-                        already watched. Adding/removing terminals here is symmetric
-                        with the terminal tab's "AI Watch" toggle. */}
-                    {isAuthenticated && (watchedTerminals.length > 0 || addLinkGroups.local.length + addLinkGroups.remote.length > 0) && (
-                        <div className="ai-chat-link-row">
-                            {watchedTerminals.map((w) => {
-                                const view = lookupSession(w.sessionId, renderSources);
-                                const status = view?.status;
-                                const stale = status !== 'connected';
-                                const label = watchedLabels.get(w.sessionId) || t('aiChat.pane.terminalFallback');
-                                const worker = workers[w.sessionId];
-                                if (worker) {
-                                    // AI worker session (ADR-AI-007): no tab to jump to, so the chip
-                                    // offers "open as tab" and "disconnect" instead of focus / unwatch.
-                                    const connecting = worker.status === 'connecting';
-                                    const statusLabel = connecting ? t('aiChat.connect.statusConnecting') : (status ?? t('aiChat.pane.statusDisconnected'));
-                                    return (
-                                        <div
-                                            key={w.sessionId}
-                                            className={`ai-chat-link ai-chat-link-worker${stale && !connecting ? ' ai-chat-link-stale' : ''}`}
-                                            style={activeConvColor ? ({ '--accent-color': activeConvColor } as React.CSSProperties) : undefined}
-                                            data-testid="ai-worker-chip"
-                                        >
-                                            <span
-                                                className="ai-chat-linked-chip ai-chat-worker-chip"
-                                                title={t('aiChat.connect.trayChipTitle', { name: label, status: statusLabel })}
-                                            >
-                                                {/* robot icon: an AI-opened session */}
-                                                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                                    <rect x="4" y="8" width="16" height="12" rx="2" />
-                                                    <path d="M12 2v6" />
-                                                    <circle cx="9" cy="14" r="1" />
-                                                    <circle cx="15" cy="14" r="1" />
-                                                </svg>
-                                                <span className="ai-chat-linked-chip-name">{label}</span>
-                                                {connecting && <span className="ai-chat-worker-spinner" aria-hidden="true" />}
-                                            </span>
-                                            <button
-                                                type="button"
-                                                className="ai-chat-link-unlink ai-chat-worker-action"
-                                                title={t('aiChat.connect.trayOpenAsTab', { name: label })}
-                                                aria-label={t('aiChat.connect.trayOpenAsTab', { name: label })}
-                                                // An AI Chat window hands the terminal to another window, which
-                                                // can only take ownership of a session the backend already has:
-                                                // handed over while still connecting, it would come up in the
-                                                // other window as a tab that never connects.
-                                                disabled={IS_AI_CHAT_WINDOW && connecting}
-                                                onClick={() => onMaterializeWorker?.(w.sessionId)}
-                                            >
-                                                {/* open-in-tab icon */}
-                                                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                                    <rect x="3" y="5" width="18" height="14" rx="2" />
-                                                    <path d="M3 9h18" />
-                                                </svg>
-                                            </button>
-                                            <button
-                                                type="button"
-                                                className="ai-chat-link-unlink"
-                                                title={t('aiChat.connect.trayDisconnect', { name: label })}
-                                                aria-label={t('aiChat.connect.trayDisconnect', { name: label })}
-                                                onClick={() => onCloseWorker?.(w.sessionId)}
-                                            >
-                                                <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true">
-                                                    <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
-                                                </svg>
-                                            </button>
-                                        </div>
-                                    );
-                                }
+            {/* One 36px toolbar, like the tool panes: the watched terminals on the
+                left (each with the number of the pane showing it), the execution
+                mode and the window buttons at the right end. */}
+            {isAuthenticated && (
+                <div className="ai-chat-toolbar">
+                    <div className="ai-chat-link-row">
+                        {watchedTerminals.map((w) => {
+                            const view = lookupSession(w.sessionId, renderSources);
+                            const status = view?.status;
+                            const stale = status !== 'connected';
+                            const label = watchedLabels.get(w.sessionId) || t('aiChat.pane.terminalFallback');
+                            const worker = workers[w.sessionId];
+                            if (worker) {
+                                // AI worker session (ADR-AI-007): no tab to jump to, so the chip
+                                // offers "open as tab" and "disconnect" instead of focus / unwatch.
+                                const connecting = worker.status === 'connecting';
+                                const statusLabel = connecting ? t('aiChat.connect.statusConnecting') : (status ?? t('aiChat.pane.statusDisconnected'));
                                 return (
                                     <div
                                         key={w.sessionId}
-                                        className={`ai-chat-link${stale ? ' ai-chat-link-stale' : ''}`}
-                                        style={activeConvColor ? ({ '--accent-color': activeConvColor } as React.CSSProperties) : undefined}
+                                        className={`ai-chat-link ai-chat-link-worker${stale && !connecting ? ' ai-chat-link-stale' : ''}`}
+                                        style={activeConvColor ? ({ '--conv-color': activeConvColor } as React.CSSProperties) : undefined}
+                                        data-testid="ai-worker-chip"
                                     >
+                                        <span
+                                            className="ai-chat-linked-chip ai-chat-worker-chip"
+                                            title={t('aiChat.connect.trayChipTitle', { name: label, status: statusLabel })}
+                                        >
+                                            {/* robot icon: an AI-opened session */}
+                                            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                                <rect x="4" y="8" width="16" height="12" rx="2" />
+                                                <path d="M12 2v6" />
+                                                <circle cx="9" cy="14" r="1" />
+                                                <circle cx="15" cy="14" r="1" />
+                                            </svg>
+                                            <span className="ai-chat-linked-chip-name">{label}</span>
+                                            {connecting && <span className="ai-chat-worker-spinner" aria-hidden="true" />}
+                                        </span>
                                         <button
                                             type="button"
-                                            className={`ai-chat-linked-chip${stale ? ' ai-chat-linked-chip-stale' : ''}`}
-                                            onClick={() => {
-                                                tauriService.focusWindow().catch(() => {});
-                                                window.dispatchEvent(new CustomEvent('hotty-focus-session', { detail: { sessionId: w.sessionId } }));
-                                            }}
-                                            onMouseEnter={() => {
-                                                window.dispatchEvent(new CustomEvent('hotty-highlight-session', { detail: { sessionId: w.sessionId, highlighted: true } }));
-                                            }}
-                                            onMouseLeave={() => {
-                                                window.dispatchEvent(new CustomEvent('hotty-highlight-session', { detail: { sessionId: w.sessionId, highlighted: false } }));
-                                            }}
-                                            title={stale
-                                                ? t('aiChat.pane.linkedChipTitleStale', { name: label, status: status ?? t('aiChat.pane.statusDisconnected') })
-                                                : t('aiChat.pane.linkedChipTitle', { name: label })}
-                                            aria-label={stale
-                                                ? t('aiChat.pane.linkedChipAriaStale', { name: label, status: status ?? t('aiChat.pane.statusDisconnected') })
-                                                : t('aiChat.pane.linkedChipAria', { name: label })}
+                                            className="ai-chat-link-unlink ai-chat-worker-action"
+                                            title={t('aiChat.connect.trayOpenAsTab', { name: label })}
+                                            aria-label={t('aiChat.connect.trayOpenAsTab', { name: label })}
+                                            // An AI Chat window hands the terminal to another window, which
+                                            // can only take ownership of a session the backend already has:
+                                            // handed over while still connecting, it would come up in the
+                                            // other window as a tab that never connects.
+                                            disabled={IS_AI_CHAT_WINDOW && connecting}
+                                            onClick={() => onMaterializeWorker?.(w.sessionId)}
                                         >
+                                            {/* open-in-tab icon */}
                                             <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-                                                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                                                <rect x="3" y="5" width="18" height="14" rx="2" />
+                                                <path d="M3 9h18" />
                                             </svg>
-                                            <span className="ai-chat-linked-chip-name">
-                                                {label}{stale ? t('aiChat.pane.disconnectedSuffix') : ''}
-                                            </span>
                                         </button>
                                         <button
                                             type="button"
                                             className="ai-chat-link-unlink"
-                                            title={t('aiChat.pane.linkedChipRemove', { name: label })}
-                                            aria-label={t('aiChat.pane.linkedChipRemove', { name: label })}
-                                            onClick={() => onRemoveLink?.(w.sessionId)}
+                                            title={t('aiChat.connect.trayDisconnect', { name: label })}
+                                            aria-label={t('aiChat.connect.trayDisconnect', { name: label })}
+                                            onClick={() => onCloseWorker?.(w.sessionId)}
                                         >
-                                            {/* broken-chain (link-off) icon */}
-                                            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true">
-                                                <path d="M17 7h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1 0 1.43-.98 2.63-2.31 2.98l1.46 1.46C20.88 15.61 22 13.95 22 12c0-2.76-2.24-5-5-5zm-1 4h-2.19l2 2H16v-2zM2 4.27l3.11 3.11C3.29 8.12 2 9.91 2 12c0 2.76 2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1 0-1.59 1.21-2.9 2.76-3.07L8.73 11H8v2h2.73L13 15.27V17h1.73l4.01 4.01 1.41-1.41L3.41 2.86 2 4.27z" />
-                                            </svg>
+                                            ×
                                         </button>
                                     </div>
                                 );
-                            })}
-                            {aiOpenedLive > 0 && (
-                                <span
-                                    className="ai-chat-worker-counter"
-                                    title={t('aiChat.connect.trayCounterTitle', { count: aiOpenedLive, max: aiMaxWorkerSessionsPerTab })}
+                            }
+                            return (
+                                <div
+                                    key={w.sessionId}
+                                    className={`ai-chat-link${stale ? ' ai-chat-link-stale' : ''}`}
+                                    style={activeConvColor ? ({ '--conv-color': activeConvColor } as React.CSSProperties) : undefined}
                                 >
-                                    {t('aiChat.connect.trayCounter', { count: aiOpenedLive, max: aiMaxWorkerSessionsPerTab })}
-                                </span>
-                            )}
-                            {(addLinkGroups.local.length + addLinkGroups.remote.length) > 0 && (
-                                <div className="ai-chat-link-attach ai-chat-link-add">
-                                    {/* plus icon */}
-                                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                        <line x1="12" y1="5" x2="12" y2="19" />
-                                        <line x1="5" y1="12" x2="19" y2="12" />
-                                    </svg>
-                                    <span className="ai-chat-link-attach-label">{t('aiChat.pane.addTerminal')}</span>
-                                    <select
-                                        className="ai-chat-link-select"
-                                        value=""
-                                        title={t('aiChat.pane.addTerminal')}
-                                        aria-label={t('aiChat.pane.addTerminal')}
-                                        onMouseDown={() => onRefreshSessions?.()}
-                                        onFocus={() => onRefreshSessions?.()}
-                                        onChange={(e) => { if (e.target.value) onAddLink?.(e.target.value); }}
+                                    <button
+                                        type="button"
+                                        className={`ai-chat-linked-chip${stale ? ' ai-chat-linked-chip-stale' : ''}`}
+                                        onClick={() => {
+                                            tauriService.focusWindow().catch(() => {});
+                                            window.dispatchEvent(new CustomEvent('hotty-focus-session', { detail: { sessionId: w.sessionId } }));
+                                        }}
+                                        onMouseEnter={() => {
+                                            window.dispatchEvent(new CustomEvent('hotty-highlight-session', { detail: { sessionId: w.sessionId, highlighted: true } }));
+                                        }}
+                                        onMouseLeave={() => {
+                                            window.dispatchEvent(new CustomEvent('hotty-highlight-session', { detail: { sessionId: w.sessionId, highlighted: false } }));
+                                        }}
+                                        title={stale
+                                            ? t('aiChat.pane.linkedChipTitleStale', { name: label, status: status ?? t('aiChat.pane.statusDisconnected') })
+                                            : t('aiChat.pane.linkedChipTitle', { name: label })}
+                                        aria-label={stale
+                                            ? t('aiChat.pane.linkedChipAriaStale', { name: label, status: status ?? t('aiChat.pane.statusDisconnected') })
+                                            : t('aiChat.pane.linkedChipAria', { name: label })}
                                     >
-                                        <option value="" disabled>{t('aiChat.pane.addTerminal')}</option>
-                                        {addLinkGroups.local.length > 0 && (
-                                            <optgroup label={t('aiChat.pane.linkThisWindow')}>
-                                                {addLinkGroups.local.map((s) => (
-                                                    <option key={s.sessionId} value={s.sessionId}>{s.displayName}</option>
-                                                ))}
-                                            </optgroup>
-                                        )}
-                                        {addLinkGroups.remote.map(([label, list]) => (
-                                            <optgroup key={label} label={t('aiChat.pane.linkOtherWindow', { label })}>
-                                                {list.map((s) => (
-                                                    <option key={s.sessionId} value={s.sessionId}>{s.displayName}</option>
-                                                ))}
-                                            </optgroup>
-                                        ))}
-                                    </select>
+                                        {paneMark(w.sessionId)}
+                                        <span className="ai-chat-linked-chip-name">
+                                            {label}{stale ? t('aiChat.pane.disconnectedSuffix') : ''}
+                                        </span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="ai-chat-link-unlink"
+                                        title={t('aiChat.pane.linkedChipRemove', { name: label })}
+                                        aria-label={t('aiChat.pane.linkedChipRemove', { name: label })}
+                                        onClick={() => onRemoveLink?.(w.sessionId)}
+                                    >
+                                        ×
+                                    </button>
                                 </div>
+                            );
+                        })}
+                        {aiOpenedLive > 0 && (
+                            <span
+                                className="ai-chat-worker-counter"
+                                title={t('aiChat.connect.trayCounterTitle', { count: aiOpenedLive, max: aiMaxWorkerSessionsPerTab })}
+                            >
+                                {t('aiChat.connect.trayCounter', { count: aiOpenedLive, max: aiMaxWorkerSessionsPerTab })}
+                            </span>
+                        )}
+                        {(addLinkGroups.local.length + addLinkGroups.remote.length) > 0 && (
+                            <button
+                                ref={addLinkBtnRef}
+                                type="button"
+                                className={`ai-chat-link-add-btn${addLinkOpen ? ' open' : ''}`}
+                                title={t('aiChat.pane.addTerminal')}
+                                aria-label={t('aiChat.pane.addTerminal')}
+                                aria-haspopup="menu"
+                                aria-expanded={addLinkOpen}
+                                onClick={() => {
+                                    if (!addLinkOpen) onRefreshSessions?.();
+                                    setAddLinkOpen((o) => !o);
+                                }}
+                            >
+                                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                    <line x1="12" y1="5" x2="12" y2="19" />
+                                    <line x1="5" y1="12" x2="19" y2="12" />
+                                </svg>
+                                {/* With nothing watched yet the button says what it does;
+                                    beside the chips a bare + is enough. */}
+                                {watchedTerminals.length === 0 && <span>{t('aiChat.pane.addTerminal')}</span>}
+                            </button>
+                        )}
+                        <DockMenu
+                            open={addLinkOpen}
+                            onClose={() => setAddLinkOpen(false)}
+                            anchorRef={addLinkBtnRef}
+                            placement="down"
+                            aria-label={t('aiChat.pane.addTerminal')}
+                        >
+                            {addLinkGroups.local.length > 0 && (
+                                <>
+                                    <div className="ai-chat-link-menu-heading">{t('aiChat.pane.linkThisWindow')}</div>
+                                    {addLinkGroups.local.map((s) => (
+                                        <button
+                                            key={s.sessionId}
+                                            type="button"
+                                            role="menuitem"
+                                            className="dock-menu-item"
+                                            onClick={() => { setAddLinkOpen(false); onAddLink?.(s.sessionId); }}
+                                        >
+                                            {paneMark(s.sessionId)}
+                                            <span>{s.displayName}</span>
+                                        </button>
+                                    ))}
+                                </>
                             )}
-                        </div>
-                    )}
-                </div>
-                {/* One header action, on the right: clearing the conversation. (A
-                    separate "New chat" pill used to sit on the left doing the same
-                    thing — the tab strip's + is what opens a new conversation.) */}
-                {isAuthenticated && (
-                    <div className="ai-chat-header-right">
-                        {/* Pinning belongs to the AI Chat window alone: doing it
-                            to a terminal window would park the user's own work
-                            permanently over everything else. */}
-                        {IS_AI_CHAT_WINDOW && onToggleAlwaysOnTop && (
-                            <button
-                                type="button"
-                                className={`ai-chat-window-btn${alwaysOnTop ? ' active' : ''}`}
-                                onClick={onToggleAlwaysOnTop}
-                                aria-pressed={!!alwaysOnTop}
-                                title={alwaysOnTop ? t('aiChat.pane.unpinTitle') : t('aiChat.pane.pinTitle')}
-                                aria-label={alwaysOnTop ? t('aiChat.pane.unpinTitle') : t('aiChat.pane.pinTitle')}
-                            >
-                                {/* pin icon */}
-                                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                    <path d="M12 17v5" />
-                                    <path d="M9 10.76V4h6v6.76a2 2 0 0 0 .59 1.42L18 14.5V17H6v-2.5l2.41-2.32A2 2 0 0 0 9 10.76z" />
-                                </svg>
-                            </button>
-                        )}
-                        {(IS_AI_CHAT_WINDOW ? onPopInWindow : onPopOutWindow) && (
-                            <button
-                                type="button"
-                                className="ai-chat-window-btn"
-                                onClick={IS_AI_CHAT_WINDOW ? onPopInWindow : onPopOutWindow}
-                                disabled={!canMoveWindow}
-                                title={windowMoveTitle}
-                                aria-label={windowMoveTitle}
-                            >
-                                {/* two overlapping frames: this pane, elsewhere */}
-                                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                    <rect x="3" y="7" width="12" height="12" rx="2" />
-                                    <path d="M9 7V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2" />
-                                </svg>
-                                <span>
-                                    {IS_AI_CHAT_WINDOW ? t('aiChat.pane.popIn') : t('aiChat.pane.popOut')}
-                                </span>
-                            </button>
-                        )}
+                            {addLinkGroups.remote.map(([label, list]) => (
+                                <React.Fragment key={label}>
+                                    <div className="ai-chat-link-menu-heading">{t('aiChat.pane.linkOtherWindow', { label })}</div>
+                                    {list.map((s) => (
+                                        <button
+                                            key={s.sessionId}
+                                            type="button"
+                                            role="menuitem"
+                                            className="dock-menu-item"
+                                            onClick={() => { setAddLinkOpen(false); onAddLink?.(s.sessionId); }}
+                                        >
+                                            <span>{s.displayName}</span>
+                                        </button>
+                                    ))}
+                                </React.Fragment>
+                            ))}
+                        </DockMenu>
+                    </div>
+                    <ExecutionModeBar
+                        paused={autoExecPaused}
+                        onPausedChange={(next) => {
+                            setAutoExecPaused(next);
+                            if (next && isStreaming) {
+                                handleCancel();
+                            }
+                        }}
+                        onOpenSettings={onOpenSettings}
+                    />
+                    {/* Pinning belongs to the AI Chat window alone: doing it
+                        to a terminal window would park the user's own work
+                        permanently over everything else. */}
+                    {IS_AI_CHAT_WINDOW && onToggleAlwaysOnTop && (
                         <button
                             type="button"
-                            className="ai-chat-new-chat-btn"
-                            onClick={handleClearChatClick}
-                            title={t('aiChat.pane.clearConversationTitle')}
-                            aria-label={t('aiChat.pane.clearConversationTitle')}
+                            className={`ai-chat-window-btn${alwaysOnTop ? ' active' : ''}`}
+                            onClick={onToggleAlwaysOnTop}
+                            aria-pressed={!!alwaysOnTop}
+                            title={alwaysOnTop ? t('aiChat.pane.unpinTitle') : t('aiChat.pane.pinTitle')}
+                            aria-label={alwaysOnTop ? t('aiChat.pane.unpinTitle') : t('aiChat.pane.pinTitle')}
                         >
-                            {/* trash icon */}
-                            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                <polyline points="3 6 5 6 21 6" />
-                                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                            {/* pin icon */}
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <path d="M12 17v5" />
+                                <path d="M9 10.76V4h6v6.76a2 2 0 0 0 .59 1.42L18 14.5V17H6v-2.5l2.41-2.32A2 2 0 0 0 9 10.76z" />
                             </svg>
-                            <span>{t('aiChat.pane.clearConversation')}</span>
                         </button>
-                    </div>
-                )}
-            </div>
+                    )}
+                    {(IS_AI_CHAT_WINDOW ? onPopInWindow : onPopOutWindow) && (
+                        <button
+                            type="button"
+                            className="ai-chat-window-btn"
+                            onClick={IS_AI_CHAT_WINDOW ? onPopInWindow : onPopOutWindow}
+                            disabled={!canMoveWindow}
+                            title={windowMoveTitle}
+                            aria-label={windowMoveTitle}
+                        >
+                            {/* two overlapping frames: this pane, elsewhere */}
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <rect x="3" y="7" width="12" height="12" rx="2" />
+                                <path d="M9 7V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2" />
+                            </svg>
+                        </button>
+                    )}
+                </div>
+            )}
 
             {!isAuthenticated ? (
                 <div className="ai-chat-unauth-state">
@@ -2946,9 +2964,6 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                             }
                             return (
                             <div key={idx} className={`ai-chat-message ai-chat-message-${msg.role}`}>
-                                <div className="ai-chat-message-avatar">
-                                    {msg.role === 'user' ? '\u{1F464}' : <AIIcon size={18} provider={activeAiProvider} />}
-                                </div>
                                 <div className={`ai-chat-message-content ${msg.role === 'model' ? 'ai-chat-markdown' : ''}`}>
                                     {msg.role === 'model' ? (
                                         <MessageContent
@@ -2960,6 +2975,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                             targetId={lastTargetSessionId}
                                             targetLive={linkedLive}
                                             resolveBlockTarget={(alias) => resolveBlockTarget(alias, msg.execTarget)}
+                                            paneMarkFor={paneMark}
                                             autoExecutedCommands={autoExecutedCommands}
                                             ranManuallyCommands={ranManuallyCommands}
                                             declinedCommands={declinedCommands}
@@ -3032,7 +3048,6 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                         })}
                         {streamingContent && (
                             <div className="ai-chat-message ai-chat-message-model">
-                                <div className="ai-chat-message-avatar"><AIIcon size={18} provider={activeAiProvider} /></div>
                                 <div className="ai-chat-message-content ai-chat-markdown streaming">
                                     <MessageContent
                                         content={streamingContent}
@@ -3042,6 +3057,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                         targetId={lastTargetSessionId}
                                         targetLive={linkedLive}
                                         resolveBlockTarget={resolveBlockTarget}
+                                        paneMarkFor={paneMark}
                                         connectPolicyOff={aiConnectPolicy === 'off'}
                                         localShellType={aiLocalShellType}
                                     />
@@ -3050,7 +3066,6 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                         )}
                         {isStreaming && !streamingContent && (
                             <div className="ai-chat-message ai-chat-message-model">
-                                <div className="ai-chat-message-avatar"><AIIcon size={18} provider={activeAiProvider} /></div>
                                 <div className="ai-chat-message-content">
                                     <span className="ai-chat-thinking">
                                         {t('aiChat.pane.thinking')}
@@ -3140,9 +3155,25 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                             onChange={(e) => setInputText(e.target.value)}
                             onKeyDown={handleKeyDown}
                             onPaste={handlePaste}
-                            placeholder={selectedModel === 'Unspecified' ? t('aiChat.pane.inputPlaceholderSelectModel') : t('aiChat.pane.inputPlaceholder')}
+                            placeholder={selectedModel === 'Unspecified'
+                                ? t('aiChat.pane.inputPlaceholderSelectModel')
+                                : watchedTerminals.length === 1
+                                    ? t('aiChat.pane.askAbout', { name: watchedNamesLabel })
+                                    : t('aiChat.pane.inputPlaceholder')}
                         />
                         <div className="ai-chat-input-toolbar">
+                            <button
+                                type="button"
+                                className="ai-chat-attach-btn"
+                                onClick={() => fileInputRef.current?.click()}
+                                disabled={pendingImages.length >= IMAGE_MAX_COUNT}
+                                title={t('aiChat.pane.attachImage')}
+                                aria-label={t('aiChat.pane.attachImage')}
+                            >
+                                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                    <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                                </svg>
+                            </button>
                             <div className="ai-chat-settings-wrap">
                                 <button
                                     ref={settingsTriggerRef}
@@ -3154,11 +3185,10 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                     aria-haspopup="dialog"
                                     aria-expanded={settingsOpen}
                                 >
-                                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                        <circle cx="12" cy="12" r="3" />
-                                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-                                    </svg>
                                     <span className="ai-chat-settings-btn-label">{selectedModel === 'Unspecified' ? t('aiChat.pane.settingsButtonSelectModel') : modelLabel(availableModels, selectedModel)}</span>
+                                    <svg className="ai-chat-settings-btn-caret" viewBox="0 0 24 24" width="10" height="10" fill="currentColor" aria-hidden="true">
+                                        <path d="M6 9l6 6 6-6z" />
+                                    </svg>
                                 </button>
                                 {settingsOpen && (
                                     <div ref={settingsPopoverRef} className="ai-chat-settings-popover" role="dialog" aria-label={t('aiChat.pane.settingsPopoverAriaLabel')}>
@@ -3251,31 +3281,32 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                     </div>
                                 )}
                             </div>
+                            {(totalInputTokens > 0 || totalOutputTokens > 0) && (
+                                // The cost when the model's price is known, else the
+                                // token counts; the counts are always in the title.
+                                <span
+                                    className="ai-chat-cost"
+                                    title={t('aiChat.pane.tokenInOut', { in: totalInputTokens.toLocaleString(), out: totalOutputTokens.toLocaleString() })}
+                                >
+                                    {totalCost !== null
+                                        ? t('aiChat.pane.tokenCost', { cost: formatAICost(totalCost) })
+                                        : t('aiChat.pane.tokenInOut', { in: totalInputTokens.toLocaleString(), out: totalOutputTokens.toLocaleString() })}
+                                </span>
+                            )}
+                            <span className="ai-chat-input-toolbar-spacer" />
+                            {isStreaming && (
+                                <button
+                                    type="button"
+                                    className="ai-chat-cancel-btn"
+                                    onClick={handleCancel}
+                                    title={t('aiChat.pane.stop')}
+                                    aria-label={t('aiChat.pane.stop')}
+                                >
+                                    <svg width="9" height="9" viewBox="0 0 10 10" fill="currentColor" aria-hidden="true"><rect width="10" height="10" rx="1" /></svg>
+                                </button>
+                            )}
                             <button
                                 type="button"
-                                className="ai-chat-attach-btn"
-                                onClick={() => fileInputRef.current?.click()}
-                                disabled={pendingImages.length >= IMAGE_MAX_COUNT}
-                                title={t('aiChat.pane.attachImage')}
-                                aria-label={t('aiChat.pane.attachImage')}
-                            >
-                                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                    <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
-                                </svg>
-                            </button>
-                            <span className="ai-chat-input-toolbar-spacer" />
-                            <ExecutionModeBar
-                                paused={autoExecPaused}
-                                onPausedChange={(next) => {
-                                    setAutoExecPaused(next);
-                                    if (next && isStreaming) {
-                                        handleCancel();
-                                    }
-                                }}
-                                onOpenSettings={onOpenSettings}
-                            />
-                            {isStreaming && <button className="ai-chat-cancel-btn" onClick={handleCancel} title={t('aiChat.pane.stop')} aria-label={t('aiChat.pane.stop')}>&#x25A0;</button>}
-                            <button
                                 className="ai-chat-send-btn"
                                 onClick={handleSend}
                                 disabled={(!inputText.trim() && pendingImages.length === 0) || selectedModel === 'Unspecified'}
@@ -3289,7 +3320,13 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                         ? t('aiChat.pane.sendTitleQueue')
                                         : t('aiChat.pane.sendTitle')
                                 }
-                            >&#x27A4;</button>
+                            >
+                                {/* arrow-up */}
+                                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                    <path d="M12 19V5" />
+                                    <path d="M5 12l7-7 7 7" />
+                                </svg>
+                            </button>
                         </div>
                     </div>
                     {selectedModel === 'Unspecified' && !isLoadingModels && availableModels.length > 0 && (
@@ -3298,35 +3335,6 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                 <path d="M12 2L1 21h22L12 2zm0 4l8.53 14.5H3.47L12 6zm-1 5v5h2v-5h-2zm0 7v2h2v-2h-2z" />
                             </svg>
                             <span>{t('aiChat.pane.selectModelHint')}</span>
-                        </div>
-                    )}
-                    {(inputText.length > 0 || isStreaming || totalInputTokens > 0 || totalOutputTokens > 0) && (
-                        <div className="ai-token-status">
-                            {isStreaming ? (
-                                streamingContent.length > 0 ? (
-                                    <span>{t('aiChat.pane.tokenReceiving', { tokens: Math.ceil(streamingContent.length / 4).toLocaleString() })}</span>
-                                ) : (
-                                    <span>{t('aiChat.pane.tokenWaiting')}</span>
-                                )
-                            ) : (
-                                <>
-                                    {(totalInputTokens > 0 || totalOutputTokens > 0) && (
-                                        <span>{t('aiChat.pane.tokenInOut', { in: totalInputTokens.toLocaleString(), out: totalOutputTokens.toLocaleString() })}</span>
-                                    )}
-                                    {totalCost !== null && (
-                                        <>
-                                            <span className="ai-token-status-sep">&middot;</span>
-                                            <span>{t('aiChat.pane.tokenCost', { cost: formatAICost(totalCost) })}</span>
-                                        </>
-                                    )}
-                                    {inputText.length > 0 && (
-                                        <>
-                                            {(totalInputTokens > 0 || totalOutputTokens > 0) && <span className="ai-token-status-sep">&middot;</span>}
-                                            <span>{t('aiChat.pane.tokenToSend', { tokens: Math.ceil(inputText.length / 4).toLocaleString() })}</span>
-                                        </>
-                                    )}
-                                </>
-                            )}
                         </div>
                     )}
                 </div>
