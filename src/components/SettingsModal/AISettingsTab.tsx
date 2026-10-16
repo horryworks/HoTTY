@@ -431,7 +431,7 @@ export function AISettingsTab() {
           onChange={(e) => update('aiLocalShellType', e.target.value as AiLocalShellType)}
         >
           <option value="powershell">PowerShell</option>
-          <option value="cmd">Command Prompt</option>
+          <option value="cmd">{t('chrome.tabBar.protocolCmd')}</option>
           <option value="git-bash">Git Bash</option>
         </select>
       </div>

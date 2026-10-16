@@ -195,8 +195,9 @@ pub async fn open_debug_log_folder(app: AppHandle) -> Result<(), String> {
         .map_err(|e| format!("failed to resolve log directory: {e}"))?;
 
     if !log_dir.exists() {
-        std::fs::create_dir_all(&log_dir)
-            .map_err(|e| format!("failed to create log directory: {e}"))?;
+        std::fs::create_dir_all(&log_dir).map_err(|e| {
+            crate::services::session_service::humanize_fs_error("the log folder", &e)
+        })?;
     }
 
     crate::services::os_paths::open_in_file_manager(&log_dir)

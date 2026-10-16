@@ -4,6 +4,8 @@ use std::path::PathBuf;
 use tauri::AppHandle;
 use tauri::Manager;
 
+use crate::services::session_service::humanize_fs_error;
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -39,7 +41,7 @@ fn user_algorithms_path(app: &AppHandle) -> Result<PathBuf, String> {
         .map_err(|e| format!("failed to resolve app config dir: {e}"))?;
     if !config_dir.exists() {
         std::fs::create_dir_all(&config_dir)
-            .map_err(|e| format!("failed to create config dir: {e}"))?;
+            .map_err(|e| humanize_fs_error("the config folder", &e))?;
     }
     Ok(config_dir.join(ALGORITHMS_FILENAME))
 }
@@ -130,16 +132,15 @@ pub fn merge_user_with_bundled(user: &SshAlgorithms, bundled: &SshAlgorithms) ->
 
 /// Read and parse an algorithms JSON file.
 fn read_algorithms_file(path: &std::path::Path) -> Result<SshAlgorithms, String> {
-    let meta =
-        std::fs::metadata(path).map_err(|e| format!("cannot read {}: {e}", path.display()))?;
+    let meta = std::fs::metadata(path).map_err(|e| humanize_fs_error("the algorithms file", &e))?;
     if meta.len() > MAX_FILE_SIZE {
         return Err(format!(
             "algorithms file {} exceeds max size",
             path.display()
         ));
     }
-    let contents = std::fs::read_to_string(path)
-        .map_err(|e| format!("failed to read {}: {e}", path.display()))?;
+    let contents =
+        std::fs::read_to_string(path).map_err(|e| humanize_fs_error("the algorithms file", &e))?;
     serde_json::from_str(&contents).map_err(|e| format!("failed to parse {}: {e}", path.display()))
 }
 
@@ -228,7 +229,7 @@ pub async fn save_ssh_algorithms(
     let user_path = user_algorithms_path(&app)?;
     let json = serde_json::to_string_pretty(&algorithms)
         .map_err(|e| format!("failed to serialize algorithms: {e}"))?;
-    std::fs::write(&user_path, json).map_err(|e| format!("failed to write algorithms: {e}"))?;
+    std::fs::write(&user_path, json).map_err(|e| humanize_fs_error("the algorithms file", &e))?;
 
     log::info!("saved SSH algorithms to {}", user_path.display());
     Ok(true)

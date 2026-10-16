@@ -3,6 +3,7 @@ import { usePaneStore, gridPaneIds } from '../../stores/paneStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { STORAGE_KEYS, windowScopedKey } from '../../constants/storage';
 import { WINDOW_LABEL } from '../../utils/windowLabel';
+import { SESSION_DRAG_TYPE } from '../../utils/sessionDrag';
 import './GridLayout.css';
 
 // Grid sizes are per-window layout state, so namespace their localStorage keys
@@ -235,7 +236,7 @@ export function GridLayout({ renderPane, onDropSession }: GridLayoutProps) {
   );
 
   const handleDragOver = (paneId: string) => (e: React.DragEvent) => {
-    if (!e.dataTransfer.types.includes('application/x-hotty-session')) return;
+    if (!e.dataTransfer.types.includes(SESSION_DRAG_TYPE)) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
     setDragOverPaneId(paneId);
@@ -244,7 +245,7 @@ export function GridLayout({ renderPane, onDropSession }: GridLayoutProps) {
   const handleDragLeave = () => setDragOverPaneId(null);
 
   const handleDrop = (paneId: string) => (e: React.DragEvent) => {
-    const sessionId = e.dataTransfer.getData('application/x-hotty-session');
+    const sessionId = e.dataTransfer.getData(SESSION_DRAG_TYPE);
     setDragOverPaneId(null);
     if (!sessionId) return;
     e.preventDefault();

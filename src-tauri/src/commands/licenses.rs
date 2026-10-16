@@ -11,6 +11,8 @@ use std::path::PathBuf;
 use tauri::AppHandle;
 use tauri::Manager;
 
+use crate::services::session_service::humanize_fs_error;
+
 /// One bundled third-party dependency.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -70,12 +72,12 @@ pub fn get_third_party_licenses(app: AppHandle) -> Result<ThirdPartyLicenses, St
         return Ok(ThirdPartyLicenses::default());
     }
     let meta =
-        std::fs::metadata(&path).map_err(|e| format!("cannot read license manifest: {e}"))?;
+        std::fs::metadata(&path).map_err(|e| humanize_fs_error("the license manifest", &e))?;
     if meta.len() > MAX_LICENSE_FILE_SIZE {
         return Err("license manifest exceeds max size".into());
     }
     let contents = std::fs::read_to_string(&path)
-        .map_err(|e| format!("failed to read license manifest: {e}"))?;
+        .map_err(|e| humanize_fs_error("the license manifest", &e))?;
     serde_json::from_str(&contents).map_err(|e| format!("failed to parse license manifest: {e}"))
 }
 

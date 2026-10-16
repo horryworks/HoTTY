@@ -447,8 +447,8 @@ export function NetboxTab() {
                     </div>
                 )}
 
-                {/* Rendered here only for tidiness — it is a fixed overlay at
-                    z-index 10001, one tier above the settings modal itself. */}
+                {/* Rendered here only for tidiness — it is a <Dialog>, so
+                    useDialogStack stacks it above the settings modal. */}
                 {scanOpen && (
                     <MoveByPrefixModal
                         tree={hostManager.tree}

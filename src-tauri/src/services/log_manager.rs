@@ -466,7 +466,9 @@ impl LogManager {
         }
 
         // Ensure directory exists
-        fs::create_dir_all(log_dir).map_err(|e| format!("failed to create log dir: {e}"))?;
+        fs::create_dir_all(log_dir).map_err(|e| {
+            crate::services::session_service::humanize_fs_error("the log folder", &e)
+        })?;
 
         // Require the directory to have been user-approved via a native dialog
         // (Browse-to-pick or yes/no confirm). This means a compromised

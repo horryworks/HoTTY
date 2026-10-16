@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { useSidebarLayoutStore, type SidebarEdge } from '../../stores/sidebarLayoutStore';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { SESSION_DRAG_TYPE } from '../../utils/sessionDrag';
 import './Sidebar.css';
 
 interface SidebarProps {
@@ -113,7 +114,7 @@ export function Sidebar({ edge, children, onDropSession }: SidebarProps) {
   }, [edge, setPercent, visible]);
 
   const handleDragOver = (e: React.DragEvent) => {
-    if (!e.dataTransfer.types.includes('application/x-hotty-session')) return;
+    if (!e.dataTransfer.types.includes(SESSION_DRAG_TYPE)) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
     setDropActive(true);
@@ -122,7 +123,7 @@ export function Sidebar({ edge, children, onDropSession }: SidebarProps) {
   const handleDragLeave = () => setDropActive(false);
 
   const handleDrop = (e: React.DragEvent) => {
-    const sessionId = e.dataTransfer.getData('application/x-hotty-session');
+    const sessionId = e.dataTransfer.getData(SESSION_DRAG_TYPE);
     setDropActive(false);
     if (!sessionId) return;
     e.preventDefault();
