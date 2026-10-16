@@ -947,6 +947,7 @@ function App() {
             title={featureLabel}
             detail={featureName && featureName !== featureLabel ? featureName : undefined}
             onClose={() => handleCloseTab(featureInfo.id)}
+            dragSessionId={featureInfo.id}
           />
         )}
         {terminalHeader && (

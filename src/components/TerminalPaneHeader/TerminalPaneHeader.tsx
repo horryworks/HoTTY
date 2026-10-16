@@ -51,6 +51,7 @@ export function TerminalPaneHeader({
           )
         }
         onClose={() => onClose(session.id)}
+        dragSessionId={session.id}
       />
       {menuElement}
     </>

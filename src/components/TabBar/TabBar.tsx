@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type DragEvent, type MouseEvent, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useTabKeyboardNav } from '../../hooks/useTabKeyboardNav';
-import { useUiOverlayStore } from '../../stores/uiOverlayStore';
+import { beginSessionDrag, endSessionDrag } from '../../utils/sessionDrag';
 import { useTabActivityStore } from '../../stores/tabActivityStore';
 import { paneNumber } from '../../stores/paneStore';
 import { FEATURE_LABEL_KEYS } from '../../utils/paneTypes';
@@ -14,8 +14,6 @@ import { NewSessionMenu } from './NewSessionMenu';
 import { ChevronIcon } from './TabIcons';
 import type { LocalShellChoice, NewSessionChoice } from '../../types/appTypes';
 import './TabBar.css';
-
-export const SESSION_DRAG_TYPE = 'application/x-hotty-session';
 
 interface TabBarProps {
   tabItems: TabItem[];
@@ -183,17 +181,12 @@ export function TabBar({
 
   const handleDragStart = (e: DragEvent, item: TabItem) => {
     setDragId(item.id);
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData(SESSION_DRAG_TYPE, item.id);
-    e.dataTransfer.setData('text/plain', item.id);
-    // Hide any Web Browser pane's native webview for the drag's duration so its
-    // OS-composited window stops swallowing the pane drop target's DOM events.
-    useUiOverlayStore.getState().setSessionDragging(true);
+    beginSessionDrag(e.dataTransfer, item.id);
   };
 
   const handleDragEnd = () => {
     clearDrag();
-    useUiOverlayStore.getState().setSessionDragging(false);
+    endSessionDrag();
   };
 
   /** Dropping on a shown row puts the dragged tab in that row's pane. */

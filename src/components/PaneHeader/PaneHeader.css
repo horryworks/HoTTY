@@ -14,6 +14,11 @@
   overflow: hidden;
 }
 
+/* Grab the header to move the pane's tab onto another pane. */
+.pane-term-header.draggable {
+  cursor: grab;
+}
+
 .pane-term-name {
   color: var(--text-primary);
   font-weight: 600;
