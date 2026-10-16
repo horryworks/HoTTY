@@ -2579,7 +2579,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
             {modelLoadError && (
                 <div className="ai-chat-auth-error" style={{ margin: '8px 12px' }}>
                     {t('aiChat.pane.modelListError')}
-                    <button onClick={() => setModelLoadError(false)} style={{ marginLeft: 8, cursor: 'pointer', background: 'none', border: 'none', color: 'inherit', textDecoration: 'underline' }}>{t('aiChat.pane.dismiss')}</button>
+                    <button type="button" className="ai-chat-auth-error-dismiss" onClick={() => setModelLoadError(false)}>{t('aiChat.pane.dismiss')}</button>
                 </div>
             )}
             {/* One 36px toolbar, like the tool panes: the watched terminals on the

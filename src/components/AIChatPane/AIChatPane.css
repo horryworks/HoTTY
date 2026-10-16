@@ -153,7 +153,7 @@
     transition: opacity 0.1s, color 0.1s;
 }
 
-.ai-chat-link:hover .ai-chat-link-unlink,
+.ai-chat-link:hover .ai-chat-link-unlink:not(:disabled),
 .ai-chat-link-unlink:focus-visible {
     opacity: 0.8;
 }
@@ -626,6 +626,17 @@
 
 .ai-chat-send-btn:hover:not(:disabled) {
     background-color: var(--accent-hover);
+}
+
+.ai-chat-auth-error-dismiss {
+    margin-left: 8px;
+    padding: 0;
+    background: none;
+    border: none;
+    color: inherit;
+    font: inherit;
+    text-decoration: underline;
+    cursor: pointer;
 }
 
 /* Nothing to send yet: a quiet grey disc, not the half-transparent accent the

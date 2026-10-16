@@ -12,8 +12,9 @@ interface DockMenuProps {
   anchorRef: RefObject<HTMLElement | null>;
   placement: DockMenuPlacement;
   className?: string;
-  /** `menu` for a list of commands; `group` for a row of toggle buttons. */
-  role?: 'menu' | 'group';
+  /** `menu` for a list of commands; `group` for a row of toggle buttons;
+   *  `dialog` for a small form (inputs and buttons together). */
+  role?: 'menu' | 'group' | 'dialog';
   'aria-label'?: string;
   children: ReactNode;
 }

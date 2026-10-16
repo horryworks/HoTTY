@@ -1,7 +1,8 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { Segmented } from '../PaneTools/PaneTools';
+import { DockMenu } from '../Dock/DockMenu';
 import './ExecutionModeBar.css';
 
 interface ExecutionModeBarProps {
@@ -27,30 +28,10 @@ export const ExecutionModeBar: React.FC<ExecutionModeBarProps> = ({ paused, onPa
     const maxConsecutiveAutoExecutions = useSettingsStore(s => s.maxConsecutiveAutoExecutions);
 
     const [popoverOpen, setPopoverOpen] = useState(false);
-    const popoverRef = useRef<HTMLDivElement | null>(null);
     const triggerRef = useRef<HTMLButtonElement | null>(null);
 
     const isAuto = commandExecutionMode === 'auto-execute-safe';
     const isUnlimited = maxConsecutiveAutoExecutions <= 0;
-
-    useEffect(() => {
-        if (!popoverOpen) return;
-        const onMouseDown = (e: MouseEvent) => {
-            const target = e.target as Node;
-            if (popoverRef.current?.contains(target)) return;
-            if (triggerRef.current?.contains(target)) return;
-            setPopoverOpen(false);
-        };
-        const onKey = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') setPopoverOpen(false);
-        };
-        document.addEventListener('mousedown', onMouseDown);
-        document.addEventListener('keydown', onKey);
-        return () => {
-            document.removeEventListener('mousedown', onMouseDown);
-            document.removeEventListener('keydown', onKey);
-        };
-    }, [popoverOpen]);
 
     const setMode = (mode: ExecutionMode) => {
         // Leaving auto mode leaves nothing for the limit popover to hold.
@@ -100,9 +81,12 @@ export const ExecutionModeBar: React.FC<ExecutionModeBarProps> = ({ paused, onPa
                 </button>
             )}
 
-            {popoverOpen && isAuto && (
-                <div
-                    ref={popoverRef}
+            {isAuto && (
+                <DockMenu
+                    open={popoverOpen}
+                    onClose={() => setPopoverOpen(false)}
+                    anchorRef={triggerRef}
+                    placement="down"
                     className="execution-mode-popover"
                     role="dialog"
                     aria-label={t('aiChat.executionMode.popoverAriaLabel')}
@@ -164,7 +148,7 @@ export const ExecutionModeBar: React.FC<ExecutionModeBarProps> = ({ paused, onPa
                             </button>
                         </>
                     )}
-                </div>
+                </DockMenu>
             )}
         </div>
     );

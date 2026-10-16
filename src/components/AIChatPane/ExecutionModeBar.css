@@ -38,12 +38,8 @@
     background: color-mix(in srgb, var(--color-warning) 10%, transparent);
 }
 
-/* ── Popover (opens downward from the toolbar, anchored right) ── */
-.execution-mode-popover {
-    position: absolute;
-    top: calc(100% + 6px);
-    right: 0;
-    z-index: 1000;
+/* ── Popover: a DockMenu (fixed, so a short pane never clips it) ── */
+.dock-menu.execution-mode-popover {
     min-width: 240px;
     padding: 10px;
     background: var(--bg-secondary);

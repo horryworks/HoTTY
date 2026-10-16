@@ -1,5 +1,25 @@
 # Release Notes
 
+## v2.1.2
+
+**The AI Chat pane is rebuilt to match the other panes, the title bar follows your theme, and a pane header can be dragged to swap two panes.**
+
+### New Features
+
+- **Swap two panes by dragging a header.** Drag a pane's one-line header onto another pane or an edge bar, and the two trade places. The close button and the AI link on the header still click as before.
+- **The title bar follows the theme.** On Windows 11 each HoTTY window paints its title bar in the theme's colours, and the minimise, maximise and close buttons turn light or dark to match. Two new theme colours, title bar background and title bar text, can be changed in the custom theme creator. A custom theme saved before this release uses its panel background and main text colour. Older Windows keeps the system title bar.
+
+### Improvements
+
+- **AI Chat looks like the other panes.** One toolbar runs across the top: the watched terminals on the left, each marked with the number of the pane showing it, and the execution mode and window buttons at the right end. "+" opens a menu of terminals to watch.
+- **Execution mode is two buttons: Ask each time and Auto.** In Auto, a "Max N" button beside them opens the run limit, Pause and the safety settings; while paused it reads "Paused". The default is still Ask each time.
+- **Command cards say first where they run** ("[1] Runs on sw-01"), then the verdict. The buttons read Run and Skip.
+- **Clear Conversation moved to the conversation tab's right-click menu,** and it now always asks first. Conversation tabs are marked with an underline instead of a coloured fill.
+- **A quieter message area.** No avatars; your messages sit on the right; the cost sits beside the model button; Send and Stop are a round arrow and a square. The token line under the input is gone.
+- **The AI Watch button says "AI"** in a small frame instead of showing a circle, painted in the conversation's colour while watching.
+- **The app icon has a white face,** so it stays visible on dark and light title bars alike.
+- **Clearer file errors.** Problems reading or saving settings, SSH algorithm settings, the license list or the log folder read as sentences instead of raw Windows text. "Command Prompt" in the AI shell choice is now translated.
+
 ## v2.1.1
 
 **Edge bars are numbered after the grid.** Every pane on screen now carries a number, edge bars included, in the order Ctrl+Tab moves through them.

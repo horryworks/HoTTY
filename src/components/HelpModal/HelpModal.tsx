@@ -14,11 +14,9 @@ const NewSessionIcon: React.FC<{ size?: number }> = ({ size = 14 }) => (
   </svg>
 );
 
-const WatchIcon: React.FC<{ size?: number }> = ({ size = 14 }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" style={{ display: 'inline', verticalAlign: 'middle', marginInline: '2px' }}>
-    <circle cx="12" cy="12" r="10" fill="currentColor" opacity="0.7" />
-    <circle cx="12" cy="12" r="6" fill="currentColor" opacity="0.4" />
-  </svg>
+/** The AI Watch button's own mark (see WatchButton), so the help shows what the tab shows. */
+const WatchIcon: React.FC = () => (
+  <span className="tab-watch-mark" style={{ display: 'inline-flex', verticalAlign: 'middle', marginInline: '2px' }} aria-hidden="true">AI</span>
 );
 
 interface HelpModalProps {
