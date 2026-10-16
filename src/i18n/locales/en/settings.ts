@@ -561,6 +561,8 @@ export const settings = {
       paneBadge6: "Pane mark 6: the badge of pane 6 in the tab list and in that pane's corner.",
       paneBadgeEdge: "Mark for edge-bar panes (left/right/top/bottom) in the tab list and in the bar's corner.",
       paneBadgeText: 'Text color on pane marks.',
+      titlebarBg: 'Background of the window\'s title bar (Windows 11).',
+      titlebarText: 'Text color of the window\'s title bar (Windows 11).',
       searchHighlightBg: 'Background tint for lines that contain a search match.',
       searchHighlightCurrentBg: 'Background for the currently focused search match line.',
       searchHighlightCurrentBorder: 'Outline color for the currently focused match line.',

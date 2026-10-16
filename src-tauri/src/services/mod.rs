@@ -32,4 +32,5 @@ pub mod timefmt;
 pub mod updater;
 pub mod watch_buffer;
 pub mod web_browser;
+pub mod window_chrome;
 pub mod wsl;

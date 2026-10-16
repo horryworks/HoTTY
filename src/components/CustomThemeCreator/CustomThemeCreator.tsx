@@ -47,7 +47,7 @@ const THEME_SECTIONS: { titleKey: string; descKey: string; keys: string[] }[] = 
     {
         titleKey: 'settings.customTheme.sectionUiTitle',
         descKey: 'settings.customTheme.sectionUiDesc',
-        keys: ['sidebar-bg', 'sidebar-btn-color', 'sidebar-btn-hover-bg', 'sidebar-btn-hover-color', 'sidebar-btn-active-bg', 'tab-bg', 'tab-text', 'tab-active-text', 'tab-close-bg', 'tab-close-hover-bg', 'tab-watching-text', 'tab-watching-bg', 'tab-watching-icon', 'tab-watching-icon-glow', 'tab-connecting-bg', 'tab-connecting-text', 'pane-connecting-bg', 'context-menu-bg', 'context-menu-border', 'context-menu-text', 'context-menu-hover-bg', 'hidden-item-bg', 'hidden-item-bg-hover', 'tree-meta-color', 'icon-folder', 'icon-host', 'terminal-prompt-default', 'terminal-prompt-active', 'terminal-letterbox-bg', 'pane-color-1', 'pane-color-2', 'pane-color-3', 'pane-color-4', 'pane-color-5', 'pane-color-6', 'pane-badge-1', 'pane-badge-2', 'pane-badge-3', 'pane-badge-4', 'pane-badge-5', 'pane-badge-6', 'pane-badge-edge', 'pane-badge-text'],
+        keys: ['titlebar-bg', 'titlebar-text', 'sidebar-bg', 'sidebar-btn-color', 'sidebar-btn-hover-bg', 'sidebar-btn-hover-color', 'sidebar-btn-active-bg', 'tab-bg', 'tab-text', 'tab-active-text', 'tab-close-bg', 'tab-close-hover-bg', 'tab-watching-text', 'tab-watching-bg', 'tab-watching-icon', 'tab-watching-icon-glow', 'tab-connecting-bg', 'tab-connecting-text', 'pane-connecting-bg', 'context-menu-bg', 'context-menu-border', 'context-menu-text', 'context-menu-hover-bg', 'hidden-item-bg', 'hidden-item-bg-hover', 'tree-meta-color', 'icon-folder', 'icon-host', 'terminal-prompt-default', 'terminal-prompt-active', 'terminal-letterbox-bg', 'pane-color-1', 'pane-color-2', 'pane-color-3', 'pane-color-4', 'pane-color-5', 'pane-color-6', 'pane-badge-1', 'pane-badge-2', 'pane-badge-3', 'pane-badge-4', 'pane-badge-5', 'pane-badge-6', 'pane-badge-edge', 'pane-badge-text'],
     },
     {
         titleKey: 'settings.customTheme.sectionProvidersTitle',
@@ -171,6 +171,8 @@ const VAR_DESCRIPTIONS: Record<string, string> = {
     'pane-badge-6': 'settings.customTheme.vars.paneBadge6',
     'pane-badge-edge': 'settings.customTheme.vars.paneBadgeEdge',
     'pane-badge-text': 'settings.customTheme.vars.paneBadgeText',
+    'titlebar-bg': 'settings.customTheme.vars.titlebarBg',
+    'titlebar-text': 'settings.customTheme.vars.titlebarText',
     'search-highlight-bg': 'settings.customTheme.vars.searchHighlightBg',
     'search-highlight-current-bg': 'settings.customTheme.vars.searchHighlightCurrentBg',
     'search-highlight-current-border': 'settings.customTheme.vars.searchHighlightCurrentBorder',

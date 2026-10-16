@@ -69,6 +69,7 @@ import { useTranslation } from 'react-i18next';
 import { useSettingsStore } from './stores/settingsStore';
 import { changeLanguage } from './i18n';
 import { applyTheme } from './utils/applyTheme';
+import { titleBarColors } from './utils/titleBarColors';
 import { DEFAULT_THEMES, isBuiltInThemeId } from './themes/defaults';
 import { useThemes } from './hooks/useThemes';
 import { usePaneKeyboardNav } from './hooks/usePaneKeyboardNav';
@@ -553,6 +554,12 @@ function App() {
       updateSetting('paneBackground', theme.terminal.paneBackground);
     }
   }, [themeId, fontSize, fontFamily, themesData, updateSetting]);
+
+  // The native title bar is outside the web page, so CSS cannot reach it.
+  const titleBar = titleBarColors(themesData[themeId] ?? DEFAULT_THEMES.dark);
+  useEffect(() => {
+    tauriService.setTitleBarColors(titleBar.background, titleBar.text).catch(() => {});
+  }, [titleBar.background, titleBar.text]);
 
   const orderedSessions: SessionRecord[] = sessionOrder
     .map((id) => sessions.get(id))

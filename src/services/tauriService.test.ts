@@ -111,6 +111,12 @@ describe('tauriService system commands', () => {
     expect(mockInvoke).toHaveBeenCalledWith('focus_window');
   });
 
+  it('setTitleBarColors passes both colours', async () => {
+    mockInvoke.mockResolvedValue(undefined);
+    await tauriService.setTitleBarColors('#252526', null);
+    expect(mockInvoke).toHaveBeenCalledWith('set_title_bar_colors', { background: '#252526', text: null });
+  });
+
   it('openDebugLogFolder invokes the correct command', async () => {
     mockInvoke.mockResolvedValue(undefined);
     await tauriService.openDebugLogFolder();

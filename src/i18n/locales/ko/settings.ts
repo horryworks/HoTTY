@@ -558,6 +558,8 @@ export const settings = {
       paneBadge6: '창 6 표시: 탭 목록과 해당 창 모서리에 표시되는 6번 창의 배지 색입니다.',
       paneBadgeEdge: '가장자리 바(왼쪽/오른쪽/위/아래) 창의 표시 색입니다(탭 목록과 바 모서리).',
       paneBadgeText: '창 표시의 글자 색입니다.',
+      titlebarBg: '창 제목 표시줄의 배경색입니다 (Windows 11).',
+      titlebarText: '창 제목 표시줄의 글자 색입니다 (Windows 11).',
       searchHighlightBg: '검색 결과가 포함된 행의 배경 색조입니다.',
       searchHighlightCurrentBg: '현재 포커스된 검색 결과 행의 배경색입니다.',
       searchHighlightCurrentBorder: '현재 포커스된 결과 행의 윤곽선 색상입니다.',

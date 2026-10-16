@@ -560,6 +560,8 @@ export const settings = {
       paneBadge6: 'ペイン 6 の番号札の色（タブ一覧とペインの右上）。',
       paneBadgeEdge: 'エッジバー（左・右・上・下）の札の色（タブ一覧とバーの右上）。',
       paneBadgeText: '番号札の文字色。',
+      titlebarBg: 'ウィンドウのタイトルバーの背景色（Windows 11）。',
+      titlebarText: 'ウィンドウのタイトルバーの文字色（Windows 11）。',
       searchHighlightBg: '検索に一致した行の背景の色味。',
       searchHighlightCurrentBg: '現在フォーカスされている検索一致行の背景色。',
       searchHighlightCurrentBorder: '現在フォーカスされている一致行の外枠の色。',

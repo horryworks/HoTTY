@@ -563,6 +563,8 @@ export const settings = {
       paneBadge6: 'Marque de volet 6 : le badge du volet 6 dans la liste des onglets et dans son coin.',
       paneBadgeEdge: 'Marque des volets de barre latérale (gauche/droite/haut/bas) dans la liste des onglets et dans leur coin.',
       paneBadgeText: 'Couleur du texte des marques de volet.',
+      titlebarBg: 'Fond de la barre de titre de la fenêtre (Windows 11).',
+      titlebarText: 'Couleur du texte de la barre de titre de la fenêtre (Windows 11).',
       searchHighlightBg: 'Teinte de fond des lignes contenant une correspondance de recherche.',
       searchHighlightCurrentBg: 'Couleur de fond de la ligne de correspondance actuellement sélectionnée.',
       searchHighlightCurrentBorder: 'Couleur du contour de la ligne de correspondance actuellement sélectionnée.',

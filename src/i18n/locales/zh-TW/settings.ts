@@ -556,6 +556,8 @@ export const settings = {
       paneBadge6: '窗格標記 6：索引標籤清單與該窗格右上角中窗格 6 的徽章顏色。',
       paneBadgeEdge: '邊欄窗格（左/右/上/下）的標記顏色（索引標籤清單與邊欄右上角）。',
       paneBadgeText: '窗格標記的文字顏色。',
+      titlebarBg: '視窗標題列的背景顏色（Windows 11）。',
+      titlebarText: '視窗標題列的文字顏色（Windows 11）。',
       searchHighlightBg: '包含搜尋相符項目的行的背景色調。',
       searchHighlightCurrentBg: '目前聚焦的搜尋相符行的背景色。',
       searchHighlightCurrentBorder: '目前聚焦的相符行的外框色彩。',

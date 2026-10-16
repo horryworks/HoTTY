@@ -3,6 +3,8 @@ use tauri::{AppHandle, Manager};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 use tauri_plugin_opener::OpenerExt;
 
+use crate::services::window_chrome;
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -275,6 +277,28 @@ pub async fn open_external(app: AppHandle, url: String) -> Result<(), String> {
     app.opener()
         .open_url(&url, None::<&str>)
         .map_err(|e| format!("failed to open url: {e}"))
+}
+
+// ---------------------------------------------------------------------------
+// set_title_bar_colors — paint the native title bar with the theme's colours
+// ---------------------------------------------------------------------------
+
+/// Colour the calling window's title bar (`#rrggbb`). `None` restores the
+/// system default.
+#[tauri::command]
+pub fn set_title_bar_colors(
+    window: tauri::WebviewWindow,
+    background: Option<String>,
+    text: Option<String>,
+) -> Result<(), String> {
+    let parse = |v: Option<String>| match v {
+        Some(v) => window_chrome::parse_hex_rgb(&v)
+            .map(Some)
+            .ok_or_else(|| format!("invalid colour: {v}")),
+        None => Ok(None),
+    };
+    let (bg, fg) = (parse(background)?, parse(text)?);
+    window_chrome::set_title_bar_colors(&window, bg, fg)
 }
 
 // ---------------------------------------------------------------------------

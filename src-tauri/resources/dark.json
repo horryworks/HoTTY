@@ -103,6 +103,8 @@
         "pane-badge-6": "#d98c6a",
         "pane-badge-edge": "#9aa1ad",
         "pane-badge-text": "#0f1114",
+        "titlebar-bg": "#252526",
+        "titlebar-text": "#e0e0e0",
         "ai-chat-content-font-size": "1.1em",
         "ai-token-font-size": "0.78em",
         "ai-markdown-h1-font-size": "1.3em",

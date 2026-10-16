@@ -562,6 +562,8 @@ export const settings = {
       paneBadge6: 'Marca de panel 6: la insignia del panel 6 en la lista de pestañas y en su esquina.',
       paneBadgeEdge: 'Marca de los paneles de barra lateral (izquierda/derecha/arriba/abajo) en la lista de pestañas y en su esquina.',
       paneBadgeText: 'Color del texto de las marcas de panel.',
+      titlebarBg: 'Fondo de la barra de título de la ventana (Windows 11).',
+      titlebarText: 'Color del texto de la barra de título de la ventana (Windows 11).',
       searchHighlightBg: 'Tono de fondo de las líneas que contienen una coincidencia de búsqueda.',
       searchHighlightCurrentBg: 'Color de fondo de la línea de la coincidencia de búsqueda enfocada.',
       searchHighlightCurrentBorder: 'Color del contorno de la línea de la coincidencia enfocada.',

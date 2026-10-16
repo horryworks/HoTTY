@@ -39,6 +39,7 @@ vi.mock('./services/tauriService', () => ({
     pingMonitorStop: vi.fn().mockResolvedValue(undefined),
     getAppVersion: vi.fn().mockResolvedValue('2.0.0-beta1'),
     setWindowTitle: vi.fn().mockResolvedValue(undefined),
+    setTitleBarColors: vi.fn().mockResolvedValue(undefined),
     onSessionData: vi.fn().mockResolvedValue(() => {}),
     onSessionStatus: vi.fn().mockResolvedValue(() => {}),
     onSessionError: vi.fn().mockResolvedValue(() => {}),
@@ -52,6 +53,7 @@ vi.mock('./utils/applyTheme', () => ({
 
 vi.mock('./themes/defaults', () => {
   const t = {
+    variables: {},
     terminal: {
       foreground: '#fff',
       background: '#000',

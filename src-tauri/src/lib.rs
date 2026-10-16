@@ -47,7 +47,7 @@ use commands::ssh_keys::{
 use commands::sync::broadcast_shared_change;
 use commands::system::{
     detect_git_bash, focus_window, list_serial_ports, list_system_fonts, list_wsl_distributions,
-    open_debug_log_folder, open_external,
+    open_debug_log_folder, open_external, set_title_bar_colors,
 };
 use commands::themes::{delete_custom_theme, get_themes, save_custom_theme};
 use commands::updater::{
@@ -388,6 +388,7 @@ pub fn run() {
             focus_window,
             open_debug_log_folder,
             open_external,
+            set_title_bar_colors,
             create_window,
             create_ai_chat_window,
             list_window_labels,

@@ -844,6 +844,11 @@ export const tauriService = {
     await getCurrentWebviewWindow().setTitle(title);
   },
 
+  /** Colour this window's native title bar (`#rrggbb`); null = system default. */
+  async setTitleBarColors(background: string | null, text: string | null): Promise<void> {
+    await invoke('set_title_bar_colors', { background, text });
+  },
+
   /**
    * Open an external URL in the user's default app.
    *
