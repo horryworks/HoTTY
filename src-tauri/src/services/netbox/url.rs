@@ -3,47 +3,23 @@
 use super::NetboxError;
 use tauri::Url;
 
-/// Generous, but bounded — a base URL is a host and maybe a port.
-pub const MAX_URL_LEN: usize = 2048;
+pub use crate::services::base_url::MAX_URL_LEN;
+use crate::services::base_url::{normalize_base_url, BaseUrlError};
 
 /// Validate and normalize a user-entered NetBox base URL to `scheme://host[:port]`.
 ///
 /// The single implementation, called from every command, so the check cannot be
-/// half-applied. Path, query, fragment **and userinfo** are dropped: a pasted
-/// `https://alice:secret@netbox.example.com/dcim/sites/` must not carry
-/// credentials into every request, nor double a slash onto `/api/dcim/regions/`.
-///
-/// ⚠️ Deliberately **not** an SSRF check, and this differs from Yagra on
-/// purpose. Yagra is a server with a real SSRF surface, so it refuses loopback.
-/// HoTTY is a desktop app: the person typing this URL is the person running the
-/// app, and the app already opens SSH sessions to arbitrary hosts. A developer's
-/// own `http://127.0.0.1:8000` NetBox is a legitimate user and is accepted —
-/// see `a_loopback_url_is_accepted_on_purpose`.
+/// half-applied. The rules (userinfo dropped, loopback accepted on purpose — this
+/// differs from Yagra, which is a server with a real SSRF surface) live in
+/// [`normalize_base_url`].
 pub fn validate_base_url(raw: &str) -> Result<String, NetboxError> {
-    let trimmed = raw.trim();
-    if trimmed.is_empty() {
-        return Err(NetboxError::UrlEmpty);
-    }
-    if trimmed.len() > MAX_URL_LEN {
-        return Err(NetboxError::UrlTooLong);
-    }
-    let url = Url::parse(trimmed).map_err(|_| NetboxError::UrlMalformed)?;
-    if !matches!(url.scheme(), "http" | "https") {
-        return Err(NetboxError::UrlScheme);
-    }
-    // `host_str` returns an IPv6 literal already bracketed (`[fd00::1]`), so
-    // rebuilding from it round-trips without parsing the address ourselves.
-    let host = url
-        .host_str()
-        .filter(|h| !h.is_empty())
-        .ok_or(NetboxError::UrlNoHost)?;
-
-    let mut out = format!("{}://{}", url.scheme(), host);
-    if let Some(port) = url.port() {
-        out.push(':');
-        out.push_str(&port.to_string());
-    }
-    Ok(out)
+    normalize_base_url(raw).map_err(|e| match e {
+        BaseUrlError::Empty => NetboxError::UrlEmpty,
+        BaseUrlError::TooLong => NetboxError::UrlTooLong,
+        BaseUrlError::Malformed => NetboxError::UrlMalformed,
+        BaseUrlError::Scheme => NetboxError::UrlScheme,
+        BaseUrlError::NoHost => NetboxError::UrlNoHost,
+    })
 }
 
 /// The path-and-query of a paginator's `next` link, ready to be re-joined onto

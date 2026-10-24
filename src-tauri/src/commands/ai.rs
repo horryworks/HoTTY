@@ -136,11 +136,12 @@ pub enum SendOutcome {
 }
 
 /// Run one chat send in its conversation's queue. `send` receives the token
-/// that Stop, a superseding send, a clear and the backstop deadline fire.
+/// that Stop, a superseding send, a clear and the backstop `deadline` fire.
 async fn run_send<F, Fut>(
     cancels: &CancelRegistry,
     gates: &SessionGates,
     session_id: &str,
+    deadline: std::time::Duration,
     send: F,
 ) -> Result<SendOutcome, String>
 where
@@ -177,7 +178,7 @@ where
         // not count against it.
         let deadline_token = cancel_token.clone();
         let deadline_guard = tokio::spawn(async move {
-            tokio::time::sleep(std::time::Duration::from_secs(STREAM_DEADLINE_SECS)).await;
+            tokio::time::sleep(deadline).await;
             log::warn!("[ai] stream exceeded backstop deadline; cancelling");
             deadline_token.cancel();
         });
@@ -306,16 +307,6 @@ const MAX_MESSAGE_LENGTH: usize = 1_000_000;
 /// A single command to classify is bounded well below the chat message limit —
 /// execute blocks are short. Keeps a hostile/runaway input from reaching the API.
 const MAX_COMMAND_LENGTH: usize = 8_192;
-/// Hard ceiling on a classification round-trip so a hung provider can't hold the
-/// service lock (and block auto-exec) indefinitely.
-const CLASSIFY_TIMEOUT_SECS: u64 = 12;
-
-/// Backstop deadline for a whole chat stream. Defense-in-depth: the frontend
-/// watchdog normally cancels a stalled stream at its ~600s hard cap, but if the
-/// UI is gone (window crashed) that cancel never arrives and the stream would
-/// hold the service lock forever. Set a bit above the frontend cap so the UI
-/// wins under normal operation and this only fires when the UI can't.
-const STREAM_DEADLINE_SECS: u64 = 660;
 
 fn validate_session_id(session_id: &str) -> Result<(), String> {
     if session_id.is_empty() {
@@ -525,20 +516,29 @@ async fn chat_send_inner(
     let sid = session_id.as_str();
     let (app, message, model) = (&app, message.as_str(), model.as_str());
     let system_instruction = system_instruction.as_deref();
-    let outcome = run_send(&ai.cancels, &ai.gates, sid, |cancel_token| async move {
-        let service = ai.service.read().await;
-        service
-            .send_message(
-                app,
-                sid,
-                message,
-                model,
-                system_instruction,
-                images,
-                cancel_token,
-            )
-            .await
-    })
+    // The backstop for this send, from the provider active when it starts
+    // (a local model may take minutes just to load).
+    let deadline = std::time::Duration::from_secs(ai.service.read().await.stream_deadline_secs());
+    let outcome = run_send(
+        &ai.cancels,
+        &ai.gates,
+        sid,
+        deadline,
+        |cancel_token| async move {
+            let service = ai.service.read().await;
+            service
+                .send_message(
+                    app,
+                    sid,
+                    message,
+                    model,
+                    system_instruction,
+                    images,
+                    cancel_token,
+                )
+                .await
+        },
+    )
     .await?;
     if outcome == SendOutcome::SkippedCancelled {
         // The provider never ran, so it could not report the cancel itself.
@@ -583,7 +583,8 @@ pub async fn ai_chat_clear(
 
 /// One-shot command-safety classification. History-less and non-streaming:
 /// returns a structured verdict the frontend uses to decide auto-execution.
-/// Bounded by `CLASSIFY_TIMEOUT_SECS` so a hung provider can't stall the gate.
+/// Bounded by the provider's `classify_timeout_secs` so a hung provider can't
+/// stall the gate.
 #[tauri::command]
 pub async fn ai_classify_command(
     state: State<'_, AIServiceState>,
@@ -591,17 +592,15 @@ pub async fn ai_classify_command(
     model: String,
 ) -> Result<CommandVerdict, String> {
     validate_command(&command)?;
+    let limit = state.service.read().await.classify_timeout_secs();
     // Read lock: classification now runs CONCURRENTLY with in-flight streams
-    // (both are read-shaped), so it no longer queues behind a send. The 12s
+    // (both are read-shaped), so it no longer queues behind a send. The
     // timeout still bounds a hung provider, and acquiring the lock inside it keeps
     // the guarantee even against a pending writer.
-    match tokio::time::timeout(
-        std::time::Duration::from_secs(CLASSIFY_TIMEOUT_SECS),
-        async {
-            let service = state.service.read().await;
-            service.classify_command(&command, &model).await
-        },
-    )
+    match tokio::time::timeout(std::time::Duration::from_secs(limit), async {
+        let service = state.service.read().await;
+        service.classify_command(&command, &model).await
+    })
     .await
     {
         Ok(result) => result,
@@ -702,6 +701,8 @@ mod tests {
     use futures::poll;
     use std::pin::pin;
     use std::sync::atomic::AtomicBool;
+
+    const TEST_DEADLINE: std::time::Duration = std::time::Duration::from_secs(660);
 
     fn gate_count(gates: &SessionGates) -> usize {
         gates.map().len()
@@ -811,19 +812,31 @@ mod tests {
         let (cancels, gates) = (StdMutex::new(HashMap::new()), SessionGates::default());
         let store = &ChatHistoryStore::new(0);
 
-        let mut old = pin!(run_send(&cancels, &gates, "s", |token| async move {
-            store.push("s", "user", "U1");
-            token.cancelled().await;
-            store.finalize_assistant("s", "assistant", "p", true);
-            Ok(())
-        }));
+        let mut old = pin!(run_send(
+            &cancels,
+            &gates,
+            "s",
+            TEST_DEADLINE,
+            |token| async move {
+                store.push("s", "user", "U1");
+                token.cancelled().await;
+                store.finalize_assistant("s", "assistant", "p", true);
+                Ok(())
+            }
+        ));
         assert!(poll!(old.as_mut()).is_pending());
 
-        let mut new = pin!(run_send(&cancels, &gates, "s", |_| async move {
-            store.push("s", "user", "U2");
-            store.finalize_assistant("s", "assistant", "A2", false);
-            Ok(())
-        }));
+        let mut new = pin!(run_send(
+            &cancels,
+            &gates,
+            "s",
+            TEST_DEADLINE,
+            |_| async move {
+                store.push("s", "user", "U2");
+                store.finalize_assistant("s", "assistant", "A2", false);
+                Ok(())
+            }
+        ));
         assert!(poll!(new.as_mut()).is_pending());
 
         let (a, b) = tokio::join!(old, new);
@@ -841,12 +854,18 @@ mod tests {
         let (cancels, gates) = (StdMutex::new(HashMap::new()), SessionGates::default());
         let store = &ChatHistoryStore::new(0);
 
-        let mut old = pin!(run_send(&cancels, &gates, "s", |token| async move {
-            store.push("s", "user", "U_old");
-            token.cancelled().await;
-            store.finalize_assistant("s", "assistant", "", true);
-            Ok(())
-        }));
+        let mut old = pin!(run_send(
+            &cancels,
+            &gates,
+            "s",
+            TEST_DEADLINE,
+            |token| async move {
+                store.push("s", "user", "U_old");
+                token.cancelled().await;
+                store.finalize_assistant("s", "assistant", "", true);
+                Ok(())
+            }
+        ));
         assert!(poll!(old.as_mut()).is_pending());
 
         let mut clear = pin!(run_clear(&cancels, &gates, "s", || async move {
@@ -854,11 +873,17 @@ mod tests {
         }));
         assert!(poll!(clear.as_mut()).is_pending());
 
-        let mut new = pin!(run_send(&cancels, &gates, "s", |_| async move {
-            store.push("s", "user", "U_new");
-            store.finalize_assistant("s", "assistant", "A_new", false);
-            Ok(())
-        }));
+        let mut new = pin!(run_send(
+            &cancels,
+            &gates,
+            "s",
+            TEST_DEADLINE,
+            |_| async move {
+                store.push("s", "user", "U_new");
+                store.finalize_assistant("s", "assistant", "A_new", false);
+                Ok(())
+            }
+        ));
         assert!(poll!(new.as_mut()).is_pending());
 
         let _ = tokio::join!(old, clear, new);
@@ -871,19 +896,31 @@ mod tests {
         let store = &ChatHistoryStore::new(0);
         let started = &AtomicBool::new(false);
 
-        let mut old = pin!(run_send(&cancels, &gates, "s", |token| async move {
-            store.push("s", "user", "U1");
-            token.cancelled().await;
-            store.finalize_assistant("s", "assistant", "", true);
-            Ok(())
-        }));
+        let mut old = pin!(run_send(
+            &cancels,
+            &gates,
+            "s",
+            TEST_DEADLINE,
+            |token| async move {
+                store.push("s", "user", "U1");
+                token.cancelled().await;
+                store.finalize_assistant("s", "assistant", "", true);
+                Ok(())
+            }
+        ));
         assert!(poll!(old.as_mut()).is_pending());
 
-        let mut queued = pin!(run_send(&cancels, &gates, "s", |_| async move {
-            started.store(true, Ordering::SeqCst);
-            store.push("s", "user", "U2");
-            Ok(())
-        }));
+        let mut queued = pin!(run_send(
+            &cancels,
+            &gates,
+            "s",
+            TEST_DEADLINE,
+            |_| async move {
+                started.store(true, Ordering::SeqCst);
+                store.push("s", "user", "U2");
+                Ok(())
+            }
+        ));
         assert!(poll!(queued.as_mut()).is_pending());
 
         // New Chat while the second send is still waiting: it stops that one.

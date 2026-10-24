@@ -291,6 +291,7 @@ export const settings = {
     providerGemini: 'Google AI Studio (Gemini)',
     providerAnthropic: 'Anthropic (Claude)',
     providerOpenai: 'OpenAI',
+    providerLocal: 'LLM local (Ollama, LM Studio…)',
     // Autenticación
     authentication: 'Autenticación',
     authenticated: 'Autenticado',
@@ -329,6 +330,15 @@ export const settings = {
       apiKey: 'Clave de API',
       failed: 'La autenticación falló. Inténtelo de nuevo.',
       timedOut: 'Se agotó el tiempo de autenticación. Inténtelo de nuevo.',
+      // Local AI server
+      localTitle: 'Conectar a un servidor de IA local',
+      localServerUrl: 'URL del servidor',
+      apiKeyOptional: 'Clave de API (opcional)',
+      connectLocal: 'Conectar',
+      unreachable: 'No se pudo contactar con el servidor. Compruebe que está en marcha y que la dirección es correcta.',
+      needsKey: 'El servidor rechazó la solicitud. Introduzca su clave de API.',
+      notCompatible: 'El servidor respondió, pero no como una API compatible con OpenAI. Compruebe el puerto.',
+      badUrl: 'Introduzca una dirección que empiece por http:// o https://.',
     },
     // Perfiles
     personasSection: 'Perfiles',
@@ -596,6 +606,7 @@ export const settings = {
       providerGemini2: 'Parada intermedia del degradado del icono de Gemini.',
       providerGemini3: 'Última parada del degradado del icono de Gemini (color final).',
       providerOpenai: 'Color de marca del fondo del icono de OpenAI.',
+      providerLocal: 'Color del icono del servidor de IA local.',
       providerAnthropic: 'Color de marca del fondo del icono de Anthropic.',
       providerVertexAi: 'Color de marca del icono de Vertex AI.',
       glowAccent: 'Color del resplandor de neón del contorno del panel activo y de los iconos activos de la barra lateral (se recomienda rgba).',

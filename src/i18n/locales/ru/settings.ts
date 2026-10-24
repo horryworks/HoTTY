@@ -291,6 +291,7 @@ export const settings = {
     providerGemini: 'Google AI Studio (Gemini)',
     providerAnthropic: 'Anthropic (Claude)',
     providerOpenai: 'OpenAI',
+    providerLocal: 'Локальная LLM (Ollama, LM Studio…)',
     // Аутентификация
     authentication: 'Аутентификация',
     authenticated: 'Аутентифицирован',
@@ -329,6 +330,15 @@ export const settings = {
       apiKey: 'API-ключ',
       failed: 'Ошибка аутентификации. Повторите попытку.',
       timedOut: 'Время ожидания аутентификации истекло. Повторите попытку.',
+      // Local AI server
+      localTitle: 'Подключение к локальному ИИ-серверу',
+      localServerUrl: 'URL сервера',
+      apiKeyOptional: 'Ключ API (необязательно)',
+      connectLocal: 'Подключить',
+      unreachable: 'Не удалось связаться с сервером. Проверьте, что он запущен и адрес указан верно.',
+      needsKey: 'Сервер отклонил запрос. Введите его ключ API.',
+      notCompatible: 'Сервер ответил, но не как API, совместимый с OpenAI. Проверьте порт.',
+      badUrl: 'Введите адрес, начинающийся с http:// или https://.',
     },
     // Персоны
     personasSection: 'Персоны',
@@ -596,6 +606,7 @@ export const settings = {
       providerGemini2: 'Средняя точка градиента значка Gemini.',
       providerGemini3: 'Последняя точка градиента значка Gemini (конечный цвет).',
       providerOpenai: 'Фирменный цвет фона значка OpenAI.',
+      providerLocal: 'Цвет значка локального ИИ-сервера.',
       providerAnthropic: 'Фирменный цвет фона значка Anthropic.',
       providerVertexAi: 'Фирменный цвет значка Vertex AI.',
       glowAccent: 'Цвет неонового свечения контура активной панели и активных значков боковой панели (рекомендуется rgba).',

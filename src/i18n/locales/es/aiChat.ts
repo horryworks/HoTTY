@@ -203,6 +203,7 @@ export const aiChat = {
     // Aviso único que se muestra antes de enviar por primera vez datos del terminal a un proveedor de IA.
     title: 'Aviso sobre el envío de datos a la IA',
     intro: 'Las funciones de IA envían datos al proveedor de IA externo que haya configurado (Google Gemini / Vertex AI, Anthropic u OpenAI) usando su propia clave de API, conforme a los términos y la política de privacidad de dicho proveedor.',
+    introLocal: 'Las funciones de IA envían datos al servidor de IA en {{host}}. Está en otra máquina, así que la salida del terminal sale de este PC, sin cifrar si la dirección empieza por http://.',
     bulletWhat: 'Qué se envía: los mensajes que escribe y, en el caso de Preguntar a la IA y el modo de monitorización, la salida del terminal y los comandos capturados de la sesión, incluidos los de terminales que la IA abre con su aprobación.',
     bulletWhen: 'Cuándo: solo cuando usa explícitamente una función de IA. Su terminal nunca se transmite de forma continua.',
     bulletRedaction: 'Los patrones de secretos conocidos se ocultan de los registros, pero el texto que usted mismo incluye en un mensaje se envía tal cual: evite pegar credenciales en las indicaciones de IA.',

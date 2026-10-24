@@ -52,7 +52,7 @@ const THEME_SECTIONS: { titleKey: string; descKey: string; keys: string[] }[] = 
     {
         titleKey: 'settings.customTheme.sectionProvidersTitle',
         descKey: 'settings.customTheme.sectionProvidersDesc',
-        keys: ['provider-gemini-1', 'provider-gemini-2', 'provider-gemini-3', 'provider-openai', 'provider-anthropic', 'provider-vertex-ai'],
+        keys: ['provider-gemini-1', 'provider-gemini-2', 'provider-gemini-3', 'provider-openai', 'provider-anthropic', 'provider-vertex-ai', 'provider-local'],
     },
     {
         titleKey: 'settings.customTheme.sectionSearchTitle',
@@ -205,6 +205,7 @@ const VAR_DESCRIPTIONS: Record<string, string> = {
     'provider-gemini-2': 'settings.customTheme.vars.providerGemini2',
     'provider-gemini-3': 'settings.customTheme.vars.providerGemini3',
     'provider-openai': 'settings.customTheme.vars.providerOpenai',
+    'provider-local': 'settings.customTheme.vars.providerLocal',
     'provider-anthropic': 'settings.customTheme.vars.providerAnthropic',
     'provider-vertex-ai': 'settings.customTheme.vars.providerVertexAi',
     'glow-accent': 'settings.customTheme.vars.glowAccent',

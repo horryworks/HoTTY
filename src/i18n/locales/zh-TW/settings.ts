@@ -285,6 +285,7 @@ export const settings = {
     providerGemini: 'Google AI Studio（Gemini）',
     providerAnthropic: 'Anthropic（Claude）',
     providerOpenai: 'OpenAI',
+    providerLocal: '本機 LLM（Ollama、LM Studio 等）',
     // 驗證
     authentication: '驗證',
     authenticated: '已驗證',
@@ -323,6 +324,15 @@ export const settings = {
       apiKey: 'API 金鑰',
       failed: '驗證失敗。請再試一次。',
       timedOut: '驗證逾時。請再試一次。',
+      // Local AI server
+      localTitle: '連線到本機 AI 伺服器',
+      localServerUrl: '伺服器 URL',
+      apiKeyOptional: 'API 金鑰（選填）',
+      connectLocal: '連線',
+      unreachable: '無法連線到伺服器。請確認它正在執行且位址正確。',
+      needsKey: '伺服器拒絕了要求。請輸入其 API 金鑰。',
+      notCompatible: '伺服器有回應，但不是相容 OpenAI 的 API。請檢查連接埠。',
+      badUrl: '請輸入以 http:// 或 https:// 開頭的位址。',
     },
     // 角色
     personasSection: '角色',
@@ -590,6 +600,7 @@ export const settings = {
       providerGemini2: 'Gemini 圖示漸層的中間色標。',
       providerGemini3: 'Gemini 圖示漸層的最後一個色標（結束色）。',
       providerOpenai: 'OpenAI 圖示背景的品牌色。',
+      providerLocal: '本機 AI 伺服器圖示的顏色。',
       providerAnthropic: 'Anthropic 圖示背景的品牌色。',
       providerVertexAi: 'Vertex AI 圖示的品牌色。',
       glowAccent: '作用中窗格外框與作用中側邊欄圖示的霓虹光暈色（建議使用 rgba）。',

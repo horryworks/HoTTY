@@ -258,3 +258,18 @@ describe('settingsStore v37 migration (Ping targets, SNMP devices)', () => {
     expect(s.snmpDevices).toEqual(devices);
   });
 });
+
+describe('settingsStore v38 migration (local AI server)', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it('adds the local classifier choice as rules only, with no consented hosts', async () => {
+    const s = await rehydrateFrom({ language: 'en', classifierStrategy: 'hybrid' }, 37);
+    expect(s.classifierStrategyLocal).toBe('static');
+    expect(s.aiLocalConsentHosts).toEqual([]);
+    expect(s.localAiBaseUrl).toBe('');
+    // The cloud choice is untouched.
+    expect(s.classifierStrategy).toBe('hybrid');
+  });
+});

@@ -205,6 +205,7 @@ export const aiChat = {
     // 在首次向 AI 提供商发送终端数据之前显示一次的告知。
     title: 'AI 数据共享须知',
     intro: 'AI 功能会使用您自己的 API 密钥，将数据发送给您配置的第三方 AI 提供商（Google Gemini / Vertex AI、Anthropic 或 OpenAI），并受该提供商的条款和隐私政策约束。',
+    introLocal: 'AI 功能会将数据发送到 {{host}} 上的 AI 服务器。它在另一台机器上，因此终端输出会离开本机；地址为 http:// 时不加密。',
     bulletWhat: '发送内容：您输入的消息，以及在使用“询问 AI”和监视模式时，从会话中捕获的终端输出和命令（包括经您批准由 AI 打开的终端）。',
     bulletWhen: '发送时机：仅在您明确使用 AI 功能时发送。您的终端绝不会被持续传输。',
     bulletRedaction: '已知的密钥模式会从日志中隐去，但您自己在消息中输入的文本会原样发送——请勿将凭据粘贴到 AI 提示中。',

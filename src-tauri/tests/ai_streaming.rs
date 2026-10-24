@@ -255,6 +255,54 @@ async fn openai_accumulates_deltas_ignores_done_and_reads_usage() {
 }
 
 #[tokio::test]
+async fn openai_reasoning_is_not_answer_text_but_signals_thinking() {
+    // A local reasoning model streams `reasoning_content` (llama.cpp, LM Studio,
+    // vLLM) or `reasoning` (Ollama) before the answer. It must not leak into the
+    // answer, and a burst of it must collapse into one throttled `thinking` event.
+    let items: Vec<Item> = vec![
+        ok(
+            "data: {\"choices\":[{\"delta\":{\"reasoning_content\":\"Let me\"}}]}
+
+",
+        ),
+        ok(
+            "data: {\"choices\":[{\"delta\":{\"reasoning_content\":\" think\"}}]}
+
+",
+        ),
+        ok("data: {\"choices\":[{\"delta\":{\"reasoning\":\" more\"}}]}
+
+"),
+        ok("data: {\"choices\":[{\"delta\":{\"content\":\"Answer\"}}]}
+
+"),
+        ok("data: [DONE]
+
+"),
+    ];
+    let sink = CollectingSink::new();
+    let outcome = run_openai_sse_stream(stream_of(items), &sink, "s1", &CancellationToken::new())
+        .await
+        .unwrap();
+
+    assert_eq!(outcome.full_response, "Answer");
+    assert_eq!(sink.chunks(), vec!["Answer"]);
+    let thinking: Vec<ChatResponseData> = sink
+        .0
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|d| d.response_type == ChatResponseKind::Thinking)
+        .cloned()
+        .collect();
+    assert_eq!(thinking.len(), 1, "a fast burst is throttled to one event");
+    assert!(
+        thinking[0].content.is_empty(),
+        "the reasoning text is not sent"
+    );
+}
+
+#[tokio::test]
 async fn openai_stream_error_surfaces() {
     let items: Vec<Item> = vec![
         ok("data: {\"choices\":[{\"delta\":{\"content\":\"partial\"}}]}\n\n"),

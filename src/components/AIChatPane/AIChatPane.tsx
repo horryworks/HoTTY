@@ -19,7 +19,7 @@ import {
 } from '../../utils/autoExecReducer';
 import { useAiTranscriptStore, paneTranscripts, tabPrep, setTabPrep, forgetPrep } from '../../stores/aiTranscriptStore';
 import { STORAGE_KEYS } from '../../constants/storage';
-import { aiProviderLabelKey } from '../../constants/aiProviders';
+import { aiProviderLabelKey, isLocalAiProvider } from '../../constants/aiProviders';
 import { formatAICost } from '../../constants/aiPricing';
 import { buildExecutionRules, languageDirective, resolveAiLanguage, languageSwitchNotice, AUTO_LANGUAGE, NETWORK_EXPERT_KICKOFF, NETWORK_EXPERT_RECONNECT_PREP, NETWORK_EXPERT_SAME_DEVICE_PREP, buildWatchTargetsBlock, withTargetDirective, buildConnectCapabilityBlock, buildNoTerminalBlock, withPromptHint } from '../../constants/aiPrompts';
 import { SUPPORTED_LANGUAGES } from '../../i18n';
@@ -234,6 +234,7 @@ const PROVIDER_SOLID_VAR: Record<string, string> = {
     openai: 'provider-openai',
     anthropic: 'provider-anthropic',
     vertexai: 'provider-vertex-ai',
+    local: 'provider-local',
 };
 const AIIcon: React.FC<{ size?: number; className?: string; provider?: string }> = ({ size = 24, className = '', provider }) => {
     const solidVar = provider ? PROVIDER_SOLID_VAR[provider] : undefined;
@@ -694,7 +695,10 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
     // `?? 3` guards a store that predates this setting (or a test mock that omits it)
     // so `slots` math never goes NaN.
     const maxConcurrentStreams = useSettingsStore(s => s.maxConcurrentStreams) ?? 3;
-    const classifierStrategy = useSettingsStore(s => s.classifierStrategy);
+    // The local AI server has its own choice (rules only by default, ADR-AI-009).
+    // `??` guards a store / test mock that predates the setting.
+    const classifierStrategy = useSettingsStore(s =>
+        isLocalAiProvider(s.activeAiProvider) ? (s.classifierStrategyLocal ?? 'static') : s.classifierStrategy);
     const aiClassifyConfidenceThreshold = useSettingsStore(s => s.aiClassifyConfidenceThreshold);
     // AI-initiated terminal sessions (ADR-AI-007). `??` guards a store / test mock that
     // predates these fields, like maxConcurrentStreams below.

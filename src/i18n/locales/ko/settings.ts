@@ -287,6 +287,7 @@ export const settings = {
     providerGemini: 'Google AI Studio (Gemini)',
     providerAnthropic: 'Anthropic (Claude)',
     providerOpenai: 'OpenAI',
+    providerLocal: '로컬 LLM (Ollama, LM Studio 등)',
     // Authentication
     authentication: '인증',
     authenticated: '인증됨',
@@ -325,6 +326,15 @@ export const settings = {
       apiKey: 'API 키',
       failed: '인증에 실패했습니다. 다시 시도하세요.',
       timedOut: '인증 시간이 초과되었습니다. 다시 시도하세요.',
+      // Local AI server
+      localTitle: '로컬 AI 서버에 연결',
+      localServerUrl: '서버 URL',
+      apiKeyOptional: 'API 키 (선택)',
+      connectLocal: '연결',
+      unreachable: '서버에 연결할 수 없습니다. 실행 중인지, 주소가 맞는지 확인하세요.',
+      needsKey: '서버가 요청을 거부했습니다. API 키를 입력하세요.',
+      notCompatible: '서버가 응답했지만 OpenAI 호환 API가 아닙니다. 포트를 확인하세요.',
+      badUrl: 'http:// 또는 https://로 시작하는 주소를 입력하세요.',
     },
     // Personas
     personasSection: '페르소나',
@@ -592,6 +602,7 @@ export const settings = {
       providerGemini2: 'Gemini 아이콘 그라데이션의 중간 색상 지점입니다.',
       providerGemini3: 'Gemini 아이콘 그라데이션의 마지막 색상 지점(끝색)입니다.',
       providerOpenai: 'OpenAI 아이콘 배경의 브랜드 색상입니다.',
+      providerLocal: '로컬 AI 서버 아이콘 색상입니다.',
       providerAnthropic: 'Anthropic 아이콘 배경의 브랜드 색상입니다.',
       providerVertexAi: 'Vertex AI 아이콘의 브랜드 색상입니다.',
       glowAccent: '활성 창 윤곽선과 활성 사이드바 아이콘의 네온 발광 색상입니다(rgba 권장).',

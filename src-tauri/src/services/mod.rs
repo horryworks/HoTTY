@@ -1,5 +1,6 @@
 pub mod ai;
 pub mod atomic_file;
+pub mod base_url;
 pub mod chat_log;
 pub mod dpapi;
 pub mod exe_finder;

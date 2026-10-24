@@ -209,6 +209,7 @@ export const aiChat = {
     // One-time disclosure shown before terminal data is first sent to an AI provider.
     title: 'AI Data Sharing Notice',
     intro: 'AI features send data to the third-party AI provider you configured (Google Gemini / Vertex AI, Anthropic, or OpenAI) using your own API key, under that provider\'s terms and privacy policy.',
+    introLocal: 'AI features send data to the AI server at {{host}}. It runs on another machine, so terminal output leaves this PC — unencrypted when the address starts with http://.',
     bulletWhat: 'What is sent: the messages you type, plus — for Ask AI and Watch Mode — terminal output and commands captured from the session, including from terminals the AI opens with your approval.',
     bulletWhen: 'When: only when you explicitly use an AI feature. Your terminal is never streamed continuously.',
     bulletRedaction: 'Known secret patterns are redacted from logs, but text you put in a message yourself is sent as-is — avoid pasting credentials into AI prompts.',

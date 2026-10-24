@@ -488,3 +488,10 @@
   text-decoration: underline;
 }
 
+
+/* The address of the connected local AI server, next to "Connected". */
+.settings-ai-server-url {
+  font-family: var(--font-family);
+  font-size: calc(var(--font-size-base) - 1px);
+  color: var(--text-secondary);
+}

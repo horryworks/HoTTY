@@ -37,6 +37,31 @@ pub fn describe_transport_error(provider: &str) -> String {
     format!("Could not reach {provider}. Check your network connection and try again.")
 }
 
+/// A non-2xx answer from a local AI server, worded for a server the user runs
+/// themselves: no quota or billing talk, and the two failures that are specific
+/// to self-hosting (a model that is not downloaded / loaded, a server that wants
+/// a key) say what to do. `base_url` is the normalized server address.
+pub fn describe_local_http_error(base_url: &str, status: u16, body: &str) -> String {
+    let base = match status {
+        401 | 403 => format!(
+            "The AI server at {base_url} refused the request (HTTP {status}). It may need an API key — set one in Settings → AI."
+        ),
+        404 => format!(
+            "The AI server at {base_url} does not have this model (HTTP 404). Check that it is downloaded or listed in the server's config."
+        ),
+        _ => return describe_http_error(&format!("The AI server at {base_url}"), status, body),
+    };
+    match extract_api_message(body) {
+        Some(detail) if !detail.is_empty() => format!("{base} ({detail})"),
+        _ => base,
+    }
+}
+
+/// A local AI server that could not be reached at all.
+pub fn describe_local_transport_error(base_url: &str) -> String {
+    format!("Could not reach the AI server at {base_url}. Check that it is running and reachable from this PC.")
+}
+
 /// Finish reasons that mean a content filter withheld the answer, as opposed to
 /// some other abnormal stop (recitation, malformed tool call, …).
 const CONTENT_FILTER_REASONS: &[&str] = &[
@@ -179,6 +204,21 @@ mod tests {
         let msg = describe_http_error("OpenAI", 500, &long);
         assert!(msg.chars().count() < 300);
         assert!(msg.contains('…'));
+    }
+
+    #[test]
+    fn local_errors_name_the_server_and_skip_quota_talk() {
+        let url = "http://192.0.2.10:8080";
+        let msg = describe_local_http_error(url, 401, "");
+        assert!(msg.contains(url) && msg.contains("API key"), "{msg}");
+        let msg = describe_local_http_error(url, 404, r#"{"error":{"message":"model not found"}}"#);
+        assert!(
+            msg.contains("downloaded") && msg.contains("model not found"),
+            "{msg}"
+        );
+        let msg = describe_local_http_error(url, 500, "");
+        assert!(msg.contains(url), "{msg}");
+        assert!(describe_local_transport_error(url).contains("running"));
     }
 
     #[test]

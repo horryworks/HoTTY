@@ -292,6 +292,7 @@ export const settings = {
     providerGemini: 'Google AI Studio (Gemini)',
     providerAnthropic: 'Anthropic (Claude)',
     providerOpenai: 'OpenAI',
+    providerLocal: 'LLM local (Ollama, LM Studio…)',
     // Authentication
     authentication: 'Authentification',
     authenticated: 'Authentifié',
@@ -330,6 +331,15 @@ export const settings = {
       apiKey: 'Clé API',
       failed: "Échec de l'authentification. Veuillez réessayer.",
       timedOut: "Délai d'authentification dépassé. Veuillez réessayer.",
+      // Local AI server
+      localTitle: "Se connecter à un serveur d'IA local",
+      localServerUrl: 'URL du serveur',
+      apiKeyOptional: "Clé d'API (facultative)",
+      connectLocal: 'Se connecter',
+      unreachable: "Impossible de joindre le serveur. Vérifiez qu'il est démarré et que l'adresse est correcte.",
+      needsKey: "Le serveur a refusé la requête. Saisissez sa clé d'API.",
+      notCompatible: 'Le serveur a répondu, mais pas comme une API compatible OpenAI. Vérifiez le port.',
+      badUrl: 'Saisissez une adresse commençant par http:// ou https://.',
     },
     // Personas
     personasSection: 'Personas',
@@ -597,6 +607,7 @@ export const settings = {
       providerGemini2: "Arrêt intermédiaire du dégradé de l'icône Gemini.",
       providerGemini3: "Dernier arrêt du dégradé de l'icône Gemini (couleur de fin).",
       providerOpenai: "Couleur de marque du fond de l'icône OpenAI.",
+      providerLocal: "Couleur de l'icône du serveur d'IA local.",
       providerAnthropic: "Couleur de marque du fond de l'icône Anthropic.",
       providerVertexAi: "Couleur de marque de l'icône Vertex AI.",
       glowAccent: 'Couleur de la lueur néon du contour du panneau actif et des icônes actives de la barre latérale (rgba recommandé).',

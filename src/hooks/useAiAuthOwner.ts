@@ -76,7 +76,8 @@ type AiLoginRequest =
       keyFilePath?: string;
     }
   | { provider: 'openai'; apiKey: string }
-  | { provider: 'anthropic'; apiKey: string };
+  | { provider: 'anthropic'; apiKey: string }
+  | { provider: 'local'; baseUrl: string; apiKey: string };
 
 /**
  * Start an interactive sign-in. The outcome arrives via the global
@@ -120,6 +121,15 @@ export async function aiAuthLogin(req: AiLoginRequest): Promise<void> {
       }
       await tauriService.aiSetProvider('gemini');
       await tauriService.aiAuthStart({ clientId: req.clientId, clientSecret: req.clientSecret });
+      return;
+    }
+
+    if (req.provider === 'local') {
+      // The address is not secret — kept to pre-fill the form. The key is never
+      // persisted client-side; the backend seals it together with the address.
+      useSettingsStore.getState().update('localAiBaseUrl', req.baseUrl.trim());
+      await tauriService.aiSetProvider('local');
+      await tauriService.aiAuthStart({ baseUrl: req.baseUrl, apiKey: req.apiKey || undefined });
       return;
     }
 
@@ -208,7 +218,7 @@ export function useAiAuthOwner(): void {
           if (!creds) return;
           credentials = creds;
         } else {
-          // OpenAI / Anthropic re-auth from the backend's encrypted config.
+          // OpenAI / Anthropic / local re-auth from the backend's encrypted config.
           credentials = {};
         }
 
@@ -249,7 +259,7 @@ export function useAiAuthOwner(): void {
         // authenticated, or a failed attempt racing a successful silent auto-auth).
         // Show the error, but reconcile isAuthenticated from the backend rather than
         // force it false.
-        useAiAuthStore.setState({ isAuthLoading: false, authError: 'failed' });
+        useAiAuthStore.setState({ isAuthLoading: false, authError: result.reason ?? 'failed' });
         void tauriService.aiAuthStatus()
           .then((status) => { if (!cancelled) useAiAuthStore.setState({ isAuthenticated: status.authenticated }); })
           .catch(() => { if (!cancelled) useAiAuthStore.setState({ isAuthenticated: false }); });

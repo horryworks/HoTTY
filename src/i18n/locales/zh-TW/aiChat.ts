@@ -203,6 +203,7 @@ export const aiChat = {
     // 在首次將終端機資料傳送給 AI 供應商之前顯示一次的告知。
     title: 'AI 資料分享須知',
     intro: 'AI 功能會使用您自己的 API 金鑰，將資料傳送給您設定的第三方 AI 供應商（Google Gemini / Vertex AI、Anthropic 或 OpenAI），並受該供應商的條款與隱私權政策約束。',
+    introLocal: 'AI 功能會將資料傳送到 {{host}} 上的 AI 伺服器。它在另一台機器上，因此終端機輸出會離開本機；位址為 http:// 時不加密。',
     bulletWhat: '傳送內容：您輸入的訊息，以及在使用「詢問 AI」和監看模式時，從工作階段擷取的終端機輸出與指令（包括經您核准由 AI 開啟的終端機）。',
     bulletWhen: '傳送時機：僅在您明確使用 AI 功能時傳送。您的終端機絕不會被持續傳輸。',
     bulletRedaction: '已知的密鑰模式會從記錄中隱去，但您自己在訊息中輸入的文字會原樣傳送——請勿將憑證貼到 AI 提示中。',

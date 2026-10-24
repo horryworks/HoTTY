@@ -56,6 +56,12 @@ pub enum ChatResponseKind {
     /// the tab as streaming closes it out instead of waiting for its watchdog.
     /// A pane that already stopped the tab itself (the Stop button) ignores it.
     Cancelled,
+    /// The model is still reasoning: it streamed "thinking" text (a local
+    /// reasoning model's `reasoning_content`) that is not part of the answer.
+    /// `content` is always empty — the reasoning itself is not shown. Sent at
+    /// most about once a second so a long think keeps the pane's idle watchdog
+    /// from firing without flooding the event channel.
+    Thinking,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -75,7 +81,36 @@ pub struct AuthResultPayload {
     /// ignore a late result for a provider the user has since switched away from.
     pub provider: String,
     pub success: bool,
+    /// Why a sign-in failed, when the provider can tell. `None` on success and
+    /// for providers that only know "it failed".
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<AuthFailureReason>,
 }
+
+/// A sign-in failure the settings form can explain better than "failed".
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum AuthFailureReason {
+    /// The server could not be reached at all (nothing listening, DNS, TLS).
+    Unreachable,
+    /// The server answered 401/403: it wants an API key, or a different one.
+    NeedsKey,
+    /// The server answered, but not like an OpenAI-compatible API.
+    NotCompatible,
+    /// The URL entered is not a usable `http(s)://host[:port]`.
+    BadUrl,
+}
+
+/// Backstop deadline for a whole chat stream. Defense-in-depth: the frontend
+/// watchdog normally cancels a stalled stream at its ~600s hard cap, but if the
+/// UI is gone (window crashed) that cancel never arrives and the stream would
+/// hold the service lock forever. Set a bit above the frontend cap so the UI
+/// wins under normal operation and this only fires when the UI can't.
+pub const DEFAULT_STREAM_DEADLINE_SECS: u64 = 660;
+
+/// Hard ceiling on a classification round-trip so a hung provider can't hold
+/// the service lock (and block auto-exec) indefinitely.
+pub const DEFAULT_CLASSIFY_TIMEOUT_SECS: u64 = 12;
 
 // ---------------------------------------------------------------------------
 // AIProvider trait
@@ -161,6 +196,20 @@ pub trait AIProvider: Send + Sync {
         None
     }
 
+    /// How long the command layer lets one chat stream run before its backstop
+    /// cancels it. Must stay above the frontend's hard cap for this provider
+    /// (`streamLimitsFor` in `src/constants/aiProviders.ts`) so the UI wins
+    /// under normal operation.
+    fn stream_deadline_secs(&self) -> u64 {
+        DEFAULT_STREAM_DEADLINE_SECS
+    }
+
+    /// Ceiling on one command-classification round-trip. A timeout falls back
+    /// to asking the user, so a short value is always safe.
+    fn classify_timeout_secs(&self) -> u64 {
+        DEFAULT_CLASSIFY_TIMEOUT_SECS
+    }
+
     /// List available locations/regions. Default returns an empty list.
     /// `&self` for the same interior-mutable token-refresh reason as [`list_models`].
     async fn list_locations(&self) -> Result<Vec<String>, String> {
@@ -229,6 +278,19 @@ pub fn emit_auth_result(app: &AppHandle, provider: &str, success: bool) {
         AuthResultPayload {
             provider: provider.to_string(),
             success,
+            reason: None,
+        },
+    );
+}
+
+/// Broadcast a failed sign-in together with why it failed.
+pub fn emit_auth_failure(app: &AppHandle, provider: &str, reason: AuthFailureReason) {
+    let _ = app.emit(
+        "ai-auth-result",
+        AuthResultPayload {
+            provider: provider.to_string(),
+            success: false,
+            reason: Some(reason),
         },
     );
 }
@@ -291,10 +353,23 @@ mod tests {
         let payload = AuthResultPayload {
             provider: "gemini".into(),
             success: true,
+            reason: None,
         };
         let json = serde_json::to_value(&payload).unwrap();
         assert_eq!(json["provider"], "gemini");
         assert_eq!(json["success"], true);
+        assert!(json.get("reason").is_none());
+    }
+
+    #[test]
+    fn auth_failure_reason_serializes_camel_case() {
+        let payload = AuthResultPayload {
+            provider: "local".into(),
+            success: false,
+            reason: Some(AuthFailureReason::NeedsKey),
+        };
+        let json = serde_json::to_value(&payload).unwrap();
+        assert_eq!(json["reason"], "needsKey");
     }
 
     #[test]

@@ -32,6 +32,20 @@ pub fn is_valid_model(model: &str) -> bool {
     model_re().is_match(model)
 }
 
+/// Longest model id a local server is allowed to name.
+const MAX_LOCAL_MODEL_LEN: usize = 256;
+
+/// True when `model` is a plausible model id for a local OpenAI-compatible
+/// server. Looser than [`is_valid_model`] on purpose: Ollama names models
+/// `llama3.1:8b`, vLLM and LM Studio use `org/Model-8B-Instruct`, and
+/// llama-swap aliases are free-form. The id only ever travels inside a JSON
+/// body, so the check just keeps out whitespace and control characters.
+pub fn is_valid_local_model(model: &str) -> bool {
+    !model.is_empty()
+        && model.len() <= MAX_LOCAL_MODEL_LEN
+        && !model.chars().any(|c| c.is_control() || c.is_whitespace())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -56,5 +70,20 @@ mod tests {
         assert!(!is_valid_model("-leading"));
         assert!(!is_valid_model("trailing-"));
         assert!(!is_valid_model("bad space"));
+    }
+
+    #[test]
+    fn local_model_shape() {
+        assert!(is_valid_local_model("llama3.1:8b"));
+        assert!(is_valid_local_model("qwen2.5-coder:7b-instruct-q4_K_M"));
+        assert!(is_valid_local_model("meta-llama/Llama-3.1-8B-Instruct"));
+        assert!(is_valid_local_model("hf.co/org/model-GGUF:Q4_K_M"));
+        assert!(!is_valid_local_model(""));
+        assert!(!is_valid_local_model("two words"));
+        assert!(!is_valid_local_model(
+            "line
+break"
+        ));
+        assert!(!is_valid_local_model(&"x".repeat(257)));
     }
 }

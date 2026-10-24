@@ -1358,6 +1358,7 @@ function App() {
         <AiConsentModal
           onAccept={consent.handleAiConsentAccept}
           onCancel={consent.handleAiConsentCancel}
+          host={consent.aiConsentHost}
         />
       )}
       {/* Closing an AI Chat window ends its conversations, so it says what will

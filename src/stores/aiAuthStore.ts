@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { AIAuthFailureReason } from '../types/appTypes';
 
 /**
  * Window-global AI auth state. NOT persisted — the backend owns the real auth
@@ -8,9 +9,11 @@ import { create } from 'zustand';
  * AIChatPane / AISettingsTab.
  *
  * `authError` is a code, not display text — translate at render time
- * (`settings.ai.auth.failed` / `settings.ai.auth.timedOut`).
+ * (`settings.ai.auth.<code>`).
  */
-type AiAuthError = 'failed' | 'timedOut' | null;
+
+/** `failed` / `timedOut`, or a specific reason a provider reported. */
+type AiAuthError = 'failed' | 'timedOut' | AIAuthFailureReason | null;
 
 interface AiAuthState {
   isAuthenticated: boolean;

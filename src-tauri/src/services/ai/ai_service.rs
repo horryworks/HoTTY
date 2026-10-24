@@ -44,6 +44,25 @@ impl AIService {
             .and_then(|p| p.location())
     }
 
+    /// The active provider's stream backstop (see
+    /// [`AIProvider::stream_deadline_secs`](super::ai_provider::AIProvider::stream_deadline_secs)).
+    pub fn stream_deadline_secs(&self) -> u64 {
+        self.registry
+            .get(&self.active_provider_id)
+            .map_or(super::ai_provider::DEFAULT_STREAM_DEADLINE_SECS, |p| {
+                p.stream_deadline_secs()
+            })
+    }
+
+    /// The active provider's classification ceiling.
+    pub fn classify_timeout_secs(&self) -> u64 {
+        self.registry
+            .get(&self.active_provider_id)
+            .map_or(super::ai_provider::DEFAULT_CLASSIFY_TIMEOUT_SECS, |p| {
+                p.classify_timeout_secs()
+            })
+    }
+
     // -- Authentication -------------------------------------------------------
 
     pub async fn authenticate(

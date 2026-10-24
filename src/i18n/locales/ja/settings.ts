@@ -288,6 +288,7 @@ export const settings = {
     providerGemini: 'Google AI Studio (Gemini)',
     providerAnthropic: 'Anthropic (Claude)',
     providerOpenai: 'OpenAI',
+    providerLocal: 'ローカル LLM（Ollama、LM Studio など）',
     // 認証
     authentication: '認証',
     authenticated: '認証済み',
@@ -326,6 +327,15 @@ export const settings = {
       apiKey: 'APIキー',
       failed: '認証に失敗しました。もう一度お試しください。',
       timedOut: '認証がタイムアウトしました。もう一度お試しください。',
+      // Local AI server
+      localTitle: 'ローカルの AI サーバにつなぐ',
+      localServerUrl: 'サーバの URL',
+      apiKeyOptional: 'API キー（任意）',
+      connectLocal: '接続',
+      unreachable: 'サーバにつながりません。起動しているか、アドレスが正しいか確かめてください。',
+      needsKey: 'サーバに断られました。API キーを入れてください。',
+      notCompatible: 'サーバは応答しましたが、OpenAI 互換の API ではありません。ポート番号を確かめてください。',
+      badUrl: 'http:// か https:// で始まるアドレスを入れてください。',
     },
     // ペルソナ
     personasSection: 'ペルソナ',
@@ -594,6 +604,7 @@ export const settings = {
       providerGemini2: 'Gemini アイコンのグラデーション中間の色。',
       providerGemini3: 'Gemini アイコンのグラデーション最後の色（終了色）。',
       providerOpenai: 'OpenAI アイコン背景のブランドカラー。',
+      providerLocal: 'ローカル AI サーバのアイコンの色。',
       providerAnthropic: 'Anthropic アイコン背景のブランドカラー。',
       providerVertexAi: 'Vertex AI アイコンのブランドカラー。',
       glowAccent: 'アクティブなペインの輪郭とアクティブなサイドバーアイコンのネオン発光色（rgba 推奨）。',

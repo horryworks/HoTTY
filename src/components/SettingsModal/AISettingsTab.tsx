@@ -14,6 +14,8 @@ import { AuthenticationPanel } from './AuthenticationPanel';
 import { VertexAIAuthPanel } from './VertexAIAuthPanel';
 import { OpenAIAuthPanel } from './OpenAIAuthPanel';
 import { AnthropicAuthPanel } from './AnthropicAuthPanel';
+import { LocalAuthPanel } from './LocalAuthPanel';
+import { isLocalAiProvider } from '../../constants/aiProviders';
 
 export function AISettingsTab() {
   const settings = useSettingsStore();
@@ -31,11 +33,7 @@ export function AISettingsTab() {
   const isAuthenticated = useAiAuthStore((s) => s.isAuthenticated);
   const isAuthLoading = useAiAuthStore((s) => s.isAuthLoading);
   const authErrorCode = useAiAuthStore((s) => s.authError);
-  const authError = authErrorCode === 'timedOut'
-    ? t('settings.ai.auth.timedOut')
-    : authErrorCode === 'failed'
-      ? t('settings.ai.auth.failed')
-      : null;
+  const authError = authErrorCode ? t(`settings.ai.auth.${authErrorCode}`) : null;
 
   // Credential form state (persisted values pre-filled like the old pane form).
   const [geminiClientId, setGeminiClientId] = useState('');
@@ -54,6 +52,12 @@ export function AISettingsTab() {
   );
   const [openaiApiKey, setOpenaiApiKey] = useState('');
   const [anthropicApiKey, setAnthropicApiKey] = useState('');
+  const [localBaseUrl, setLocalBaseUrl] = useState(settings.localAiBaseUrl);
+  const [localApiKey, setLocalApiKey] = useState('');
+  const isLocal = isLocalAiProvider(settings.activeAiProvider);
+  // The classifier choice shown and edited is the one for the selected provider.
+  const classifierKey = isLocal ? 'classifierStrategyLocal' : 'classifierStrategy';
+  const classifierStrategy = settings[classifierKey];
 
   // Pre-fill the Gemini form from the DPAPI-encrypted stored credentials — only
   // when the Gemini form is actually on screen (that provider selected and not
@@ -86,6 +90,8 @@ export function AISettingsTab() {
       void aiAuthLogin({ provider: 'openai', apiKey: openaiApiKey });
     } else if (provider === 'anthropic') {
       void aiAuthLogin({ provider: 'anthropic', apiKey: anthropicApiKey });
+    } else if (provider === 'local') {
+      void aiAuthLogin({ provider: 'local', baseUrl: localBaseUrl, apiKey: localApiKey });
     } else {
       void aiAuthLogin({ provider: 'gemini', clientId: geminiClientId, clientSecret: geminiClientSecret });
     }
@@ -166,6 +172,9 @@ export function AISettingsTab() {
               backgroundColor: isAuthenticated ? 'var(--success-color)' : 'var(--color-danger)'
             }} />
             <span>{isAuthenticated ? t('settings.ai.authenticated') : t('settings.ai.notAuthenticated')}</span>
+            {isAuthenticated && isLocal && settings.localAiBaseUrl && (
+              <span className="settings-ai-server-url">{settings.localAiBaseUrl}</span>
+            )}
           </div>
           {isAuthenticated && (
             <button
@@ -198,6 +207,16 @@ export function AISettingsTab() {
           <OpenAIAuthPanel
             apiKey={openaiApiKey}
             setApiKey={setOpenaiApiKey}
+            isAuthLoading={isAuthLoading}
+            onLogin={handleLogin}
+            authError={authError}
+          />
+        ) : isLocal ? (
+          <LocalAuthPanel
+            baseUrl={localBaseUrl}
+            setBaseUrl={setLocalBaseUrl}
+            apiKey={localApiKey}
+            setApiKey={setLocalApiKey}
             isAuthLoading={isAuthLoading}
             onLogin={handleLogin}
             authError={authError}
@@ -342,8 +361,8 @@ export function AISettingsTab() {
           <HelpTooltip text={t('settings.ai.commandSafetyClassifierHelp')} />
         </label>
         <select
-          value={settings.classifierStrategy}
-          onChange={(e) => update('classifierStrategy', e.target.value as typeof settings.classifierStrategy)}
+          value={classifierStrategy}
+          onChange={(e) => update(classifierKey, e.target.value as typeof classifierStrategy)}
         >
           <option value="static">{t('settings.ai.classifierStatic')}</option>
           <option value="ai">{t('settings.ai.classifierAi')}</option>
@@ -352,7 +371,7 @@ export function AISettingsTab() {
       </div>
 
       {/* AI confidence threshold (only relevant when AI judges commands) */}
-      {settings.classifierStrategy !== 'static' && (
+      {classifierStrategy !== 'static' && (
         <div className="settings-group">
           <label>
             {t('settings.ai.aiConfidenceThreshold', { percent: Math.round(settings.aiClassifyConfidenceThreshold * 100) })}

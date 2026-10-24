@@ -8,6 +8,9 @@ interface AiConsentModalProps {
   onAccept: () => void;
   /** User declined (button or Escape) — abort the pending AI send. */
   onCancel: () => void;
+  /** Host of a local AI server on another machine; the notice then names it
+   *  instead of the cloud providers. */
+  host?: string | null;
 }
 
 /**
@@ -15,7 +18,7 @@ interface AiConsentModalProps {
  * third-party AI provider (chat send, Ask AI, or enabling Watch Mode). Gated by
  * the persisted `aiDataConsentAccepted` flag in the settings store.
  */
-export function AiConsentModal({ onAccept, onCancel }: AiConsentModalProps) {
+export function AiConsentModal({ onAccept, onCancel, host }: AiConsentModalProps) {
   const { t } = useTranslation();
   const acceptButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -47,7 +50,9 @@ export function AiConsentModal({ onAccept, onCancel }: AiConsentModalProps) {
         </>
       }
     >
-          <p className="ai-consent-intro">{t('aiChat.consent.intro')}</p>
+          <p className="ai-consent-intro">
+            {host ? t('aiChat.consent.introLocal', { host }) : t('aiChat.consent.intro')}
+          </p>
           <ul className="ai-consent-list">
             <li>{t('aiChat.consent.bulletWhat')}</li>
             <li>{t('aiChat.consent.bulletWhen')}</li>

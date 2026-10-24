@@ -178,6 +178,10 @@ interface SettingsState {
   maxConcurrentStreams: number;
   /** How auto-execution safety is decided (whitelist vs AI vs hybrid). */
   classifierStrategy: ClassifierStrategy;
+  /** Same choice for the local AI server (ADR-AI-009). Separate because a
+   *  small local model judging command safety is a different risk; defaults
+   *  to rules only (`static`). */
+  classifierStrategyLocal: ClassifierStrategy;
   /** Minimum AI confidence required to auto-execute a command judged read-only. */
   aiClassifyConfidenceThreshold: number;
   aiPersonas: PersonaDefinition[];
@@ -191,6 +195,12 @@ interface SettingsState {
   /** Whether the user has accepted the one-time disclosure that AI features send
    *  terminal data to the configured third-party provider. Gates all AI sends. */
   aiDataConsentAccepted: boolean;
+  /** Hosts of local AI servers on ANOTHER machine the user agreed to send
+   *  terminal data to (one consent per host). A server on this PC needs none. */
+  aiLocalConsentHosts: string[];
+  /** Last address typed for the local AI server — only pre-fills the form; the
+   *  backend keeps the address it actually uses, sealed with the key. */
+  localAiBaseUrl: string;
   /** Language the AI must answer in, as the display name sent to the model
    *  ('English', 'Japanese', …). `AUTO_LANGUAGE` follows the UI `language` above.
    *  App-wide on purpose: every AI Chat pane in every window shares it (the
@@ -316,6 +326,7 @@ const DEFAULTS: SettingsState = {
   // Hybrid (managed whitelist/blacklist + AI for the gray zone) is the default
   // for all users; the v15 migration switches existing users to it too.
   classifierStrategy: 'hybrid',
+  classifierStrategyLocal: 'static',
   aiClassifyConfidenceThreshold: 0.7,
   aiPersonas: DEFAULT_PERSONAS,
   watchBufferLimit: 500000,
@@ -323,6 +334,8 @@ const DEFAULTS: SettingsState = {
   aiSleepAsClientDelay: true,
   aiSleepMaxDelaySecs: 900,
   aiDataConsentAccepted: false,
+  aiLocalConsentHosts: [],
+  localAiBaseUrl: '',
   aiResponseLanguage: AUTO_LANGUAGE,
   // Opening a session is a NEW trust boundary: `auto-execute-safe` used to mean
   // "run safe commands on terminals I attached", never "create a shell on my PC".
@@ -347,7 +360,7 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
     }),
     {
       name: 'hotty-settings',
-      version: 37,
+      version: 38,
       migrate: (persistedState, version) => {
         const state = (persistedState ?? {}) as Partial<SettingsState>;
         if (version < 2 && state.theme === undefined) {
@@ -585,6 +598,13 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
           // them into the list and remove them.
           state.pingMonitorConfig ??= DEFAULTS.pingMonitorConfig;
           state.snmpDevices ??= importLegacySnmpTargets();
+        }
+        if (version < 38) {
+          // Local AI server (ADR-AI-009): its own classifier choice (rules only
+          // by default), per-host consent, and the form's last address.
+          state.classifierStrategyLocal ??= DEFAULTS.classifierStrategyLocal;
+          state.aiLocalConsentHosts ??= [];
+          state.localAiBaseUrl ??= '';
         }
         return state as SettingsState;
       },

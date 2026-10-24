@@ -359,9 +359,28 @@ where
     })
 }
 
+/// Least time between two `thinking` events from one stream.
+const THINKING_EVENT_INTERVAL: std::time::Duration = std::time::Duration::from_secs(1);
+
+/// The reasoning text an OpenAI-compatible server streams before the answer.
+/// llama.cpp, LM Studio, vLLM and DeepSeek use `reasoning_content`; newer vLLM
+/// and Ollama use `reasoning`. OpenAI itself sends neither.
+fn reasoning_delta(v: &Value) -> Option<&str> {
+    let delta = v.pointer("/choices/0/delta")?;
+    delta
+        .get("reasoning_content")
+        .or_else(|| delta.get("reasoning"))
+        .and_then(Value::as_str)
+        .filter(|t| !t.is_empty())
+}
+
 /// Consume an OpenAI Chat Completions SSE stream (`choices[0].delta.content`),
 /// emitting each delta as a `chunk` event. Usage arrives in a trailing `usage`
 /// object (requires `stream_options.include_usage`); `[DONE]` is ignored.
+///
+/// Reasoning text (see [`reasoning_delta`]) is not part of the answer and is not
+/// shown; it only produces a throttled `thinking` event, so a model that thinks
+/// for minutes before answering does not trip the pane's idle watchdog.
 pub async fn run_openai_sse_stream<S, St, B, E>(
     stream: St,
     sink: &S,
@@ -377,6 +396,7 @@ where
     let mut full_response = String::new();
     let mut last_usage: Option<TokenUsage> = None;
     let mut stream_error: Option<StreamError> = None;
+    let mut last_thinking: Option<std::time::Instant> = None;
     drive_sse(stream, cancel_token, |line| {
         let SseLine::Data(data) = parse_sse_line(line) else {
             return false;
@@ -390,6 +410,17 @@ where
         if let Some(e) = api_error(&parsed) {
             stream_error = Some(e);
             return true;
+        }
+        if reasoning_delta(&parsed).is_some()
+            && last_thinking.is_none_or(|t| t.elapsed() >= THINKING_EVENT_INTERVAL)
+        {
+            last_thinking = Some(std::time::Instant::now());
+            sink.emit(ChatResponseData {
+                session_id: session_id.to_string(),
+                response_type: ChatResponseKind::Thinking,
+                content: String::new(),
+                usage_metadata: None,
+            });
         }
         if let Some(text) = parsed
             .pointer("/choices/0/delta/content")

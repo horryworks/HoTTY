@@ -119,4 +119,32 @@ describe('AIChatPane per-tab token accounting (2.5c)', () => {
         });
         expect(screen.getByTitle('120 in / 30 out tokens')).toBeTruthy();
     });
+
+    it('shows token counts, never a price, for the local AI server — even for a priced-looking model id', async () => {
+        h.settings.activeAiProvider = 'local';
+        const { tauriService } = await import('../../services/tauriService');
+        vi.mocked(tauriService.aiListModels).mockResolvedValue([{ name: 'gpt-4o-mini', displayName: 'gpt-4o-mini' }]);
+        try {
+            const state = { ...twoTabState, selectedModel: 'gpt-4o-mini' };
+            render(makePane({ chatState: state }));
+            await act(async () => { useAiAuthStore.setState({ isAuthenticated: true }); });
+            const textarea = screen.getByPlaceholderText(/^(Type a message\.\.\.|Ask about .+)$/);
+            await act(async () => { fireEvent.change(textarea, { target: { value: 'hi' } }); });
+            await act(async () => { fireEvent.keyDown(textarea, { key: 'Enter' }); });
+            await act(async () => {
+                h.onAiChatResponseCb.current?.({
+                    sessionId: 'ai-1::t1',
+                    responseType: 'done',
+                    content: 'ok',
+                    usageMetadata: { promptTokenCount: 1_000_000, candidatesTokenCount: 1_000_000 },
+                });
+            });
+            await act(async () => { await Promise.resolve(); });
+            const shown = screen.getByTitle('1,000,000 in / 1,000,000 out tokens');
+            expect(shown.textContent).not.toContain('~');
+        } finally {
+            h.settings.activeAiProvider = 'gemini';
+            vi.mocked(tauriService.aiListModels).mockResolvedValue([{ name: 'gemini-pro', displayName: 'Gemini Pro' }]);
+        }
+    });
 });

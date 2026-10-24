@@ -34,7 +34,9 @@ import { isStaleRequest } from '../utils/aiRequestTracker';
 import i18n from '../i18n';
 import { calcAICost } from '../constants/aiPricing';
 import { aiBackendSessionId } from './useAiChat';
-import { streamTimeoutMessage, STREAM_IDLE_TIMEOUT_MS, STREAM_HARD_CAP_MS } from '../components/AIChatPane/streamWatchdog';
+import { streamTimeoutMessage } from '../components/AIChatPane/streamWatchdog';
+import { isLocalAiProvider, streamLimitsFor } from '../constants/aiProviders';
+import { useSettingsStore } from '../stores/settingsStore';
 import {
     useAiTranscriptStore,
     paneTranscripts,
@@ -215,20 +217,22 @@ export function useChatStream({ paneId, activeTabId, selectedModelRef, onStreamC
     }, [paneId, setMessagesByTab, setStreamingForTab, markStreaming, clearStreamWatchdog]);
     const armStreamWatchdog = useCallback((tabId: string) => {
         const key = tabKey(paneId, tabId);
+        // A local model may take minutes to load, so it gets longer limits.
+        const { idleMs, hardCapMs } = streamLimitsFor(useSettingsStore.getState().activeAiProvider);
         let w = streamWatchdogs.get(key);
         if (!w) { w = { idle: null, hardCap: null }; streamWatchdogs.set(key, w); }
         if (w.idle) clearTimeout(w.idle);
         w.idle = setTimeout(() => {
             const cur = streamWatchdogs.get(key);
             if (cur) cur.idle = null;
-            finalizeStuckStream(tabId, STREAM_IDLE_TIMEOUT_MS, 'idle');
-        }, STREAM_IDLE_TIMEOUT_MS);
+            finalizeStuckStream(tabId, idleMs, 'idle');
+        }, idleMs);
         if (!w.hardCap) {
             w.hardCap = setTimeout(() => {
                 const cur = streamWatchdogs.get(key);
                 if (cur) cur.hardCap = null;
-                finalizeStuckStream(tabId, STREAM_HARD_CAP_MS, 'hardcap');
-            }, STREAM_HARD_CAP_MS);
+                finalizeStuckStream(tabId, hardCapMs, 'hardcap');
+            }, hardCapMs);
         }
     }, [paneId, finalizeStuckStream]);
 
@@ -256,6 +260,9 @@ export function useChatStream({ paneId, activeTabId, selectedModelRef, onStreamC
             if (data.responseType === 'chunk') {
                 setStreamingForTab(targetTabId, prev => prev + data.content);
                 armStreamWatchdog(targetTabId);
+            } else if (data.responseType === 'thinking') {
+                // A reasoning model is still thinking: no text yet, but alive.
+                armStreamWatchdog(targetTabId);
             } else if (data.responseType === 'done') {
                 clearStreamWatchdog(targetTabId);
                 setMessagesByTab(prev => {
@@ -272,7 +279,11 @@ export function useChatStream({ paneId, activeTabId, selectedModelRef, onStreamC
                     const key = tabKey(paneId, targetTabId);
                     const sentModel = streamModels.get(key) ?? selectedModelRef.current;
                     streamModels.delete(key);
-                    const responseCost = calcAICost(inTokens, outTokens, sentModel);
+                    // A local server costs nothing; a model id that happens to
+                    // start with a priced name (`gpt-4o…`) must not show a price.
+                    const responseCost = isLocalAiProvider(useSettingsStore.getState().activeAiProvider)
+                        ? null
+                        : calcAICost(inTokens, outTokens, sentModel);
                     setTokensByTab(prev => {
                         const next = new Map(prev);
                         const cur = prev.get(targetTabId) ?? { input: 0, output: 0, cost: null };

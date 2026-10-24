@@ -998,6 +998,9 @@ export type AIChatResponseData = (
    * wide, and without this event the pane sat on "Thinking…" until its watchdog.
    */
   | { sessionId: string; responseType: 'cancelled'; content: string }
+  /** A reasoning model is still thinking; `content` is always empty. Throttled
+   *  to about once a second — it only keeps the idle watchdog from firing. */
+  | { sessionId: string; responseType: 'thinking'; content: string }
 ) & {
   /** The send this event belongs to (see utils/aiRequestTracker). */
   requestId?: string;
@@ -1008,7 +1011,12 @@ export interface AIAuthResultPayload {
    *  for a provider the user has since switched away from. */
   provider: string;
   success: boolean;
+  /** Why a sign-in failed, when the provider can tell (local AI server). */
+  reason?: AIAuthFailureReason;
 }
+
+/** Mirrors the Rust `AuthFailureReason` enum. */
+export type AIAuthFailureReason = 'unreachable' | 'needsKey' | 'notCompatible' | 'badUrl';
 
 export type CommandExecutionMode = 'ask-before-execute' | 'auto-execute-safe';
 

@@ -289,6 +289,7 @@ export const settings = {
     providerGemini: 'Google AI Studio (Gemini)',
     providerAnthropic: 'Anthropic (Claude)',
     providerOpenai: 'OpenAI',
+    providerLocal: 'Local LLM (Ollama, LM Studio…)',
     // Authentication
     authentication: 'Authentication',
     authenticated: 'Authenticated',
@@ -327,6 +328,15 @@ export const settings = {
       apiKey: 'API Key',
       failed: 'Authentication failed. Please try again.',
       timedOut: 'Authentication timed out. Please try again.',
+      // Local AI server
+      localTitle: 'Connect to a local AI server',
+      localServerUrl: 'Server URL',
+      apiKeyOptional: 'API Key (optional)',
+      connectLocal: 'Connect',
+      unreachable: 'Could not reach the server. Check that it is running and the address is right.',
+      needsKey: 'The server refused the request. Enter its API key.',
+      notCompatible: 'The server answered, but not as an OpenAI-compatible API. Check the port.',
+      badUrl: 'Enter an address that starts with http:// or https://.',
     },
     // Personas
     personasSection: 'Personas',
@@ -595,6 +605,7 @@ export const settings = {
       providerGemini2: 'Middle gradient stop of the Gemini icon.',
       providerGemini3: 'Final gradient stop of the Gemini icon (end color).',
       providerOpenai: 'Brand color for the OpenAI icon background.',
+      providerLocal: 'Color for the local AI server icon.',
       providerAnthropic: 'Brand color for the Anthropic icon background.',
       providerVertexAi: 'Brand color for the Vertex AI icon.',
       glowAccent: 'Neon glow color for the active pane outline and active sidebar icons (rgba recommended).',

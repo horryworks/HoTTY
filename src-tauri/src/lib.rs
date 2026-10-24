@@ -67,6 +67,7 @@ use commands::window::{
 };
 use services::ai::providers::anthropic::AnthropicProvider;
 use services::ai::providers::gemini::GeminiProvider;
+use services::ai::providers::local::LocalProvider;
 use services::ai::providers::openai::OpenAIProvider;
 use services::ai::providers::vertexai::VertexAIProvider;
 use services::ai::{AIProviderRegistry, AIService};
@@ -364,6 +365,7 @@ pub fn run() {
             registry.register(Box::new(OpenAIProvider::new(app_data_dir.clone())));
             registry.register(Box::new(AnthropicProvider::new(app_data_dir.clone())));
             registry.register(Box::new(GeminiProvider::new(app_data_dir.clone())));
+            registry.register(Box::new(LocalProvider::new(app_data_dir.clone())));
             registry.register(Box::new(VertexAIProvider::new(app_data_dir)));
 
             let service = AIService::new(registry, "openai");
