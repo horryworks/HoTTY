@@ -177,11 +177,11 @@ tokio-util = { version = "0.7", features = ["rt"] }
 # it still lists ring under rustls-webpki's optional `ring` feature, which is
 # off. deny.toml bans the crate outright so a silent return fails CI.
 #
-# Pinned to "10" rather than "11" on purpose. 11.0.0 was published 2026-07-24 —
-# note that jsonwebtoken was NOT on renovate.json's 14-day crypto list at that
-# point (only the global 7-day soak reached it); it was added to that list in
-# this release, so the cooldown appealed to here now genuinely exists. Either
-# way 11.x is merely *eligible*, not soaked, while 10.4.0 has ~3 months in the
+# Pinned to "10" rather than "11" on purpose. 11.0.0 was published 2026-07-24.
+# jsonwebtoken is on the project's crypto list, whose new versions wait 14 days
+# instead of the usual 7 before adoption (CLAUDE.md, Dependency Supply-Chain
+# Policy). That wait is only the floor, though: 11.x is merely *eligible*, not
+# soaked, while 10.4.0 has ~3 months in the
 # field on the auth path. Treat the 11.x bump as a deliberate, separately
 # verified change — re-check that the backend still resolves to aws_lc_rs, since
 # the feature set is precisely what moved between 9 and 10.
