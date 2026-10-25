@@ -35,7 +35,7 @@ use crate::services::ai::streaming::{cancellable, resolve_turn, TurnResolution};
 use crate::services::ai::validation::{is_valid_api_key, is_valid_local_model};
 use crate::services::base_url::{is_loopback_base_url, normalize_base_url};
 
-pub const PROVIDER_ID: &str = "local";
+const PROVIDER_ID: &str = "local";
 
 const CONFIG_FILE_NAME: &str = "local_ai_config.json";
 

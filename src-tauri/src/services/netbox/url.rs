@@ -3,7 +3,6 @@
 use super::NetboxError;
 use tauri::Url;
 
-pub use crate::services::base_url::MAX_URL_LEN;
 use crate::services::base_url::{normalize_base_url, BaseUrlError};
 
 /// Validate and normalize a user-entered NetBox base URL to `scheme://host[:port]`.
@@ -58,6 +57,7 @@ pub fn relative_target(target: &str) -> Result<String, NetboxError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::services::base_url::MAX_URL_LEN;
 
     #[test]
     fn accepts_and_normalizes_a_plain_https_url() {

@@ -59,7 +59,8 @@ HoTTY is a multi-protocol terminal emulator for Windows that supports SSH, Telne
 
 ### AI Integration
 - Multi-provider support: Google AI Studio (Gemini), Vertex AI, Anthropic (Claude), OpenAI (GPT)
-- AI Chat pane with streaming responses, personas, token cost tracking, and multiple colour-coded parallel conversations
+- Local LLM — any server with an OpenAI-compatible API on this PC or the LAN (Ollama, LM Studio, llama.cpp, vLLM); the address and optional API key are encrypted together so the key only goes to that address, and nothing is billed
+- AI Chat pane with streaming responses, personas, token cost tracking, a context-window usage gauge, and multiple colour-coded parallel conversations
 - Image attachments — paste, drop, or attach images to an AI Chat message on vision-capable models
 - Answer language — **Auto** follows the app's display language, or pin a specific one; shared by every window and applied to conversations already in progress
 - Ask AI — select terminal output, right-click, and type a free-form question to send it (with the selection) to the AI Chat
@@ -68,7 +69,7 @@ HoTTY is a multi-protocol terminal emulator for Windows that supports SSH, Telne
 - Cross-window linking — link an AI Chat to a terminal running in another window
 - AI Chat in its own window — move the whole pane, its conversations, and the terminals it watches or opened into a dedicated window and back; pinnable above other applications, remembers its geometry, and refuses to move mid-reply so nothing is lost
 - AI-opened terminals — on request, the AI can open a PC shell (PowerShell / Command Prompt / Git Bash) or an SSH/Telnet session to a device it discovered, approved from a card in the chat; these sessions have no tab, are capped and idle-closed per conversation, and can be opened as a real tab at any time. Host Tree credentials are used without the AI ever seeing them; the default asks for every request (Settings → AI)
-- One-time data-sharing disclosure shown before terminal data is first sent to a provider (reviewable in Settings → AI)
+- One-time data-sharing disclosure shown before terminal data is first sent to a provider (reviewable in Settings → AI); a local LLM server on this PC needs none, and one on another machine asks once per host
 - Customizable personas
 
 ### Additional Features
@@ -123,7 +124,8 @@ the GitHub Releases API.
 When you use the **AI features** (AI Chat, Ask AI, Interactive Mode, Watch Mode),
 data is sent to the third-party AI provider you configured (Google Gemini /
 Vertex AI, Anthropic, or OpenAI) using **your own API key**, under that
-provider's terms and privacy policy:
+provider's terms and privacy policy. With **Local LLM**, data goes only to the
+server address you entered — on this PC, or on another machine you run:
 
 - **What is sent:** the messages you type, and — when you use Ask AI or enable
   Watch Mode — the relevant terminal output / commands captured from the session.

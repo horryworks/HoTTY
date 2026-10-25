@@ -1,5 +1,26 @@
 # Release Notes
 
+## v2.1.3
+
+**AI Chat can use a local LLM server on your PC or LAN, shows how full the model's context window is, and the SSH crypto libraries move past two timing-leak advisories.**
+
+### New Features
+
+- **Local LLM in AI Chat.** Settings → AI → AI Provider → **Local LLM** talks to any server with an OpenAI-compatible API — Ollama, LM Studio, llama.cpp, vLLM, llama-swap — on this PC or your LAN. Enter its address and, if the server needs one, an API key. The address and key are encrypted together, so the key is only ever sent to that address, and redirects are not followed. Model names are typed freely and the model list is shown as the server returns it. Nothing is billed, so only token counts are shown.
+  - A server on this PC needs no data-sharing consent. A server on another machine asks once per host, and the prompt points out that an `http://` address is not encrypted.
+  - Automatic command execution has its own safety-check setting for the local server. It defaults to rules only, so only whitelisted commands run on their own — small models do not always follow the one-command-per-reply rule.
+  - A model that is still loading gets a longer wait before HoTTY gives up.
+  - A failed connection says why: the server could not be reached, it needs a key, it is not an OpenAI-compatible API, or the address is not `http://` / `https://`.
+  - A new theme colour for the local server's icon (`--provider-local`) can be changed in the custom theme creator.
+- **See how full the context window is.** A small pie beside the cost in AI Chat shows how much of the model's context window the conversation uses; hover it for the exact token counts. It turns amber at 80% and red at 95%. It is not shown for local servers or models whose window size is not known.
+
+### Security
+
+- **SSH crypto libraries updated** (russh 0.64.1). The big-integer and constant-time helpers behind SSH key signing and verification could take measurably different time depending on secret values (RUSTSEC-2026-0387 in crypto-bigint, RUSTSEC-2026-0385 in ctutils). The update also brings russh's own fixes since 0.60, including a session panic when the two sides disagree on MACs and handler calls for channel IDs that were never opened. The fixed crypto-bigint 0.7.6 and ctutils 0.4.4 / 0.4.5 were published on 2026-10-23 by the same RustCrypto release workflow as earlier versions, and were taken ahead of the usual 14-day wait for crypto updates because the affected code is on HoTTY's SSH path.
+  - An SSH host certificate is refused — HoTTY never asks for one — and ordinary host keys are checked against `known_hosts` as before.
+  - Very old Ed25519 private keys in the non-standard format written by russh before 0.43 are no longer read. OpenSSH-format keys, including those HoTTY generates, are unaffected.
+- **Other dependency updates:** DOMPurify 3.4.17 (two advisories) and tokio 1.51.6 (one advisory). HoTTY did not use the affected code paths on Windows.
+
 ## v2.1.2
 
 **The AI Chat pane is rebuilt to match the other panes, the title bar follows your theme, and a pane header can be dragged to swap two panes.**
