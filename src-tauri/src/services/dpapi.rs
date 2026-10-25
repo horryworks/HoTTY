@@ -219,9 +219,9 @@ pub(crate) fn crypt_protect_raw(
 
         let slice = std::slice::from_raw_parts(data_out.pbData, data_out.cbData as usize);
         let result = slice.to_vec();
-        let _ = windows::Win32::Foundation::LocalFree(windows::Win32::Foundation::HLOCAL(
+        let _ = windows::Win32::Foundation::LocalFree(Some(windows::Win32::Foundation::HLOCAL(
             data_out.pbData as _,
-        ));
+        )));
         Ok(result)
     }
 }
@@ -268,9 +268,9 @@ fn crypt_unprotect_raw(encrypted: &[u8], entropy: Option<&[u8]>) -> Result<Vec<u
 
         let slice = std::slice::from_raw_parts(data_out.pbData, data_out.cbData as usize);
         let result = slice.to_vec();
-        let _ = windows::Win32::Foundation::LocalFree(windows::Win32::Foundation::HLOCAL(
+        let _ = windows::Win32::Foundation::LocalFree(Some(windows::Win32::Foundation::HLOCAL(
             data_out.pbData as _,
-        ));
+        )));
         Ok(result)
     }
 }

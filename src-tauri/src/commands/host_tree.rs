@@ -156,9 +156,10 @@ fn aes_gcm_encrypt(key: &[u8; KEY_LEN], plaintext: &[u8]) -> Result<(Vec<u8>, Ve
     rand::thread_rng().fill_bytes(&mut nonce_bytes);
 
     let cipher = Aes256Gcm::new_from_slice(key).map_err(|e| format!("cipher init failed: {e}"))?;
-    let nonce = Nonce::from_slice(&nonce_bytes);
+    let nonce =
+        Nonce::try_from(&nonce_bytes[..]).map_err(|_| "invalid nonce length".to_string())?;
     let ciphertext = cipher
-        .encrypt(nonce, plaintext)
+        .encrypt(&nonce, plaintext)
         .map_err(|e| format!("encryption failed: {e}"))?;
     // aes-gcm appends the 16-byte tag to the ciphertext automatically.
     Ok((nonce_bytes, ciphertext))
@@ -171,9 +172,9 @@ fn aes_gcm_decrypt(
     ciphertext_with_tag: &[u8],
 ) -> Result<Vec<u8>, String> {
     let cipher = Aes256Gcm::new_from_slice(key).map_err(|e| format!("cipher init failed: {e}"))?;
-    let nonce = Nonce::from_slice(nonce_bytes);
+    let nonce = Nonce::try_from(nonce_bytes).map_err(|_| "invalid nonce length".to_string())?;
     cipher
-        .decrypt(nonce, ciphertext_with_tag)
+        .decrypt(&nonce, ciphertext_with_tag)
         .map_err(|_| "decryption failed: wrong password or corrupted file".to_string())
 }
 
@@ -571,6 +572,18 @@ mod tests {
         let k1 = derive_key("password", salt);
         let k2 = derive_key("password", salt);
         assert_eq!(k1, k2);
+    }
+
+    #[test]
+    fn aes_gcm_decrypt_rejects_wrong_nonce_length() {
+        let key = [7u8; KEY_LEN];
+        let (nonce, ciphertext) = aes_gcm_encrypt(&key, b"payload").unwrap();
+        assert_eq!(
+            aes_gcm_decrypt(&key, &nonce, &ciphertext).unwrap(),
+            b"payload"
+        );
+        // A short nonce is an error, not a panic.
+        assert!(aes_gcm_decrypt(&key, &nonce[..NONCE_LEN - 1], &ciphertext).is_err());
     }
 
     #[test]
