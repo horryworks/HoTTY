@@ -87,6 +87,7 @@ export const aiChat = {
     selectModelHint: 'メッセージ入力欄の下にある AI 設定からモデルを選択してください',
     tokenInOut: '入力 {{in}} / 出力 {{out}} トークン',
     tokenCost: '~{{cost}}',
+    contextUsage: 'コンテキスト：{{used}} / {{limit}} トークン（{{pct}}%）',
     // 会話クリアの確認
     clearConversationConfirmTitle: 'この会話をクリアしますか？',
     clearConversationConfirmMessage: '現在の会話はクリアされます。この操作は取り消せません。',

@@ -142,6 +142,8 @@ export function useChatStream({ paneId, activeTabId, selectedModelRef, onStreamC
     const totalInputTokens = activeTokens?.input ?? 0;
     const totalOutputTokens = activeTokens?.output ?? 0;
     const totalCost = activeTokens?.cost ?? null;
+    const contextTokens = activeTokens?.context ?? 0;
+    const contextModel = activeTokens?.contextModel ?? null;
     const messages = useMemo<ChatMessage[]>(
         () => (activeTabId ? (messagesByTab.get(activeTabId) ?? []) : []),
         [activeTabId, messagesByTab],
@@ -291,6 +293,10 @@ export function useChatStream({ paneId, activeTabId, selectedModelRef, onStreamC
                             input: cur.input + inTokens,
                             output: cur.output + outTokens,
                             cost: responseCost !== null ? (cur.cost ?? 0) + responseCost : cur.cost,
+                            // Not summed: each request re-sends the whole history,
+                            // so the latest answer alone says how full the window is.
+                            context: inTokens + outTokens,
+                            contextModel: sentModel,
                         });
                         return next;
                     });
@@ -411,6 +417,7 @@ export function useChatStream({ paneId, activeTabId, selectedModelRef, onStreamC
         setStreamingForTab, markStreaming, setStreamingContent, setIsStreaming, setMessages,
         armStreamWatchdog, clearStreamWatchdog,
         totalInputTokens, totalOutputTokens, totalCost,
+        contextTokens, contextModel,
         resetAllStreams, pruneStreams, clearTabStream,
     };
 }

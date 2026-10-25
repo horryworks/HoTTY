@@ -92,6 +92,7 @@ export const aiChat = {
     selectModelHint: '메시지 입력창 아래의 AI 설정에서 모델을 선택하세요',
     tokenInOut: '입력 {{in}} / 출력 {{out}} 토큰',
     tokenCost: '~{{cost}}',
+    contextUsage: '컨텍스트: {{used}} / {{limit}} 토큰 ({{pct}}%)',
     // Clear conversation confirm
     clearConversationConfirmTitle: '이 대화를 지우시겠습니까?',
     clearConversationConfirmMessage: '현재 대화가 지워집니다. 이 작업은 되돌릴 수 없습니다.',

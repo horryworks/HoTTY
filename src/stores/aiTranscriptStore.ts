@@ -34,6 +34,12 @@ export interface TabTokens {
     input: number;
     output: number;
     cost: number | null;
+    /** Size of the conversation as of the last answer (its prompt + reply
+     *  tokens) — what the next request starts from. Absent before the first
+     *  answer and in handovers from older windows. */
+    context?: number;
+    /** The model that answered last, for looking up its context window. */
+    contextModel?: string;
 }
 
 /** One tab's transcript and token totals in wire form (Maps do not survive JSON). */

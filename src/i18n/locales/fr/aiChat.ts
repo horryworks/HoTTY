@@ -92,6 +92,7 @@ export const aiChat = {
     selectModelHint: "Ouvrez les paramètres d'IA sous la zone de message pour choisir un modèle",
     tokenInOut: '{{in}} entrants / {{out}} sortants jetons',
     tokenCost: '~{{cost}}',
+    contextUsage: 'Contexte : {{used}} / {{limit}} jetons ({{pct}} %)',
     // Clear conversation confirm
     clearConversationConfirmTitle: 'Effacer cette conversation ?',
     clearConversationConfirmMessage: 'La conversation actuelle sera effacée. Cette action est irréversible.',

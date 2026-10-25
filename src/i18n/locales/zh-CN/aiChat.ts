@@ -92,6 +92,7 @@ export const aiChat = {
     selectModelHint: '打开消息框下方的 AI 设置以选择模型',
     tokenInOut: '{{in}} 输入 / {{out}} 输出 token',
     tokenCost: '~{{cost}}',
+    contextUsage: '上下文：{{used}} / {{limit}} token（{{pct}}%）',
     // Clear conversation confirm
     clearConversationConfirmTitle: '要清除此对话吗？',
     clearConversationConfirmMessage: '当前对话将被清除。此操作无法撤销。',

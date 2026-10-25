@@ -90,6 +90,7 @@ export const aiChat = {
     selectModelHint: '開啟訊息框下方的 AI 設定以選取模型',
     tokenInOut: '輸入 {{in}} 個／輸出 {{out}} 個權杖',
     tokenCost: '~{{cost}}',
+    contextUsage: '上下文：{{used}} / {{limit}} 個權杖（{{pct}}%）',
     // 清除對話確認
     clearConversationConfirmTitle: '要清除此對話嗎？',
     clearConversationConfirmMessage: '目前的對話將會被清除。此動作無法復原。',

@@ -92,6 +92,7 @@ export const aiChat = {
     selectModelHint: 'Open AI settings below the message box to choose a model',
     tokenInOut: '{{in}} in / {{out}} out tokens',
     tokenCost: '~{{cost}}',
+    contextUsage: 'Context: {{used}} / {{limit}} tokens ({{pct}}%)',
     // Clear conversation confirm
     clearConversationConfirmTitle: 'Clear this conversation?',
     clearConversationConfirmMessage: 'The current conversation will be cleared. This cannot be undone.',

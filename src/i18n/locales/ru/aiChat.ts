@@ -93,6 +93,7 @@ export const aiChat = {
     selectModelHint: 'Откройте настройки ИИ под полем сообщения, чтобы выбрать модель',
     tokenInOut: '{{in}} вход / {{out}} выход токенов',
     tokenCost: '~{{cost}}',
+    contextUsage: 'Контекст: {{used}} / {{limit}} токенов ({{pct}}%)',
     // Подтверждение очистки разговора
     clearConversationConfirmTitle: 'Очистить этот разговор?',
     clearConversationConfirmMessage: 'Текущий разговор будет очищен. Это нельзя отменить.',

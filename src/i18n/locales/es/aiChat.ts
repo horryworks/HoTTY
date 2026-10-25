@@ -90,6 +90,7 @@ export const aiChat = {
     selectModelHint: 'Abra la configuración de IA debajo del cuadro de mensaje para elegir un modelo',
     tokenInOut: '{{in}} entrada / {{out}} salida tokens',
     tokenCost: '~{{cost}}',
+    contextUsage: 'Contexto: {{used}} / {{limit}} tokens ({{pct}} %)',
     // Confirmación de borrar conversación
     clearConversationConfirmTitle: '¿Borrar esta conversación?',
     clearConversationConfirmMessage: 'La conversación actual se borrará. Esto no se puede deshacer.',

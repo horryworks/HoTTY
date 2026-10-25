@@ -21,6 +21,7 @@ import { useAiTranscriptStore, paneTranscripts, tabPrep, setTabPrep, forgetPrep 
 import { STORAGE_KEYS } from '../../constants/storage';
 import { aiProviderLabelKey, isLocalAiProvider } from '../../constants/aiProviders';
 import { formatAICost } from '../../constants/aiPricing';
+import { getContextWindow } from '../../constants/aiContextWindow';
 import { buildExecutionRules, languageDirective, resolveAiLanguage, languageSwitchNotice, AUTO_LANGUAGE, NETWORK_EXPERT_KICKOFF, NETWORK_EXPERT_RECONNECT_PREP, NETWORK_EXPERT_SAME_DEVICE_PREP, buildWatchTargetsBlock, withTargetDirective, buildConnectCapabilityBlock, buildNoTerminalBlock, withPromptHint } from '../../constants/aiPrompts';
 import { SUPPORTED_LANGUAGES } from '../../i18n';
 import { ExecutionModeBar } from './ExecutionModeBar';
@@ -35,6 +36,7 @@ import {
 import { segmentMessageContent, extractExecuteCommands, extractExecuteBlocks, extractConnectBlocks } from './executeBlockUtils';
 import { resolveAlias, watchedTerminalLabels } from '../../utils/terminalAlias';
 import { ConnectRequestCard } from './ConnectRequestCard';
+import { ContextGauge } from './ContextGauge';
 import { resolveHostLoginName } from '../../utils/hostConnectConfig';
 import {
     connectRequestReducer, emptyConnectState, getConnectBlock, hasConnectBlock, connectBlockKey, blocksSettledByOutcomes,
@@ -836,6 +838,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
         setStreamingForTab, markStreaming, setStreamingContent, setIsStreaming, setMessages,
         armStreamWatchdog, clearStreamWatchdog,
         totalInputTokens, totalOutputTokens, totalCost,
+        contextTokens, contextModel,
         resetAllStreams, pruneStreams, clearTabStream,
     } = useChatStream({
         paneId,
@@ -843,6 +846,10 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
         selectedModelRef,
         onStreamComplete: (tabId, msgs, reason) => streamCompleteHandlerRef.current(tabId, msgs, reason),
     });
+    // A local server's window is whatever it was started with, so it gets no gauge.
+    const contextLimit = contextModel && !isLocalAiProvider(activeAiProvider)
+        ? getContextWindow(contextModel)
+        : null;
 
     // ── Moving this conversation to another window ──────────────────────────
     // A conversation may change window only while it is AT REST. That single
@@ -3285,6 +3292,9 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                                     </div>
                                 )}
                             </div>
+                            {contextLimit !== null && contextTokens > 0 && (
+                                <ContextGauge used={contextTokens} limit={contextLimit} />
+                            )}
                             {(totalInputTokens > 0 || totalOutputTokens > 0) && (
                                 // The cost when the model's price is known, else the
                                 // token counts; the counts are always in the title.

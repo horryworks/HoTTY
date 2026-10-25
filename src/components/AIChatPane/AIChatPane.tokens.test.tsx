@@ -142,8 +142,39 @@ describe('AIChatPane per-tab token accounting (2.5c)', () => {
             await act(async () => { await Promise.resolve(); });
             const shown = screen.getByTitle('1,000,000 in / 1,000,000 out tokens');
             expect(shown.textContent).not.toContain('~');
+            // A local server's window size is unknown, so no context gauge.
+            expect(screen.queryByRole('img', { name: /^Context:/ })).toBeNull();
         } finally {
             h.settings.activeAiProvider = 'gemini';
+            vi.mocked(tauriService.aiListModels).mockResolvedValue([{ name: 'gemini-pro', displayName: 'Gemini Pro' }]);
+        }
+    });
+    it('shows how full the context window is from the LAST answer, not the running sum', async () => {
+        const { tauriService } = await import('../../services/tauriService');
+        vi.mocked(tauriService.aiListModels).mockResolvedValue([{ name: 'gemini-2.5-flash', displayName: 'Gemini 2.5 Flash' }]);
+        try {
+            render(makePane({ chatState: { ...twoTabState, selectedModel: 'gemini-2.5-flash' } }));
+            await act(async () => { useAiAuthStore.setState({ isAuthenticated: true }); });
+            expect(screen.queryByRole('img', { name: /^Context:/ })).toBeNull();
+
+            const textarea = screen.getByPlaceholderText(/^(Type a message\.\.\.|Ask about .+)$/);
+            for (const [prompt, reply] of [[1000, 200], [300_000, 14_288]]) {
+                await act(async () => { fireEvent.change(textarea, { target: { value: 'hi' } }); });
+                await act(async () => { fireEvent.keyDown(textarea, { key: 'Enter' }); });
+                await act(async () => {
+                    h.onAiChatResponseCb.current?.({
+                        sessionId: 'ai-1::t1',
+                        responseType: 'done',
+                        content: 'ok',
+                        usageMetadata: { promptTokenCount: prompt, candidatesTokenCount: reply },
+                    });
+                });
+                await act(async () => { await Promise.resolve(); });
+            }
+
+            const gauge = screen.getByRole('img', { name: 'Context: 314,288 / 1,048,576 tokens (30%)' });
+            expect(gauge.textContent).toBe('30%');
+        } finally {
             vi.mocked(tauriService.aiListModels).mockResolvedValue([{ name: 'gemini-pro', displayName: 'Gemini Pro' }]);
         }
     });
