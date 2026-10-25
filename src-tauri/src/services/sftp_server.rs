@@ -16,7 +16,7 @@ use rand::RngCore;
 use russh::keys::ssh_key::private::{Ed25519Keypair, Ed25519PrivateKey, KeypairData, RsaKeypair};
 use russh::keys::ssh_key::LineEnding;
 use russh::keys::PrivateKey;
-use russh::server::{Auth, Handler as RusshServerHandler, Msg, Session};
+use russh::server::{Auth, ChannelOpenHandle, Handler as RusshServerHandler, Msg, Session};
 use russh::{Channel, ChannelId};
 use russh_sftp::protocol::{
     Attrs, Data, File as SftpFile, FileAttributes, Handle as HandleReply, Name, OpenFlags, Status,
@@ -184,10 +184,12 @@ impl RusshServerHandler for SshServerHandler {
     async fn channel_open_session(
         &mut self,
         channel: Channel<Msg>,
+        reply: ChannelOpenHandle,
         _session: &mut Session,
-    ) -> Result<bool, Self::Error> {
+    ) -> Result<(), Self::Error> {
         self.channels.insert(channel.id(), channel);
-        Ok(true)
+        reply.accept().await;
+        Ok(())
     }
 
     async fn channel_eof(

@@ -76,7 +76,7 @@ portable-pty = "0.8"
 # Enable optional legacy algorithm features that the user can opt into via Settings:
 #   - "des" enables 3des-cbc (older Cisco IOS, etc.)
 #   - "dsa" enables ssh-dss host keys
-russh = { version = "0.60", features = ["des", "dsa"] }
+russh = { version = "0.64.1", features = ["des", "dsa"] }
 
 # SFTP subsystem (server + client) layered on top of russh's SSH transport.
 # Transport-agnostic — operates on any AsyncRead+AsyncWrite stream, so it is not

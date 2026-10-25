@@ -16,7 +16,7 @@ use std::time::Duration;
 use base64::Engine;
 use russh::client::{self, Handle, Handler};
 use russh::keys::ssh_key;
-use russh::keys::{load_secret_key, PrivateKey, PrivateKeyWithHashAlg};
+use russh::keys::{load_secret_key, PrivateKey, PrivateKeyWithHashAlg, PublicKeyOrCertificate};
 use russh::ChannelMsg;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
@@ -164,8 +164,19 @@ impl Handler for JumpboxHandler {
 
     async fn check_server_key(
         &mut self,
-        server_public_key: &ssh_key::PublicKey,
+        server_key: &PublicKeyOrCertificate,
     ) -> Result<bool, Self::Error> {
+        // Host certificates are never offered (`host_key_certificates` stays
+        // empty), so a certificate here is unexpected — refuse it rather than
+        // trust a key known_hosts was never asked about.
+        let PublicKeyOrCertificate::PublicKey {
+            key: server_public_key,
+            ..
+        } = server_key
+        else {
+            log::error!("jumpbox: server presented a host certificate — refusing connection");
+            return Ok(false);
+        };
         let key_type = server_public_key.algorithm().as_str().to_string();
         let key_bytes = server_public_key.to_bytes().map_err(|e| {
             log::error!("jumpbox: failed to serialize server public key: {e}");

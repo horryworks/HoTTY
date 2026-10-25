@@ -10,7 +10,9 @@ use std::time::Duration;
 
 use russh::client::{self, Handle, Handler};
 use russh::keys::ssh_key;
-use russh::keys::{load_secret_key, HashAlg, PrivateKey, PrivateKeyWithHashAlg};
+use russh::keys::{
+    load_secret_key, HashAlg, PrivateKey, PrivateKeyWithHashAlg, PublicKeyOrCertificate,
+};
 use russh::{cipher, kex, mac, ChannelMsg, Disconnect, MethodKind, Preferred};
 use tauri::AppHandle;
 use tokio::sync::{mpsc, oneshot, Mutex, Notify};
@@ -305,6 +307,7 @@ fn build_preferred(algorithms: &SshAlgorithms) -> Result<Preferred, String> {
 
     Ok(Preferred {
         kex,
+        host_key_certificates: default.host_key_certificates,
         cipher,
         mac,
         key,
@@ -515,8 +518,19 @@ impl Handler for SshHandler {
 
     async fn check_server_key(
         &mut self,
-        server_public_key: &ssh_key::PublicKey,
+        server_key: &PublicKeyOrCertificate,
     ) -> Result<bool, Self::Error> {
+        // Host certificates are never offered (`host_key_certificates` stays
+        // empty), so a certificate here is unexpected — refuse it rather than
+        // trust a key known_hosts was never asked about.
+        let PublicKeyOrCertificate::PublicKey {
+            key: server_public_key,
+            ..
+        } = server_key
+        else {
+            log::error!("ssh: server presented a host certificate — refusing connection");
+            return Ok(false);
+        };
         let key_type = server_public_key.algorithm().as_str().to_string();
         let key_bytes = server_public_key.to_bytes().map_err(|e| {
             log::error!("ssh: failed to serialize server public key: {e}");

@@ -458,7 +458,7 @@ fn describe_public(pk: &PublicKey, info: &mut SshKeyInfo) {
         info.comment = Some(comment.to_string());
     }
     if let KeyData::Rsa(rsa) = pk.key_data() {
-        if let Some(n) = rsa.n.as_positive_bytes() {
+        if let Some(n) = rsa.n().as_positive_bytes() {
             info.bits = Some((n.len() * 8) as u32);
         }
     }
@@ -656,7 +656,7 @@ fn build_key(
     let algorithm_name = public.algorithm().as_str().to_string();
     let fingerprint = public.fingerprint(HashAlg::Sha256).to_string();
     let bits = match public.key_data() {
-        KeyData::Rsa(rsa) => rsa.n.as_positive_bytes().map(|n| (n.len() * 8) as u32),
+        KeyData::Rsa(rsa) => rsa.n().as_positive_bytes().map(|n| (n.len() * 8) as u32),
         _ => None,
     };
     let public_line = public
@@ -1250,7 +1250,7 @@ mod tests {
 
         assert_eq!(parsed.algorithm().as_str(), "ssh-ed25519");
         assert_eq!(generated.algorithm, "ssh-ed25519");
-        assert_eq!(parsed.comment(), "alice@example.com");
+        assert_eq!(parsed.comment().as_str_lossy(), "alice@example.com");
         assert!(!parsed.is_encrypted());
         assert_eq!(
             parsed.public_key().fingerprint(HashAlg::Sha256).to_string(),
@@ -1309,7 +1309,7 @@ mod tests {
                 PrivateKey::from_openssh(generated.pem.as_bytes()).expect("re-read the key");
             // `PrivateKey::random` takes no comment, so the builder sets it
             // afterwards -- a regression here would ship keys with no comment.
-            assert_eq!(parsed.comment(), "alice@example.com");
+            assert_eq!(parsed.comment().as_str_lossy(), "alice@example.com");
         }
     }
 
