@@ -1,5 +1,28 @@
 # Release Notes
 
+## v2.1.4-beta1
+
+**Automatic command execution closes more ways for a command to slip past its safety checks, and HoTTY drops duplicate crypto libraries and HTTP/2.**
+
+### Improvements
+
+- **Fewer libraries in the build.** The encryption and Windows libraries now use the versions the SSH and app framework libraries already bring, so the older duplicates are gone. The HTTP client no longer includes HTTP/2; connections to AI providers, NetBox and the update check use HTTP/1.1. The Windows build compiles 492 crates instead of 510.
+
+### Bug Fixes
+
+- **A damaged .htree file no longer crashes the import.** A file whose encryption data has the wrong length is reported as an error.
+
+### Security
+
+- **Automatic command execution is stricter.** These now always ask, whichever safety-check strategy you pick:
+  - a PowerShell script block `{ … }` outside quotes, which PowerShell can run behind two whitelisted commands (`echo 1 | Get-Content -Path {iwr …}`);
+  - a path to another machine (`\\host\share\…`) given to a reading command — opening it connects to that machine and sends your Windows sign-in hash;
+  - an interpreter given code on the command line (`python -c`, `node -e`, `bash -c`, `cmd /c`, `pwsh -EncodedCommand`, a bare `powershell <code>`), and a program piped into a shell (`… | sh`, also behind `env` or `timeout`);
+  - more download and transfer tools, `git` commands that talk to a remote, and `openssl s_client`;
+  - a command name hidden with quotes, escapes or variables (`c""url`, `c\url`, `$IFS`).
+- **Network tools auto-run only in their read forms.** `ip`, `ifconfig`, `route`, `arp` and `netsh` are judged by the forms that only show something. The old list of write words missed abbreviations (`ip r de default`), capitals (`route DELETE`), `--` and shortened options (`ip --family inet link set …`), and forms with no verb at all (`ifconfig eth0 10.0.0.5`). `sysctl -p` and setting the clock with `date` also ask now. The checks on `dig`, `nslookup`, `host` and `ping` sending to a server you name now apply with every strategy.
+- **A command with a variable (`$HOME`, `${x}`) no longer runs on the whitelist alone,** because the shell rewrites it before it runs. With Hybrid the AI judges it; with Static you are asked.
+
 ## v2.1.3
 
 **AI Chat can use a local LLM server on your PC or LAN, shows how full the model's context window is, and the SSH crypto libraries move past two timing-leak advisories.**

