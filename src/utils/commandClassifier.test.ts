@@ -692,6 +692,10 @@ describe('classifyCommand', () => {
         // Commands from a file, or another machine.
         'netsh -a aliases.txt interface show interface',
         'netsh -r host-01 interface show interface',
+        // cmd variables can spell `clear` or a verb before netsh sees them.
+        'netsh wlan show profile corp key=%K%',
+        'netsh wlan show profile corp %COMSPEC:~0,1%lear',
+        'netsh wlan show profile corp key=!K!',
       ]) {
         expect(networkEgressDanger(cmd).danger, cmd).toBe(true);
       }
@@ -710,6 +714,11 @@ describe('classifyCommand', () => {
       for (const cmd of ['ip link$X"set"$X"eth0"$X"down"', 'ls $HOME', 'cat "$F"', 'echo ${PATH}']) {
         expect(classifyCommand(cmd, wl).safe, cmd).toBe(false);
       }
+      // cmd variables, quoted or not.
+      for (const cmd of ['dir %USERPROFILE%', 'type "%APPDATA%\\x.txt"', 'route print %COMSPEC:~0,1%', 'ipconfig !OPT!']) {
+        expect(classifyCommand(cmd, wl).safe, cmd).toBe(false);
+      }
+      expect(classifyCommand('date +%Y%m%d', wl).safe).toBe(true);
       // Single-quoted `$` is literal, and a trailing regex anchor expands nothing.
       expect(classifyCommand("grep 'x$' file.txt", wl).safe).toBe(true);
       expect(classifyCommand('grep "^a$" file.txt', wl).safe).toBe(true);

@@ -386,6 +386,9 @@ const EGRESS_OPTION_RULES: Record<string, FlagRule[]> = {
             },
             reason: 'netsh shows a saved Wi-Fi key in plain text (key=clear)',
         },
+        // cmd rewrites `%…%` / `!…!` before netsh runs, so `key=%COMSPEC:~…%`
+        // can spell clear (or a verb) out of sight of every rule here.
+        { patterns: [/[%!]/], reason: 'netsh with a cmd variable (% / !) — the words it runs are not the ones written' },
         // `-a <alias file>` and `-f <script>` run commands from a file, `-r`
         // targets another machine.
         { patterns: [], check: (seg) => /(?:^|\s)[-/][afr](?:\s|$)/i.test(netshText(seg)), reason: 'netsh runs commands from a file (-a / -f) or targets another machine (-r)' },
@@ -960,6 +963,12 @@ export function classifyCommand(
     // (`awk '{print $1}'`); anything else asks.
     if (/\$[\w{@*#?!$-]/.test(trimmed.replace(/'[^']*'/g, ''))) {
         return { safe: false, reason: 'Contains a variable expansion ($) — needs AI/manual review' };
+    }
+    // cmd expands `%NAME%`, `%NAME:~0,1%` and `!NAME!` whatever the quoting, and
+    // a slice of a built-in variable can spell any word. One-letter names are
+    // left alone so `date +%Y%m%d` keeps auto-running.
+    if (/%[A-Za-z_]\w+(?::[^%]*)?%|![A-Za-z_]\w+(?::[^!]*)?!/.test(trimmed)) {
+        return { safe: false, reason: 'Contains a cmd variable expansion (%…% / !…!) — needs AI/manual review' };
     }
 
     // Step 3: split by pipe and evaluate each segment
