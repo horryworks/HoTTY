@@ -666,6 +666,18 @@ describe('classifyCommand', () => {
       }
     });
 
+    it('stops netsh printing a saved Wi-Fi key on every strategy', () => {
+      for (const cmd of [
+        'netsh wlan show profile name=corp key=clear',
+        'netsh.exe wlan show profile corp key=clear',
+        'C:\\Windows\\System32\\netsh.exe wlan sh prof corp Key = "Clear"',
+        'env netsh wlan show profile corp key=clear',
+      ]) {
+        expect(networkEgressDanger(cmd).danger, cmd).toBe(true);
+      }
+      expect(networkEgressDanger('netsh wlan show profiles').danger).toBe(false);
+    });
+
     it('stops $IFS word splitting on every strategy', () => {
       for (const cmd of ['ip link$IFS"set"$IFS"eth0"$IFS"down"', 'ls${IFS}-la']) {
         expect(structuralDanger(cmd).danger, cmd).toBe(true);
@@ -744,6 +756,9 @@ describe('classifyCommand', () => {
         'netsh int ip se addr name=Local static 10.0.0.1',
         'netsh int ip a addr name=Local 10.0.0.2',
         'netsh -f script.txt',
+        'netsh wlan show profile name=corp key=clear',
+        'netsh wlan sh prof name="corp" KEY=CLEAR',
+        'netsh wlan show profiles key=c',
         'sysctl -p',
         'sysctl -p /etc/sysctl.d/99-x.conf',
         'sysctl --system',
@@ -782,6 +797,9 @@ describe('classifyCommand', () => {
         'netsh interface ipv4 show addresses',
         'netsh int ip sh conf',
         'netsh interface ip dump',
+        'netsh wlan show profiles',
+        'netsh wlan show profile name=corp',
+        'netsh wlan show interfaces',
         'sysctl -n kernel.hostname',
         'date -u',
         'date +"%Y-%m-%d %H:%M"',

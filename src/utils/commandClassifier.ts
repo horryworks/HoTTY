@@ -364,6 +364,12 @@ const EGRESS_OPTION_RULES: Record<string, FlagRule[]> = {
     openssl: [
         { patterns: [/(?:^|\s)(?:s_client|s_time|ocsp)\b/], reason: 'openssl connects to a server' },
     ],
+    // `netsh wlan show profile name=corp key=clear` prints the saved Wi-Fi key in
+    // plain text, and terminal output goes to the AI provider. Loose on purpose:
+    // netsh takes tags and values case-insensitively and abbreviated.
+    netsh: [
+        { patterns: [/(?:^|\s)k[a-z]*\s*=\s*["']?c/i], reason: 'netsh shows a saved Wi-Fi key in plain text (key=clear)' },
+    ],
 };
 
 for (const [cmd, rules] of Object.entries(EGRESS_OPTION_RULES)) {
