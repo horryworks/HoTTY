@@ -856,11 +856,12 @@ export function networkEgressDanger(command: string): StructuralDanger {
             }
 
             for (const { word: tok, index } of commandPositions(segment)) {
-                // `c$@url`, `$CMD …`: the name the shell runs is not the one written.
-                if (tok.includes('$') && !isAssignment(tok)) {
+                // `c$@url`, `$CMD …`, `cu%COMSPEC:~0,0%rl …`, `!X!`: the name the
+                // shell runs is not the one written.
+                if (/[$%!]/.test(tok) && !isAssignment(tok)) {
                     return {
                         danger: true,
-                        reason: 'A command name built from a variable ($) — needs manual review',
+                        reason: 'A command name built from a variable ($ / % / !) — needs manual review',
                     };
                 }
                 // The rest of the segment from this command on: its own arguments.
@@ -965,9 +966,14 @@ export function classifyCommand(
         return { safe: false, reason: 'Contains a variable expansion ($) — needs AI/manual review' };
     }
     // cmd expands `%NAME%`, `%NAME:~0,1%` and `!NAME!` whatever the quoting, and
-    // a slice of a built-in variable can spell any word. One-letter names are
-    // left alone so `date +%Y%m%d` keeps auto-running.
-    if (/%[A-Za-z_]\w+(?::[^%]*)?%|![A-Za-z_]\w+(?::[^!]*)?!/.test(trimmed)) {
+    // a slice of a built-in variable can spell any word. Variable names may hold
+    // almost anything (`%ProgramFiles(x86)%`, `%=ExitCode%`), so any text between
+    // two `%` or two `!` counts. Only `date`'s `+FORMAT` is exempt, so
+    // `date +%Y%m%d` keeps auto-running.
+    const unexpanded = /^date(?:\s|$)/i.test(trimmed)
+        ? trimmed.replace(/(^|\s)(?:"\+[^"]*"|'\+[^']*'|\+(?:"[^"]*"|'[^']*'|\S+))/g, '$1')
+        : trimmed;
+    if (/%[^%]+%|![^!]+!/.test(unexpanded)) {
         return { safe: false, reason: 'Contains a cmd variable expansion (%…% / !…!) — needs AI/manual review' };
     }
 
