@@ -672,10 +672,21 @@ describe('classifyCommand', () => {
         'netsh.exe wlan show profile corp key=clear',
         'C:\\Windows\\System32\\netsh.exe wlan sh prof corp Key = "Clear"',
         'env netsh wlan show profile corp key=clear',
+        // Quotes and cmd escapes are gone before netsh reads the tag.
+        'netsh wlan show profile corp k"ey"=clear',
+        'netsh wlan show profile corp key=^clear',
+        'netsh wlan show profile corp ke^y=c"lear"',
+        // netsh's own prompt: the key=clear line would be typed into it.
+        'netsh',
+        'netsh wlan',
+        'netsh\nshow profile corp key=clear',
+        'echo wlan show profile corp key=clear | netsh',
       ]) {
         expect(networkEgressDanger(cmd).danger, cmd).toBe(true);
       }
-      expect(networkEgressDanger('netsh wlan show profiles').danger).toBe(false);
+      for (const cmd of ['netsh wlan show profiles', 'netsh interface ipv4 show addresses', 'netsh int ip dump']) {
+        expect(networkEgressDanger(cmd).danger, cmd).toBe(false);
+      }
     });
 
     it('stops $IFS word splitting on every strategy', () => {

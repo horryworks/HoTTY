@@ -260,8 +260,8 @@ const DANGEROUS_FLAGS: Record<string, FlagRule[]> = {
         // password to disk; `exec` runs a script; the rest change state. Matched
         // as prefixes, since netsh accepts abbreviated commands.
         { patterns: [], check: netshHasWriteVerb, reason: 'netsh configuration change, state change or file write' },
-        // Only a read auto-runs. This also catches what a verb list cannot name.
-        { patterns: [], check: (seg) => !/(?:^|\s)(?:show|sho|sh|dump|help|\?)(?:\s|$)/i.test(seg), reason: 'netsh without a show / dump / help verb' },
+        // Only a read auto-runs: the "no show / dump / help verb" rule lives in
+        // EGRESS_OPTION_RULES below so it applies on every strategy.
     ],
     sysctl: [
         // `sysctl -w key=val` or `sysctl key=val` writes kernel parameters.
@@ -366,9 +366,22 @@ const EGRESS_OPTION_RULES: Record<string, FlagRule[]> = {
     ],
     // `netsh wlan show profile name=corp key=clear` prints the saved Wi-Fi key in
     // plain text, and terminal output goes to the AI provider. Loose on purpose:
-    // netsh takes tags and values case-insensitively and abbreviated.
+    // netsh takes tags and values case-insensitively and abbreviated, and the
+    // quotes and cmd `^` escapes in `k"ey"=^clear` are gone before netsh sees it.
     netsh: [
-        { patterns: [/(?:^|\s)k[a-z]*\s*=\s*["']?c/i], reason: 'netsh shows a saved Wi-Fi key in plain text (key=clear)' },
+        {
+            patterns: [],
+            check: (seg) => /(?:^|\s)k[a-z]*\s*=\s*c/i.test(seg.replace(/["'`^]/g, '')),
+            reason: 'netsh shows a saved Wi-Fi key in plain text (key=clear)',
+        },
+        // A bare `netsh` or `netsh wlan` opens netsh's own prompt, and the next
+        // line (`show profile corp key=clear`) is typed into it, out of sight of
+        // every check here. Without a read verb the rest are writes anyway.
+        {
+            patterns: [],
+            check: (seg) => !/(?:^|\s)(?:show|sho|sh|dump|help|\?)(?:\s|$)/i.test(seg.replace(/["'`^]/g, '')),
+            reason: 'netsh without a show / dump / help verb opens its own prompt or changes settings',
+        },
     ],
 };
 
@@ -510,6 +523,8 @@ const SH_FAMILY: Set<string> = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh', 'fis
 // of the pipe, out of the walk's reach. Keyed by {@link interpreterFamily}.
 const STDIN_INTERPRETERS: Set<string> = new Set([
     'sh', 'pwsh', 'cmd', 'python', 'node', 'perl', 'ruby', 'php', 'lua', '.', 'source',
+    // `echo wlan show profile corp key=clear | netsh` — netsh reads commands from stdin.
+    'netsh',
 ]);
 
 // PowerShell options that take a value, by full name, and the short aliases it
