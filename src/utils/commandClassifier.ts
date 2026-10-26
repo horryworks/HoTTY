@@ -969,10 +969,18 @@ export function classifyCommand(
     // a slice of a built-in variable can spell any word. Variable names may hold
     // almost anything (`%ProgramFiles(x86)%`, `%=ExitCode%`), so any text between
     // two `%` or two `!` counts. Only `date`'s `+FORMAT` is exempt, so
-    // `date +%Y%m%d` keeps auto-running.
-    const unexpanded = /^date(?:\s|$)/i.test(trimmed)
-        ? trimmed.replace(/(^|\s)(?:"\+[^"]*"|'\+[^']*'|\+(?:"[^"]*"|'[^']*'|\S+))/g, '$1')
-        : trimmed;
+    // `date +%Y%m%d` keeps auto-running — within the `date` segment alone, and
+    // only for a format holding no `|&<>^`: cmd does not treat `'` as a quote, so
+    // `date '+a | dir %X% b'` pipes into `dir` with `%X%` expanded.
+    const unexpanded = trimmed
+        .split('|')
+        .map((seg) => (/^\s*date(?:\s|$)/i.test(seg)
+            // A real name inside the format (`+%COMSPEC%`, `+%ProgramFiles(x86)%`)
+            // is still a variable; `%Y-%m` is a pair of format specifiers.
+            ? seg.replace(/(^|\s)(?:["']\+[^"'|&<>^]*["']|\+["'][^"'|&<>^]*["']|\+[^\s"'|&<>^]+)/g,
+                (m, lead: string) => (/%[A-Za-z_][\w()]+(?::[^%]*)?%/.test(m) ? m : lead))
+            : seg))
+        .join('|');
     if (/%[^%]+%|![^!]+!/.test(unexpanded)) {
         return { safe: false, reason: 'Contains a cmd variable expansion (%…% / !…!) — needs AI/manual review' };
     }

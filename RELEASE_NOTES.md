@@ -1,5 +1,15 @@
 # Release Notes
 
+## v2.1.4-beta2
+
+**Automatic command execution no longer shows a saved Wi-Fi key to the AI, and commands built from cmd variables now ask.**
+
+### Security
+
+- **`netsh wlan show profile … key=clear` never runs on its own.** It prints the saved Wi-Fi password in plain text, and terminal output goes to the AI provider. This holds whichever safety-check strategy you pick, and also for the forms netsh accepts without the tag (`netsh wlan show profile corp clear`), with quotes or `^` mixed in, or abbreviated (`KEY=CL`).
+- **netsh asks unless it only shows something.** A bare `netsh`, `netsh wlan` or `netsh -c show` opens netsh's own prompt, where the next line is typed out of sight of the checks; text piped into `netsh` is treated the same way. `-a` and `-f` (commands from a file) and `-r` (another machine) also ask on every strategy.
+- **cmd variables stop automatic execution.** cmd rewrites `%NAME%`, `%NAME:~0,1%` and `!NAME!` before a command runs, so the words that run are not the ones that were checked. A command containing one no longer runs on the whitelist alone, and a command name built from `$`, `%` or `!` asks on every strategy. `date +%Y%m%d` and similar date formats still run on their own.
+
 ## v2.1.4-beta1
 
 **Automatic command execution closes more ways for a command to slip past its safety checks, and HoTTY drops duplicate crypto libraries and HTTP/2.**

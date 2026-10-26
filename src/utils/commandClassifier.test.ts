@@ -731,6 +731,10 @@ describe('classifyCommand', () => {
         'dir %X%',
         // `+FORMAT` is exempt only for date.
         'date %X% +%Y',
+        // The exemption covers the date segment alone; cmd ignores `'`.
+        "date '+a | dir %X% b'",
+        'date +%Y | dir %X%',
+        'date "+%COMSPEC%"',
       ]) {
         expect(classifyCommand(cmd, wl).safe, cmd).toBe(false);
       }
