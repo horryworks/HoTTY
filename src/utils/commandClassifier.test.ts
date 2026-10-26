@@ -681,6 +681,17 @@ describe('classifyCommand', () => {
         'netsh wlan',
         'netsh\nshow profile corp key=clear',
         'echo wlan show profile corp key=clear | netsh',
+        // Values bind in order, so the key tag can be left out.
+        'netsh wlan show profile corp clear',
+        'netsh wlan show profile corp Wi-Fi CLEAR',
+        'netsh wlan sh prof corp * "cle"',
+        // An option's value is not the verb: `-c show` sets the context and
+        // opens the prompt.
+        'netsh -c show',
+        'netsh -c wlan -u show',
+        // Commands from a file, or another machine.
+        'netsh -a aliases.txt interface show interface',
+        'netsh -r host-01 interface show interface',
       ]) {
         expect(networkEgressDanger(cmd).danger, cmd).toBe(true);
       }

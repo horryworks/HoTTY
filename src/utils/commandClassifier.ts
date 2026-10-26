@@ -179,6 +179,11 @@ const NETSH_WRITE_VERBS = [
     'flush', 'renew', 'connect', 'disconnect', 'reconnect', 'start', 'stop',
 ];
 
+/** A netsh segment as netsh reads it: quotes and cmd `^` escapes removed. */
+function netshText(segment: string): string {
+    return segment.replace(/["'`^]/g, '');
+}
+
 function netshHasWriteVerb(segment: string): boolean {
     return argWords(segment).some((w) => {
         const t = w.toLowerCase();
@@ -255,13 +260,12 @@ const DANGEROUS_FLAGS: Record<string, FlagRule[]> = {
         { patterns: [], check: (seg) => !isReadOnlyArp(seg), reason: 'arp cache modification' },
     ],
     netsh: [
-        { patterns: [/(?:^|\s)[-/][fr]\b/i], reason: 'netsh runs a script (-f) or targets another machine (-r)' },
+        // `-a` / `-f` / `-r` and the "no read verb" rule live in EGRESS_OPTION_RULES
+        // below, so they apply on every strategy.
         // `netsh wlan export profile key=clear folder=…` writes every saved Wi-Fi
         // password to disk; `exec` runs a script; the rest change state. Matched
         // as prefixes, since netsh accepts abbreviated commands.
         { patterns: [], check: netshHasWriteVerb, reason: 'netsh configuration change, state change or file write' },
-        // Only a read auto-runs: the "no show / dump / help verb" rule lives in
-        // EGRESS_OPTION_RULES below so it applies on every strategy.
     ],
     sysctl: [
         // `sysctl -w key=val` or `sysctl key=val` writes kernel parameters.
@@ -368,18 +372,32 @@ const EGRESS_OPTION_RULES: Record<string, FlagRule[]> = {
     // plain text, and terminal output goes to the AI provider. Loose on purpose:
     // netsh takes tags and values case-insensitively and abbreviated, and the
     // quotes and cmd `^` escapes in `k"ey"=^clear` are gone before netsh sees it.
+    // Tag names are optional too — values bind in order — so `netsh wlan show
+    // profile corp clear` is key=clear, and any word that is `clear` (or a
+    // prefix of it) is treated as one.
     netsh: [
         {
             patterns: [],
-            check: (seg) => /(?:^|\s)k[a-z]*\s*=\s*c/i.test(seg.replace(/["'`^]/g, '')),
+            check: (seg) => {
+                const s = netshText(seg);
+                if (/(?:^|\s)k[a-z]*\s*=\s*c/i.test(s)) return true;
+                // A bare value in key's place: `clear`, `cle`, `c`.
+                return s.split(/\s+/).some((w) => ['c', 'cl', 'cle', 'clea', 'clear'].includes(w.toLowerCase()));
+            },
             reason: 'netsh shows a saved Wi-Fi key in plain text (key=clear)',
         },
-        // A bare `netsh` or `netsh wlan` opens netsh's own prompt, and the next
-        // line (`show profile corp key=clear`) is typed into it, out of sight of
-        // every check here. Without a read verb the rest are writes anyway.
+        // `-a <alias file>` and `-f <script>` run commands from a file, `-r`
+        // targets another machine.
+        { patterns: [], check: (seg) => /(?:^|\s)[-/][afr](?:\s|$)/i.test(netshText(seg)), reason: 'netsh runs commands from a file (-a / -f) or targets another machine (-r)' },
+        // A bare `netsh`, `netsh wlan` or `netsh -c show` opens netsh's own
+        // prompt, and the next line (`show profile corp key=clear`) is typed
+        // into it, out of sight of every check here. Without a read verb the
+        // rest are writes anyway. Option values (`-c show`) are not verbs.
         {
             patterns: [],
-            check: (seg) => !/(?:^|\s)(?:show|sho|sh|dump|help|\?)(?:\s|$)/i.test(seg.replace(/["'`^]/g, '')),
+            check: (seg) => !/(?:^|\s)(?:show|sho|sh|dump|help|\?)(?:\s|$)/i.test(
+                netshText(seg).replace(/(?:^|\s)[-/][acrupf]\s+\S+/gi, ' '),
+            ),
             reason: 'netsh without a show / dump / help verb opens its own prompt or changes settings',
         },
     ],
