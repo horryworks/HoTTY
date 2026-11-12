@@ -574,6 +574,51 @@ mod tests {
         assert_eq!(k1, k2);
     }
 
+    /// Pins the legacy v1 KDF to a value computed outside this crate (Python's
+    /// `hashlib.pbkdf2_hmac('sha256', …, 100_000, 32)`), so a `pbkdf2` / `sha2`
+    /// bump that changed the output would fail here instead of silently
+    /// breaking the import of old `.htree` files.
+    #[test]
+    fn derive_key_matches_reference_pbkdf2() {
+        let key = derive_key("correct horse", b"0123456789abcdef");
+        let hex: String = key.iter().map(|b| format!("{b:02x}")).collect();
+        assert_eq!(
+            hex,
+            "598115575ba5d2a06dee21a7385a6ae51987d1a385be638a4e5500827f665983"
+        );
+    }
+
+    /// RFC 9106 §5.3 Argon2id test vector. `derive_key_argon2` uses the same
+    /// algorithm and version with fixed parameters, so this catches an
+    /// `argon2` bump that changed the algorithm's output.
+    #[test]
+    fn argon2id_matches_rfc9106_vector() {
+        let params = argon2::ParamsBuilder::new()
+            .m_cost(32)
+            .t_cost(3)
+            .p_cost(4)
+            .output_len(32)
+            .data(argon2::AssociatedData::new(&[4u8; 12]).unwrap())
+            .build()
+            .unwrap();
+        let argon = Argon2::new_with_secret(&[3u8; 8], Algorithm::Argon2id, Version::V0x13, params)
+            .unwrap();
+        let mut out = [0u8; 32];
+        argon
+            .hash_password_into_with_memory(
+                &[1u8; 32],
+                &[2u8; 16],
+                &mut out,
+                &mut vec![argon2::Block::default(); 32],
+            )
+            .unwrap();
+        let hex: String = out.iter().map(|b| format!("{b:02x}")).collect();
+        assert_eq!(
+            hex,
+            "0d640df58d78766c08c037a34a8b53c9d01ef0452d75b65eb52520e96b01e659"
+        );
+    }
+
     #[test]
     fn aes_gcm_decrypt_rejects_wrong_nonce_length() {
         let key = [7u8; KEY_LEN];

@@ -1,7 +1,7 @@
 {
   "name": "hotty-rust-tauri",
   "private": true,
-  "version": "2.1.4-beta2",
+  "version": "2.1.4",
   "license": "GPL-3.0-or-later",
   "type": "module",
   "engines": {
@@ -31,7 +31,10 @@
     "brace-expansion@5": "5.0.12",
     "browserslist": "4.28.7",
     "@humanfs/node": "0.16.8",
-    "source-map-js": "1.2.2"
+    "source-map-js": "1.2.2",
+    "@typescript-eslint/typescript-estree": {
+      "minimatch": "11.0.1"
+    }
   },
   "dependencies": {
     "@tauri-apps/api": "^2.10.1",

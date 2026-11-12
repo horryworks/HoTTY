@@ -1,5 +1,32 @@
 # Release Notes
 
+## v2.1.4
+
+**Automatic command execution closes many more ways for a command to slip past its safety checks — saved Wi-Fi keys, inline code, network shares, cmd variables, git options — and HoTTY drops duplicate crypto libraries and HTTP/2.**
+
+### Improvements
+
+- **Fewer libraries in the build.** The encryption and Windows libraries now use the versions the SSH and app framework libraries already bring, so the older duplicates are gone. The HTTP client no longer includes HTTP/2; connections to AI providers, NetBox and the update check use HTTP/1.1. The Windows build compiles 492 crates instead of 510.
+
+### Bug Fixes
+
+- **A damaged .htree file no longer crashes the import.** A file whose encryption data has the wrong length is reported as an error.
+
+### Security
+
+- **Saved Wi-Fi keys are never shown to the AI on their own.** `netsh wlan show profile … key=clear` and `netsh wlan show hostednetwork setting=security` print a saved key in plain text, and terminal output goes to the AI provider. They always ask, whichever safety-check strategy you pick — also without the tag (`… corp clear`), with quotes or `^` mixed in, or abbreviated (`KEY=CL`, `s=sec`). `git credential fill` and other `git credential` commands, which print a stored password, ask the same way.
+- **netsh asks unless it only shows something.** A bare `netsh`, `netsh wlan` or `netsh -c show` opens netsh's own prompt, where the next line is typed out of sight of the checks; text piped into `netsh` is treated the same way. `-a` and `-f` (commands from a file) and `-r` (another machine) also ask on every strategy.
+- **These always ask, whichever strategy you pick:**
+  - an interpreter given code on the command line — `python -c`, `node -e`, `bash -c`, `cmd /c`, `pwsh -EncodedCommand`, a bare `powershell <code>`, `deno eval`, also with the code glued to the option (`python3 -c'…'`, `perl -e'…'`) — and a program piped into a shell (`… | sh`, also behind `env` or `timeout`);
+  - a PowerShell script block `{ … }` outside quotes, which PowerShell can run behind two whitelisted commands (`echo 1 | Get-Content -Path {iwr …}`);
+  - a path to another machine given to a reading command — `\\host\share\…`, and the other spellings Windows accepts: `\\.\UNC\…`, `\\?\GLOBALROOT\…`, mixed slashes (`/\host\…`), and behind a switch such as `findstr /g:`. Opening one connects to that machine and sends your Windows sign-in hash;
+  - more download and transfer tools, `openssl s_client`, and `git` commands that talk to a remote, in any option order (`git archive --format=tar --remote=…`, `git http-fetch`, `git send-pack`);
+  - `git` told to run another program: `-c` / `--config-env` (which can set `core.fsmonitor`, `core.pager` or an alias to any command), `--exec-path=<dir>`, `grep -O`, `bisect run` and `submodule foreach`;
+  - a command name hidden with quotes, escapes or variables (`c""url`, `c\url`, `$IFS`, `$CMD`, `%VAR%`, `!VAR!`).
+- **Quoting an option no longer hides it.** The checks on `dig @server`, `ping -p` and the options above now read a command the way the program receives it, so `dig "@203.0.113.5" …` or `ping ^-p …` asks like the plain form.
+- **Network tools auto-run only in their read forms.** `ip`, `ifconfig`, `route`, `arp` and `netsh` are judged by the forms that only show something. The old list of write words missed abbreviations (`ip r de default`), capitals (`route DELETE`), `--` and shortened options (`ip --family inet link set …`), and forms with no verb at all (`ifconfig eth0 10.0.0.5`). `sysctl -p` and setting the clock with `date` also ask now. The checks on `dig`, `nslookup`, `host` and `ping` sending to a server you name now apply with every strategy.
+- **A command with a variable no longer runs on the whitelist alone,** because the shell or cmd rewrites it before it runs: `$HOME`, `${x}`, `%NAME%`, `%NAME:~0,1%`, `!NAME!`. With Hybrid the AI judges it; with Static you are asked. A `$` inside single quotes stays literal (`sed -n '$p'`), and `date +%Y%m%d` still runs on its own.
+
 ## v2.1.4-beta2
 
 **Automatic command execution no longer shows a saved Wi-Fi key to the AI, and commands built from cmd variables now ask.**
