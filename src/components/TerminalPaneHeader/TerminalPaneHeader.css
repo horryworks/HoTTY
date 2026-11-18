@@ -1,0 +1,20 @@
+/* Send the host's saved enable password. Sized like the header's close button. */
+.pane-term-enable {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.pane-term-enable:hover {
+  background-color: var(--tab-close-hover-bg);
+  color: var(--text-primary);
+}

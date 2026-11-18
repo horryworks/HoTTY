@@ -79,6 +79,51 @@ describe('handleTerminalKey', () => {
     const r = handleTerminalKey(makeEvent({ key: 'a' }), term, onPaste);
     expect(r).toBe(true);
   });
+
+  it('Ctrl+Shift+E sends the enable password and keeps the key from the terminal', () => {
+    const onPaste = vi.fn();
+    const onEnable = vi.fn();
+    const { term } = makeTerm('');
+    const r = handleTerminalKey(
+      makeEvent({ ctrlKey: true, shiftKey: true, key: 'E', code: 'KeyE' }),
+      term,
+      onPaste,
+      onEnable
+    );
+    expect(onEnable).toHaveBeenCalledTimes(1);
+    expect(onPaste).not.toHaveBeenCalled();
+    expect(r).toBe(false);
+  });
+
+  it('holding Ctrl+Shift+E does not send it again', () => {
+    const onEnable = vi.fn();
+    const { term } = makeTerm('');
+    const r = handleTerminalKey(
+      makeEvent({ ctrlKey: true, shiftKey: true, key: 'E', code: 'KeyE', repeat: true }),
+      term,
+      vi.fn(),
+      onEnable
+    );
+    expect(onEnable).not.toHaveBeenCalled();
+    expect(r).toBe(false);
+  });
+
+  it('Ctrl+E alone and Ctrl+Alt+Shift+E reach the terminal untouched', () => {
+    const onEnable = vi.fn();
+    const { term } = makeTerm('');
+    expect(
+      handleTerminalKey(makeEvent({ ctrlKey: true, key: 'e', code: 'KeyE' }), term, vi.fn(), onEnable)
+    ).toBe(true);
+    expect(
+      handleTerminalKey(
+        makeEvent({ ctrlKey: true, shiftKey: true, altKey: true, key: 'E', code: 'KeyE' }),
+        term,
+        vi.fn(),
+        onEnable
+      )
+    ).toBe(true);
+    expect(onEnable).not.toHaveBeenCalled();
+  });
 });
 
 describe('TERMINAL_SEQUENCES used by useSessionManager', () => {

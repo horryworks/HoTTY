@@ -196,6 +196,9 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
     const [port, setPort] = useState('22');
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
+    // Privileged-mode password of a saved host. Never sent at connect — it is
+    // only stored on the host entry, for the terminal's "send enable password".
+    const [enablePassword, setEnablePassword] = useState('');
     // The host-tree form is SSH or Telnet; the serial dialog is always serial.
     // Kept apart so opening the serial dialog leaves the SSH / Telnet form as it was.
     const [formProtocol, setProtocol] = useState<NetworkProtocol>('ssh');
@@ -234,6 +237,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
         port: string;
         username: string;
         password: string;
+        enablePassword: string;
         isJumpbox: boolean;
         jumpboxId: string;
         privateKeyPath: string;
@@ -411,6 +415,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
         setPort('22');
         setUsername('');
         setPassword('');
+        setEnablePassword('');
         setIsJumpbox(false);
         setJumpboxId('');
         setPrivateKeyPath('');
@@ -565,6 +570,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
             setPort('22');
             setUsername('');
             setPassword('');
+            setEnablePassword('');
             setIsJumpbox(false);
             setJumpboxId('');
             setPrivateKeyPath('');
@@ -591,10 +597,11 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
         let u = e.username ?? '';
         let p = e.password ?? '';
         let kpp = e.privateKeyPassphrase ?? '';
+        let ep = e.enablePassword ?? '';
 
         const cached = getCachedCredential(node.id);
 
-        const needsDecryption: (string | undefined)[] = [undefined, undefined, undefined];
+        const needsDecryption: (string | undefined)[] = [undefined, undefined, undefined, undefined];
         if (isEncrypted(u)) {
             if (cached?.username !== undefined) u = cached.username;
             else needsDecryption[0] = u;
@@ -607,18 +614,24 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
             if (cached?.privateKeyPassphrase !== undefined) kpp = cached.privateKeyPassphrase;
             else needsDecryption[2] = kpp;
         }
+        if (isEncrypted(ep)) {
+            if (cached?.enablePassword !== undefined) ep = cached.enablePassword;
+            else needsDecryption[3] = ep;
+        }
 
         if (needsDecryption.some(val => val !== undefined)) {
             setIsDecrypting(true);
-            const [decU, decP, decKpp] = await decryptBatch(needsDecryption);
+            const [decU, decP, decKpp, decEp] = await decryptBatch(needsDecryption);
             if (decU !== undefined) u = decU;
             if (decP !== undefined) p = decP;
             if (decKpp !== undefined) kpp = decKpp;
+            if (decEp !== undefined) ep = decEp;
             setIsDecrypting(false);
         }
 
         setUsername(u);
         setPassword(p);
+        setEnablePassword(ep);
         setIsJumpbox(!!e.isJumpbox);
         setJumpboxId(e.jumpboxId ?? '');
         setPrivateKeyPath(e.privateKeyPath ?? '');
@@ -634,6 +647,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
             port: String(e.port ?? (e.protocol === 'ssh' ? 22 : 23)),
             username: u,
             password: p,
+            enablePassword: ep,
             isJumpbox: !!e.isJumpbox,
             jumpboxId: e.jumpboxId ?? '',
             privateKeyPath: e.privateKeyPath ?? '',
@@ -797,6 +811,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
         originalState.port !== String(port) ||
         originalState.username !== username ||
         originalState.password !== password ||
+        originalState.enablePassword !== enablePassword ||
         originalState.isJumpbox !== isJumpbox ||
         originalState.jumpboxId !== jumpboxId ||
         originalState.privateKeyPath !== privateKeyPath ||
@@ -836,6 +851,8 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
         setPort(draft.port);
         setUsername(draft.username);
         setPassword(draft.password);
+        // A New Connection has no saved host to hold one.
+        setEnablePassword('');
         setProtocol(draft.protocol);
         setIsJumpbox(draft.isJumpbox);
         setJumpboxId(draft.jumpboxId);
@@ -924,10 +941,11 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
         let finalU = username;
         let finalP = password;
         let finalKpp = privateKeyPassphrase;
+        let finalEp = enablePassword;
 
-        if (isEncrypted(finalU) || isEncrypted(finalP) || isEncrypted(finalKpp)) {
+        if (isEncrypted(finalU) || isEncrypted(finalP) || isEncrypted(finalKpp) || isEncrypted(finalEp)) {
             const cached = getCachedCredential(selectedHostId);
-            const needsDecryption = [undefined, undefined, undefined] as (string | undefined)[];
+            const needsDecryption = [undefined, undefined, undefined, undefined] as (string | undefined)[];
             if (isEncrypted(finalU)) {
                 if (cached?.username !== undefined) finalU = cached.username;
                 else needsDecryption[0] = finalU;
@@ -940,12 +958,17 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                 if (cached?.privateKeyPassphrase !== undefined) finalKpp = cached.privateKeyPassphrase;
                 else needsDecryption[2] = finalKpp;
             }
+            if (isEncrypted(finalEp)) {
+                if (cached?.enablePassword !== undefined) finalEp = cached.enablePassword;
+                else needsDecryption[3] = finalEp;
+            }
             if (needsDecryption.some(val => val !== undefined)) {
                 setIsDecrypting(true);
-                const [decU, decP, decKpp] = await decryptBatch(needsDecryption);
+                const [decU, decP, decKpp, decEp] = await decryptBatch(needsDecryption);
                 if (decU !== undefined) { finalU = decU; setUsername(decU); }
                 if (decP !== undefined) { finalP = decP; setPassword(decP); }
                 if (decKpp !== undefined) { finalKpp = decKpp; setPrivateKeyPassphrase(decKpp); }
+                if (decEp !== undefined) { finalEp = decEp; setEnablePassword(decEp); }
                 setIsDecrypting(false);
             }
         }
@@ -957,6 +980,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
             port: String(port),
             username: finalU,
             password: finalP,
+            enablePassword: finalEp,
             isJumpbox,
             jumpboxId,
             privateKeyPath,
@@ -971,6 +995,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
             port: parseInt(port),
             username: (isSsh || protocol === 'telnet') ? finalU : undefined,
             password: (isSsh || protocol === 'telnet') ? finalP : undefined,
+            enablePassword: finalEp || undefined,
             isJumpbox: isSsh ? (isJumpbox || undefined) : undefined,
             jumpboxId: jumpboxId || undefined,
             privateKeyPath: isSsh ? (privateKeyPath || undefined) : undefined,
@@ -1025,11 +1050,14 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
         // verbatim, so key auth failed for any host whose passphrase was stored
         // encrypted. Mirrors handleSave's three-credential resolution.
         let finalKpp = privateKeyPassphrase;
+        // Not sent to the backend; resolved only so the entry rebuilt below
+        // keeps it (an encrypted value is saved back as the plaintext it is).
+        let finalEp = enablePassword;
         // The serial dialog sends none of these; a saved host's ciphertext left
         // in the SSH / Telnet form is not worth a DPAPI round-trip.
-        if (protocol !== 'serial' && (isEncrypted(finalU) || isEncrypted(finalP) || isEncrypted(finalKpp))) {
+        if (protocol !== 'serial' && (isEncrypted(finalU) || isEncrypted(finalP) || isEncrypted(finalKpp) || isEncrypted(finalEp))) {
             const cached = selectedHostId ? getCachedCredential(selectedHostId) : undefined;
-            const needsDecryption = [undefined, undefined, undefined] as (string | undefined)[];
+            const needsDecryption = [undefined, undefined, undefined, undefined] as (string | undefined)[];
             if (isEncrypted(finalU)) {
                 if (cached?.username !== undefined) finalU = cached.username;
                 else needsDecryption[0] = finalU;
@@ -1042,12 +1070,17 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                 if (cached?.privateKeyPassphrase !== undefined) finalKpp = cached.privateKeyPassphrase;
                 else needsDecryption[2] = finalKpp;
             }
+            if (isEncrypted(finalEp)) {
+                if (cached?.enablePassword !== undefined) finalEp = cached.enablePassword;
+                else needsDecryption[3] = finalEp;
+            }
             if (needsDecryption.some(val => val !== undefined)) {
                 setIsDecrypting(true);
-                const [decU, decP, decKpp] = await decryptBatch(needsDecryption);
+                const [decU, decP, decKpp, decEp] = await decryptBatch(needsDecryption);
                 if (decU !== undefined) { finalU = decU; setUsername(decU); }
                 if (decP !== undefined) { finalP = decP; setPassword(decP); }
                 if (decKpp !== undefined) { finalKpp = decKpp; setPrivateKeyPassphrase(decKpp); }
+                if (decEp !== undefined) { finalEp = decEp; setEnablePassword(decEp); }
                 setIsDecrypting(false);
             }
         }
@@ -1064,6 +1097,7 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                 port: parseInt(port),
                 username: finalU,
                 password: finalP,
+                enablePassword: finalEp || undefined,
                 isJumpbox: isSsh ? (isJumpbox || undefined) : undefined,
                 jumpboxId: jumpboxId || undefined,
                 privateKeyPath: isSsh ? (privateKeyPath || undefined) : undefined,
@@ -1305,6 +1339,21 @@ export const SessionDialog: React.FC<SessionDialogProps> = ({
                                 autoComplete="new-password"
                             />
                         </div>
+                        {/* Only a saved host can hold one: the terminal reads it
+                            back from the host entry, never from the connection. */}
+                        {selectedHostId !== null && originalState !== null && (
+                            <div className="form-group">
+                                <label>{t('sessionDialog.enablePasswordLabel')}</label>
+                                <input
+                                    type="password"
+                                    value={isDecrypting ? t('sessionDialog.decrypting') : enablePassword}
+                                    onChange={e => setEnablePassword(e.target.value)}
+                                    className={isDecrypting ? 'decrypting-placeholder' : ''}
+                                    disabled={isDecrypting}
+                                    autoComplete="new-password"
+                                />
+                            </div>
+                        )}
                         {jumpboxHosts.length > 0 && (
                             <div className="form-group">
                                 <label>{t('sessionDialog.jumpboxLabel')}</label>

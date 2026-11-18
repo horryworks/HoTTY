@@ -50,6 +50,7 @@ export function HelpModal({ open, onClose }: HelpModalProps) {
                 <li><code>Ctrl + W</code> {t('help.shortcuts.closeTab')}</li>
                 <li><code>Ctrl + C</code> {t('help.shortcuts.clearOrSigint')}</li>
                 <li><code>Ctrl + V</code> {t('help.shortcuts.paste')}</li>
+                <li><code>Ctrl + Shift + E</code> {t('help.shortcuts.sendEnablePassword')}</li>
                 <li><code>Ctrl + Enter</code> {t('help.shortcuts.sendMessage')}</li>
                 <li><code>Ctrl + F</code> {t('help.shortcuts.findInLog')}</li>
                 <li><code>Ctrl + F</code> {t('help.shortcuts.filterHosts')}</li>

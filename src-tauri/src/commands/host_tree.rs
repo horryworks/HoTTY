@@ -479,6 +479,15 @@ pub fn migrate_host_tree_credentials(tree_json: String) -> Result<String, String
     serde_json::to_string(&tree).map_err(|e| format!("failed to serialise host tree: {e}"))
 }
 
+/// Host-entry fields that hold a DPAPI-encrypted secret. Must match what
+/// `useHostManager.encryptTree` encrypts on the frontend.
+const CREDENTIAL_FIELDS: [&str; 4] = [
+    "username",
+    "password",
+    "privateKeyPassphrase",
+    "enablePassword",
+];
+
 /// Walk a host-tree node and upgrade every encrypted credential field on each
 /// host entry to the current format (`[SAFE]` + base64(entropy-bound DPAPI blob
 /// framed with `HOTTY_MARKER`)). Two legacy shapes are upgraded:
@@ -494,8 +503,7 @@ pub fn migrate_host_tree_credentials(tree_json: String) -> Result<String, String
 /// left as-is so the user can re-enter them manually.
 ///
 /// The field list must stay in sync with what the frontend encrypts in
-/// `useHostManager.encryptTree` — currently `username`, `password`, and
-/// `privateKeyPassphrase`.
+/// `useHostManager.encryptTree` — see [`CREDENTIAL_FIELDS`].
 fn migrate_credentials(node: &mut serde_json::Value) {
     // Recurse into child folders first.
     if let Some(children) = node.get_mut("children").and_then(|c| c.as_array_mut()) {
@@ -517,7 +525,7 @@ fn migrate_credentials(node: &mut serde_json::Value) {
         return;
     };
 
-    for field in ["username", "password", "privateKeyPassphrase"] {
+    for field in CREDENTIAL_FIELDS {
         let Some(current) = entry.get(field).and_then(|v| v.as_str()) else {
             continue;
         };
@@ -908,6 +916,7 @@ mod tests {
                 "username": legacy("alice"),
                 "password": legacy("hunter2"),
                 "privateKeyPassphrase": legacy("key-pass"),
+                "enablePassword": legacy("enable-pass"),
             }
         });
 
@@ -918,6 +927,7 @@ mod tests {
             ("username", "alice"),
             ("password", "hunter2"),
             ("privateKeyPassphrase", "key-pass"),
+            ("enablePassword", "enable-pass"),
         ] {
             let got = entry.get(field).and_then(|v| v.as_str()).unwrap();
             assert!(got.starts_with("[SAFE]"));

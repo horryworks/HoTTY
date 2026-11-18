@@ -83,6 +83,8 @@ import type { AiDialogRequest } from './utils/aiWindowHandover';
 import { remoteSessionName } from './utils/sessionNameShare';
 import type { LinkableSession, LocalShellChoice, NewSessionChoice, SessionDialogKind, SessionDialogPrefill, SessionDialogProtocolPick, SessionInfo } from './types/appTypes';
 import { localShellPayload } from './utils/localShellPayload';
+import { resolveEnablePassword, sendableEnablePassword } from './utils/hostConnectConfig';
+import { useErrorNotificationStore } from './stores/errorNotificationStore';
 import { forgetPaneMemory } from './hooks/usePaneMemory';
 import {
   makeFeaturePaneId,
@@ -153,9 +155,14 @@ function App() {
   // orchestrator (wired in an effect below) is sufficient.
   const handleSessionRemovedRef = useRef<(id: string) => void>(() => {});
   const onSessionRemoved = useCallback((id: string) => handleSessionRemovedRef.current(id), []);
+  // Same delegate shape for Ctrl+Shift+E: the sender needs the host tree, which
+  // is built after useSessionManager. Wired in an effect below.
+  const sendEnablePasswordRef = useRef<(id: string) => void>(() => {});
+  const onEnablePasswordRequest = useCallback((id: string) => sendEnablePasswordRef.current(id), []);
   const { sessions, openSession, adoptSession, closeSession, getSession, setSessionFixedSize } = useSessionManager({
     onPasteRequest: handlePasteRequest,
     onSessionRemoved,
+    onEnablePasswordRequest,
   });
   // Fresh mirror of `sessions` for event handlers that read it post-render (the
   // fixed-size toggle). Synced in an effect (not during render) so it doesn't
@@ -215,6 +222,41 @@ function App() {
   }, []);
 
   const { t } = useTranslation();
+
+  // Host-tree ids whose entry has a privileged-mode password saved. Decides
+  // whether a terminal header shows the send button; nothing is decrypted here.
+  const enableHostIds = new Set(
+    flattenHosts(hostManager.tree)
+      .filter((n) => sendableEnablePassword(n.entry) !== undefined)
+      .map((n) => n.id),
+  );
+
+  // Send the saved enable password of the session's host, plus Enter. Reached
+  // only by a deliberate key press or button click on that terminal; the value
+  // is decrypted at that moment and goes nowhere but the session's input.
+  const sendEnablePassword = useCallback(async (sessionId: string) => {
+    const notify = useErrorNotificationStore.getState().push;
+    const rec = sessionsRef.current.get(sessionId);
+    const node = rec?.hostNodeId
+      ? flattenHosts(hostManager.tree).find((n) => n.id === rec.hostNodeId)
+      : undefined;
+    const result = await resolveEnablePassword(sendableEnablePassword(node?.entry));
+    if (result.kind === 'none') {
+      notify('Terminal', t('notifications.enablePassword.notSaved'));
+      return;
+    }
+    if (result.kind === 'failed') {
+      notify('Terminal', t('notifications.enablePassword.decryptFailed'));
+      return;
+    }
+    tauriService.sendInput(sessionId, `${result.value}\r`).catch(() => {
+      /* surfaced via session-error, like ordinary typing */
+    });
+  }, [hostManager.tree, t]);
+  useEffect(() => {
+    sendEnablePasswordRef.current = (id) => { void sendEnablePassword(id); };
+  }, [sendEnablePassword]);
+
   const language = useSettingsStore((s) => s.language);
   const themeId = useSettingsStore((s) => s.theme);
   const fontSize = useSettingsStore((s) => s.fontSize);
@@ -972,6 +1014,11 @@ function App() {
             onToggleWatch={toggleWatch}
             conversations={aiConversations}
             onWatchInConversation={watchInConversation}
+            onSendEnablePassword={
+              session.hostNodeId && enableHostIds.has(session.hostNodeId)
+                ? () => { void sendEnablePassword(session.id); }
+                : undefined
+            }
           />
         )}
         <div className="pane-body">

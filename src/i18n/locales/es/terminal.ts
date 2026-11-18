@@ -1,6 +1,7 @@
 // Marco del terminal — etiquetas de accesibilidad para el riel de marcadores
 // (marcadores de prompt / bloque de salida) y el riel de la barra de desplazamiento.
 export const terminal = {
+  sendEnablePassword: "Enviar contraseña de enable (Ctrl+Shift+E)",
   scrollbar: 'Barra de desplazamiento del terminal',
   markerRail: 'Marcadores de prompt',
   promptMarker: 'Ir al prompt',

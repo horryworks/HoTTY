@@ -15,6 +15,7 @@ export const help = {
     closeTab: '현재 탭 닫기',
     clearOrSigint: '선택 해제 / SIGINT 전송',
     paste: '터미널에 붙여넣기 (보안 검사 포함)',
+    sendEnablePassword: "호스트에 저장된 특권 비밀번호 보내기",
     sendMessage: 'AI에게 질문 대화 상자에서 메시지 보내기',
     findInLog: '열려 있는 로그에서 검색 (로그 뷰어 창)',
     filterHosts: '호스트 트리 필터링 (새 세션 대화상자)',

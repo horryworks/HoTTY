@@ -2,6 +2,7 @@
 // block markers) and the custom scrollbar rail. The xterm host itself renders
 // no app-level text. English is the source of truth.
 export const terminal = {
+  sendEnablePassword: "发送特权密码 (Ctrl+Shift+E)",
   scrollbar: '终端滚动条',
   markerRail: '提示符标记',
   promptMarker: '跳转到提示符',

@@ -37,6 +37,12 @@ ignore = [
   # Reviewed 2026-07-02.
   "RUSTSEC-2026-0194",
   "RUSTSEC-2026-0195",
+  # russh agent SERVER skips Agent::confirm for confirm-constrained keys. HoTTY
+  # is an SSH client only and never runs `russh::keys::agent::server` (the only
+  # agent reference is a log-level filter in lib.rs), so the flaw is unreachable.
+  # Fixed in russh 0.65.0; take that bump between releases, not during one.
+  # Accepted by the user at the v2.1.5 cut, 2026-11-18.
+  "RUSTSEC-2026-0495",
 ]
 
 [bans]

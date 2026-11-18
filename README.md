@@ -43,6 +43,7 @@ HoTTY is a multi-protocol terminal emulator for Windows that supports SSH, Telne
 
 ### Security & Credentials
 - Windows DPAPI encryption for stored credentials
+- Saved enable password — keep a host's privileged-mode password (Cisco `enable`, Huawei `super`) with its host-tree entry, and type it into that host's terminal with `Ctrl+Shift+E` or the key button in the pane header. It is decrypted only at that moment and never sent at connect time
 - SSH host key verification with fingerprint display
 - SSH key management — generate Ed25519 / ECDSA (P-256/384/521) / RSA (2048/3072/4096) key pairs into your `.ssh` folder as ordinary OpenSSH files, with the file permissions tightened to your account alone; copy the public key, export it, or show the `authorized_keys` line, and pick a key straight from the connection form
 - Paste confirmation modal for clipboard content review

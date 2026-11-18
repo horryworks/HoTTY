@@ -139,6 +139,11 @@ async function encryptTree(nodes: HostTreeNode[]): Promise<HostTreeNode[]> {
                     setters.push((val) => entry.privateKeyPassphrase = val);
                 }
 
+                if (entry.enablePassword && !isEncrypted(entry.enablePassword)) {
+                    secrets.push(entry.enablePassword);
+                    setters.push((val) => entry.enablePassword = val);
+                }
+
                 return { ...n, entry, children };
             }
             return { ...n, children };
@@ -192,6 +197,7 @@ type DecryptedCredentialInfo = {
     username?: string;
     password?: string;
     privateKeyPassphrase?: string;
+    enablePassword?: string;
     decrypted?: boolean;
 };
 const decryptedCache: Record<string, DecryptedCredentialInfo> = {};
@@ -205,6 +211,7 @@ function setCachedCredential(id: string, info: DecryptedCredentialInfo) {
     if (info.username !== undefined) decryptedCache[id].username = info.username;
     if (info.password !== undefined) decryptedCache[id].password = info.password;
     if (info.privateKeyPassphrase !== undefined) decryptedCache[id].privateKeyPassphrase = info.privateKeyPassphrase;
+    if (info.enablePassword !== undefined) decryptedCache[id].enablePassword = info.enablePassword;
     if (info.decrypted !== undefined) decryptedCache[id].decrypted = info.decrypted;
 }
 
@@ -507,7 +514,7 @@ export function useHostManager() {
 
         const eagerDecryptTree = async (nodes: HostTreeNode[]) => {
             const secrets: (string | undefined)[] = [];
-            const targets: { id: string; type: 'username' | 'password' | 'privateKeyPassphrase' }[] = [];
+            const targets: { id: string; type: 'username' | 'password' | 'privateKeyPassphrase' | 'enablePassword' }[] = [];
             let hasLegacyDpapi = false;
 
             function traverse(nodeList: HostTreeNode[]) {
@@ -527,6 +534,11 @@ export function useHostManager() {
                             if (n.entry.privateKeyPassphrase.startsWith('[DPAPI]')) hasLegacyDpapi = true;
                             secrets.push(n.entry.privateKeyPassphrase);
                             targets.push({ id: n.id, type: 'privateKeyPassphrase' });
+                        }
+                        if (n.entry.enablePassword && isEncrypted(n.entry.enablePassword)) {
+                            if (n.entry.enablePassword.startsWith('[DPAPI]')) hasLegacyDpapi = true;
+                            secrets.push(n.entry.enablePassword);
+                            targets.push({ id: n.id, type: 'enablePassword' });
                         }
                     }
                     if (n.children) {
@@ -562,6 +574,9 @@ export function useHostManager() {
                                 }
                                 if (cached?.privateKeyPassphrase !== undefined && entry.privateKeyPassphrase?.startsWith('[DPAPI]')) {
                                     entry.privateKeyPassphrase = cached.privateKeyPassphrase;
+                                }
+                                if (cached?.enablePassword !== undefined && entry.enablePassword?.startsWith('[DPAPI]')) {
+                                    entry.enablePassword = cached.enablePassword;
                                 }
                                 return { ...n, entry, children };
                             }
@@ -672,6 +687,9 @@ export function useHostManager() {
             // freshly-edited passphrase could be served stale on reconnect.
             if (patch.entry?.privateKeyPassphrase && !isEncrypted(patch.entry.privateKeyPassphrase)) {
                 setCachedCredential(id, { privateKeyPassphrase: patch.entry.privateKeyPassphrase });
+            }
+            if (patch.entry?.enablePassword && !isEncrypted(patch.entry.enablePassword)) {
+                setCachedCredential(id, { enablePassword: patch.entry.enablePassword });
             }
         }
         persistEncryptedAsync(next);

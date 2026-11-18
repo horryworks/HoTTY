@@ -14,6 +14,7 @@ export const help = {
     closeTab: '關閉目前分頁',
     clearOrSigint: '清除選取範圍／傳送 SIGINT',
     paste: '貼上至終端機（含安全性檢查）',
+    sendEnablePassword: "傳送主機已儲存的特權密碼",
     sendMessage: '在「詢問 AI」對話方塊中傳送訊息',
     findInLog: '在開啟的記錄檔中搜尋（記錄檢視器窗格）',
     filterHosts: '篩選主機樹狀結構（新增工作階段對話方塊）',

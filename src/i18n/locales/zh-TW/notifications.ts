@@ -1,6 +1,10 @@
 // 通知與覆蓋層 — 暫時性的應用程式層級 UI（錯誤快顯、連線中覆蓋層、
 // 更新橫幅、當機後備畫面）。英文為來源真相。
 export const notifications = {
+  enablePassword: {
+    notSaved: "此主機未儲存特權密碼。",
+    decryptFailed: "無法解密已儲存的特權密碼。",
+  },
   error: {
     dismiss: '關閉錯誤通知',
   },

@@ -15,6 +15,7 @@ export const help = {
     closeTab: '关闭当前标签页',
     clearOrSigint: '清除选择 / 发送 SIGINT',
     paste: '粘贴到终端（带安全检查）',
+    sendEnablePassword: "发送主机已保存的特权密码",
     sendMessage: '在“询问 AI”对话框中发送消息',
     findInLog: '在打开的日志中搜索（日志查看器窗格）',
     filterHosts: '筛选主机树（新建会话对话框）',

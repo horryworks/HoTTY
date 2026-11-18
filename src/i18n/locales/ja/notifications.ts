@@ -1,6 +1,10 @@
 // 通知・オーバーレイ（エラートースト・接続中オーバーレイ・アップデート
 // バナー・クラッシュ時のフォールバック）。
 export const notifications = {
+  enablePassword: {
+    notSaved: "このホストには特権パスワードが保存されていません。",
+    decryptFailed: "保存した特権パスワードを復号できませんでした。",
+  },
   error: {
     dismiss: 'エラー通知を閉じる',
   },

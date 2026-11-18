@@ -14,6 +14,7 @@ export const help = {
     closeTab: '現在のタブを閉じる',
     clearOrSigint: '選択を解除 / SIGINT を送信',
     paste: 'ターミナルに貼り付け（セキュリティチェックあり）',
+    sendEnablePassword: "ホストに保存した特権パスワードを送る",
     sendMessage: 'AI に質問ダイアログでメッセージを送信',
     findInLog: '開いているログ内を検索（ログビューアペイン）',
     filterHosts: 'ホストツリーを絞り込む（新規セッションダイアログ）',

@@ -133,6 +133,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
     const [formPort, setFormPort] = useState('22');
     const [formUsername, setFormUsername] = useState('');
     const [formPassword, setFormPassword] = useState('');
+    const [formEnablePassword, setFormEnablePassword] = useState('');
     const [formIsJumpbox, setFormIsJumpbox] = useState(false);
     const [formFixedTerminalSize, setFormFixedTerminalSize] = useState<FixedSizeTri>('default');
     const [importFilePath, setImportFilePath] = useState<string | null>(null);
@@ -428,6 +429,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
         setFormPort('22');
         setFormUsername('');
         setFormPassword('');
+        setFormEnablePassword('');
         setFormIsJumpbox(false);
         setFormFixedTerminalSize('default');
         setFormPrivateKeyPath('');
@@ -567,6 +569,7 @@ export const HostTree: React.FC<HostTreeProps> = ({
                     port,
                     username: formUsername || undefined,
                     password: formPassword || undefined,
+                    enablePassword: formEnablePassword || undefined,
                     isJumpbox: formProtocol === 'ssh' ? (formIsJumpbox || undefined) : undefined,
                     jumpboxId: formJumpboxId || undefined,
                     privateKeyPath: formProtocol === 'ssh' ? (formPrivateKeyPath || undefined) : undefined,
@@ -1394,6 +1397,16 @@ export const HostTree: React.FC<HostTreeProps> = ({
                                                 type="password"
                                                 value={formPassword}
                                                 onChange={e => setFormPassword(e.target.value)}
+                                                onKeyDown={e => e.key === 'Enter' && handleModalSubmit()}
+                                                autoComplete="new-password"
+                                            />
+                                        </div>
+                                        <div className="modal-form-group">
+                                            <label>{t('sessionDialog.enablePasswordLabel')}</label>
+                                            <input
+                                                type="password"
+                                                value={formEnablePassword}
+                                                onChange={e => setFormEnablePassword(e.target.value)}
                                                 onKeyDown={e => e.key === 'Enter' && handleModalSubmit()}
                                                 autoComplete="new-password"
                                             />

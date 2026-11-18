@@ -1,7 +1,7 @@
 import { isEncrypted } from '../services/tauriService';
 import { decryptBatch, findStoredHostNode, getCachedCredential } from '../hooks/useHostManager';
 import { useSettingsStore } from '../stores/settingsStore';
-import type { HostTreeNode, SshConnectionConfig, TelnetConnectionConfig } from '../types/appTypes';
+import type { HostEntry, HostTreeNode, SshConnectionConfig, TelnetConnectionConfig } from '../types/appTypes';
 
 /**
  * The saved login name of a Host Tree entry, as plaintext — for the AI connect
@@ -21,6 +21,45 @@ export async function resolveHostLoginName(nodeId: string): Promise<string | und
         return plain || undefined;
     } catch {
         return undefined;
+    }
+}
+
+/**
+ * A Host Tree entry's privileged-mode password (`enable` / `super`) as
+ * plaintext — decrypted only at the moment the user sends it to a terminal.
+ *
+ * `stored` is the entry's `enablePassword` as the live tree holds it: plaintext
+ * right after an edit in this window, ciphertext after a load or an edit in
+ * another window. Ciphertext is always decrypted afresh rather than read from
+ * the credential cache: one IPC per deliberate key press is cheap, and it keeps
+ * this path independent of when the cache is filled or cleared.
+ */
+export type EnablePasswordResult =
+    | { kind: 'none' }
+    | { kind: 'failed' }
+    | { kind: 'ok'; value: string };
+
+/**
+ * The entry's stored enable password if it is one the terminal may send, else
+ * undefined. A gcloud-iap host is a cloud VM reached through IAP, not a network
+ * device, so it never offers one. The header button and Ctrl+Shift+E both ask
+ * here, so they cannot disagree.
+ */
+export function sendableEnablePassword(entry: HostEntry | undefined): string | undefined {
+    if (!entry || entry.protocol === 'gcloud-iap') return undefined;
+    return entry.enablePassword || undefined;
+}
+
+export async function resolveEnablePassword(stored: string | undefined): Promise<EnablePasswordResult> {
+    if (!stored) return { kind: 'none' };
+    if (!isEncrypted(stored)) return { kind: 'ok', value: stored };
+    try {
+        const [plain] = await decryptBatch([stored]);
+        // decryptBatch fails open: when the IPC call itself is rejected it hands
+        // the input back unchanged. Ciphertext must never be typed into a device.
+        return plain && !isEncrypted(plain) ? { kind: 'ok', value: plain } : { kind: 'failed' };
+    } catch {
+        return { kind: 'failed' };
     }
 }
 

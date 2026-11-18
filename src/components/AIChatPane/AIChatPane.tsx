@@ -48,7 +48,7 @@ import {
 } from '../../utils/aiConnectRequest';
 import { buildWatchedViews, buildConnectCapabilityInput } from '../../utils/aiConnectContext';
 import { lookupSession, type SessionSources } from '../../utils/sessionLookup';
-import { useAiWorkerSessionStore } from '../../stores/aiWorkerSessionStore';
+import { useAiWorkerSessionStore, isWorkerLive } from '../../stores/aiWorkerSessionStore';
 import { IS_AI_CHAT_WINDOW } from '../../utils/windowLabel';
 import type { ChatPanePort } from '../../hooks/useAiChatWindow';
 import { conversationColorIndex, conversationColorVar } from '../../utils/conversationColor';
@@ -2568,7 +2568,7 @@ export const AIChatPane: React.FC<AIChatPaneProps> = React.memo(({
                     onClose={(id) => {
                         const hasConversation = (messagesByTab.get(id)?.length ?? 0) > 0;
                         const liveWorkers = Object.values(workers)
-                            .filter((w) => w.tabId === id && (w.status === 'connected' || w.status === 'connecting')).length;
+                            .filter((w) => w.tabId === id && isWorkerLive(w)).length;
                         if (hasConversation || liveWorkers > 0) {
                             setCloseTabConfirm({ tabId: id, workers: liveWorkers });
                             return;

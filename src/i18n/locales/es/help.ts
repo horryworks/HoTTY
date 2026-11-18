@@ -15,6 +15,7 @@ export const help = {
     closeTab: 'Cerrar la pestaña actual',
     clearOrSigint: 'Limpiar selección / Enviar SIGINT',
     paste: 'Pegar en el terminal (con comprobación de seguridad)',
+    sendEnablePassword: "Enviar la contraseña de enable guardada del host",
     sendMessage: 'Enviar mensaje en el diálogo Preguntar a la IA',
     findInLog: 'Buscar en el registro abierto (panel Visor de registros)',
     filterHosts: 'Filtrar el árbol de hosts (diálogo Nueva sesión)',

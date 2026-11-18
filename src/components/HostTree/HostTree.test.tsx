@@ -1009,9 +1009,12 @@ describe('HostTree — public key auth in Add Host', () => {
   }
 
   const keyPathField = () => screen.getByPlaceholderText('~/.ssh/id_rsa');
-  /** Two password fields in this form: the account password, then the passphrase. */
-  const passphraseField = () =>
-    document.querySelectorAll<HTMLInputElement>('.host-edit-modal input[type="password"]')[1];
+  /** Password fields in this form, in order: the account password, the enable
+   *  password, then (SSH only) the key passphrase. */
+  const passwordFields = () =>
+    document.querySelectorAll<HTMLInputElement>('.host-edit-modal input[type="password"]');
+  const enablePasswordField = () => passwordFields()[1];
+  const passphraseField = () => passwordFields()[2];
   const protocolSelect = () => screen.getByDisplayValue('SSH');
   const jumpboxSelect = () => screen.queryByRole('combobox', { name: 'Jumpbox (Bastion)' });
 
@@ -1040,6 +1043,21 @@ describe('HostTree — public key auth in Add Host', () => {
         privateKeyPassphrase: 'secret',
       }),
     );
+  });
+
+  it('saves an enable password onto a new Telnet host as well as an SSH one', () => {
+    const p = openAddHost();
+    fireEvent.change(protocolSelect(), { target: { value: 'telnet' } });
+    expect(screen.getByText('Enable Password')).toBeTruthy();
+    fireEvent.change(enablePasswordField(), { target: { value: 'en-secret' } });
+    fireEvent.click(screen.getByText('Save'));
+    expect(p.onAddHost.mock.calls[0][2]).toMatchObject({ protocol: 'telnet', enablePassword: 'en-secret' });
+  });
+
+  it('leaves enablePassword out when the field is empty', () => {
+    const p = openAddHost();
+    fireEvent.click(screen.getByText('Save'));
+    expect(p.onAddHost.mock.calls[0][2].enablePassword).toBeUndefined();
   });
 
   it('drops the key fields when the protocol is switched to Telnet', () => {

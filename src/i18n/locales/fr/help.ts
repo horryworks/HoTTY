@@ -15,6 +15,7 @@ export const help = {
     closeTab: "Fermer l'onglet actuel",
     clearOrSigint: 'Effacer la sélection / Envoyer SIGINT',
     paste: 'Coller dans le terminal (avec vérification de sécurité)',
+    sendEnablePassword: "Envoyer le mot de passe enable enregistré de l’hôte",
     sendMessage: "Envoyer le message dans la boîte de dialogue Demander à l'IA",
     findInLog: 'Rechercher dans le journal ouvert (volet Visionneuse de journaux)',
     filterHosts: "Filtrer l'arborescence des hôtes (dialogue Nouvelle session)",

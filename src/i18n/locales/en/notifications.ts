@@ -2,6 +2,10 @@
 // overlay, update banner, crash fallback). English is the source of truth; values
 // are byte-identical to the in-component literals they replace.
 export const notifications = {
+  enablePassword: {
+    notSaved: "No enable password is saved for this host.",
+    decryptFailed: "The saved enable password could not be decrypted.",
+  },
   error: {
     dismiss: 'Dismiss error notification',
   },

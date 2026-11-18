@@ -15,6 +15,7 @@ export const help = {
     closeTab: 'Close current tab',
     clearOrSigint: 'Clear selection / Send SIGINT',
     paste: 'Paste to terminal (with security check)',
+    sendEnablePassword: "Send the host’s saved enable password",
     sendMessage: 'Send message in Ask AI dialog',
     findInLog: 'Search in the open log (Log Viewer pane)',
     filterHosts: 'Filter the host tree (New Session dialog)',

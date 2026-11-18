@@ -9,5 +9,12 @@
     "against the gate again and the report says the acceptance expired. Set it to the",
     "date the blocker is expected to clear, not to a comfortable distance."
   ],
-  "ignore": []
+  "ignore": [
+    {
+      "id": "GHSA-fc5q-39xc-vjpf",
+      "package": "picomatch",
+      "reason": "ReDoS in extglob matching. devDependency only (vite, vitest, tinyglobby), not shipped in the Tauri bundle; it only ever matches the repo's own build/test globs. No patched release exists yet (<=4.0.7 affected). Accepted by the user at the v2.1.5 cut, 2026-11-18.",
+      "expires": "2026-12-31"
+    }
+  ]
 }

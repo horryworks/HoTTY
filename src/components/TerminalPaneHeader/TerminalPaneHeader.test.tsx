@@ -59,4 +59,31 @@ describe('TerminalPaneHeader', () => {
     const { container } = render(<TerminalPaneHeader paneId="0" paneNumber={1} session={session} onClose={() => {}} />);
     expect(container.querySelector('.tab-watch-btn')).toBeNull();
   });
+
+  it('has no enable-password button unless the host has one saved', () => {
+    const { container } = render(<TerminalPaneHeader paneId="0" paneNumber={1} session={session} onClose={() => {}} />);
+    expect(container.querySelector('.pane-term-enable')).toBeNull();
+  });
+
+  it('puts the enable-password button before the AI link button and sends on click', () => {
+    const onSend = vi.fn();
+    const { container } = render(
+      <TerminalPaneHeader
+        paneId="0"
+        paneNumber={1}
+        session={session}
+        onClose={() => {}}
+        onToggleWatch={() => {}}
+        onSendEnablePassword={onSend}
+      />
+    );
+    const buttons = Array.from(container.querySelectorAll('button')).map((b) => b.className);
+    expect(buttons).toEqual(['pane-term-enable', 'tab-watch-btn', 'pane-term-close']);
+    const btn = container.querySelector('.pane-term-enable')!;
+    // Pressing must not pull focus out of the terminal.
+    const down = fireEvent.mouseDown(btn);
+    expect(down).toBe(false);
+    fireEvent.click(btn);
+    expect(onSend).toHaveBeenCalledTimes(1);
+  });
 });

@@ -54,6 +54,7 @@ export const sessionDialog = {
   privateKeyPathLabel: '秘密鍵のパス（任意）',
   privateKeyPathPlaceholder: '~/.ssh/id_rsa',
   privateKeyPassphraseLabel: '秘密鍵のパスフレーズ',
+  enablePasswordLabel: "特権パスワード",
   keyPickerLabel: '.ssh フォルダから鍵を選ぶ',
   keyPickerNone: '鍵を選ぶ…',
   keyPickerGenerate: '鍵を新しく作る…',

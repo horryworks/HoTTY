@@ -550,6 +550,30 @@ describe('SessionDialog', () => {
       expect(restoredHostInput.value).toBe('10.0.0.77');
     });
 
+    it('shows a saved host\'s enable password, keeps it on connect, and never sends it', async () => {
+      localStorage.setItem(STORAGE_KEYS.HOST_TREE, JSON.stringify([
+        { id: 'host-en-1', type: 'host', name: 'Edge Router', entry: { protocol: 'telnet', host: '192.0.2.30', port: 23, username: 'alice', enablePassword: '[SAFE]en-pass' } },
+      ]));
+      const onConnect = vi.fn().mockReturnValue('sess-en');
+      render(<SessionDialog {...defaultProps} onConnect={onConnect} sessions={makeSessions([['sess-en', 'connecting']])} />);
+      // A New Connection has no saved host to hold one.
+      expect(screen.queryByText('Enable Password')).toBeNull();
+      await act(async () => {
+        fireEvent.click(screen.getByText('Edge Router'));
+      });
+      const label = screen.getByText('Enable Password');
+      const field = label.parentElement!.querySelector('input') as HTMLInputElement;
+      expect(field.value).toBe('en-pass');
+      await act(async () => {
+        fireEvent.click(screen.getByText('Connect'));
+      });
+      expect(onConnect).toHaveBeenCalledTimes(1);
+      expect(JSON.stringify(onConnect.mock.calls[0][0])).not.toContain('en-pass');
+      // Connecting rebuilds the host entry; the enable password must survive it.
+      const saved = JSON.parse(localStorage.getItem(STORAGE_KEYS.HOST_TREE)!);
+      expect(saved[0].entry.enablePassword).toBe('[SAFE]en-pass');
+    });
+
     it('does not clear the draft while the session is still in the "connecting" state', async () => {
       localStorage.setItem(STORAGE_KEYS.HOST_TREE, JSON.stringify([
         { id: 'host-conn-1', type: 'host', name: 'Sample Box', entry: { protocol: 'ssh', host: '10.0.0.22', port: 22, username: 'alice' } },

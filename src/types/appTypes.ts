@@ -671,6 +671,10 @@ export interface HostEntry {
   iapTunnel?: IapTunnelEntry;
   privateKeyPath?: string;
   privateKeyPassphrase?: string;
+  /** Privileged-mode password (Cisco `enable`, Huawei `super`, ...). Stored
+   *  DPAPI-encrypted like `password`. Never part of a connection config: it is
+   *  only decrypted when the user sends it to a terminal on purpose. */
+  enablePassword?: string;
   /** Per-host "fixed terminal size" preference; `undefined` = follow the global
    *  default. Persisted so it survives across sessions and syncs across windows. */
   fixedTerminalSize?: boolean;

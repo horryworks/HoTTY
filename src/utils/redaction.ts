@@ -26,6 +26,8 @@ const SENSITIVE_KEYS = [
   // `sensitive_env.rs`; this closes the matching gap on the TypeScript side.
   'private[_-]?key[_-]?passphrase',
   'passphrase',
+  // Host Tree privileged-mode password (`enablePassword`); same \b reason.
+  'enable[_-]?password',
 ];
 
 const KEYED_VALUE_PATTERN = new RegExp(

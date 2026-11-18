@@ -1,6 +1,10 @@
 // Notificaciones y superposiciones — UI transitoria a nivel de aplicación (avisos de
 // error, superposición de conexión, banner de actualización, pantalla de fallo).
 export const notifications = {
+  enablePassword: {
+    notSaved: "Este host no tiene una contraseña de enable guardada.",
+    decryptFailed: "No se pudo descifrar la contraseña de enable guardada.",
+  },
   error: {
     dismiss: 'Descartar notificación de error',
   },

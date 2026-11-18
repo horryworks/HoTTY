@@ -57,6 +57,7 @@ export const sessionDialog = {
   keyPickerNone: '키 선택…',
   keyPickerGenerate: '새 키 만들기…',
   privateKeyPassphraseLabel: '개인 키 암호 구문',
+  enablePasswordLabel: "특권 비밀번호",
   serialPortLabel: '시리얼 포트',
   serialPortPlaceholder: 'COM3',
   baudRateLabel: '보드레이트',

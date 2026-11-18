@@ -45,6 +45,11 @@ describe('redactSensitive', () => {
     expect(redactSecrets('{"privateKeyPassphrase":"hunter2"}')).not.toContain('hunter2');
   });
 
+  it('redacts the host privileged-mode password field', () => {
+    expect(redactSensitive('enablePassword=hunter2')).toBe('enablePassword=<redacted>');
+    expect(redactSecrets('{"enablePassword":"hunter2"}')).not.toContain('hunter2');
+  });
+
   it('redacts Bearer tokens', () => {
     expect(redactSensitive('Authorization: Bearer eyJhbGc.payload.sig')).toBe(
       'Authorization: Bearer <redacted>',

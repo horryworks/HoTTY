@@ -23,7 +23,7 @@
  * command is channel-agnostic, so no backend change is needed.
  */
 
-import type { AiWorkerSession } from '../stores/aiWorkerSessionStore';
+import { isWorkerLive, type AiWorkerSession } from '../stores/aiWorkerSessionStore';
 import type { AiChatState } from '../hooks/useAiChat';
 import type { SessionDialogPrefill } from '../types/appTypes';
 import type { ChatMessage, TabTokens } from '../hooks/useChatStream';
@@ -163,7 +163,7 @@ export function buildHandoverPayload(input: {
     // grace period (so a poll can read why). The receiver has no such timer:
     // moved over, it would sit in the tray as a dead chip for good.
     workers: input.workers.filter(
-      (w) => tabIds.has(w.tabId) && (w.status === 'connected' || w.status === 'connecting'),
+      (w) => tabIds.has(w.tabId) && isWorkerLive(w),
     ),
     imagesDropped,
   };

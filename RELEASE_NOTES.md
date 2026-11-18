@@ -1,5 +1,19 @@
 # Release Notes
 
+## v2.1.5
+
+**A host can keep its enable password, and HoTTY types it into that host's terminal when you press Ctrl+Shift+E or the key button in the pane header.**
+
+### New Features
+
+- **Saved enable password.** A host in the Host Tree has a new **Enable Password** field for the device's privileged-mode password (Cisco `enable`, Huawei `super`, and the like). Fill it in when adding a host, or in the New Session dialog after picking a saved SSH or Telnet host. It is stored encrypted with Windows DPAPI, like the login password.
+- **Send it to the terminal.** In a terminal opened from that host, press **`Ctrl+Shift+E`**, or click the key button in the pane header, to type the saved enable password followed by Enter. The button appears only when the host has one saved. The password is decrypted at that moment, goes only to that terminal, and is never sent when connecting. Holding the keys down sends it once.
+
+### Security
+
+- **Logs hide the enable password** the same way they hide the login password.
+- **Accepted, not exploitable in HoTTY:** RUSTSEC-2026-0495 (russh 0.64.1) affects russh's SSH agent *server*; HoTTY is an SSH client and never runs it. GHSA-fc5q-39xc-vjpf (picomatch 4.0.7, no fixed release yet) is in the build and test tools only and is not shipped. Both are recorded with a reason and will be cleared by a dependency update between releases.
+
 ## v2.1.4
 
 **Automatic command execution closes many more ways for a command to slip past its safety checks — saved Wi-Fi keys, inline code, network shares, cmd variables, git options — and HoTTY drops duplicate crypto libraries and HTTP/2.**

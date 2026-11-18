@@ -57,6 +57,7 @@ export const sessionDialog = {
   keyPickerNone: 'Choisir une clé…',
   keyPickerGenerate: 'Générer une nouvelle clé…',
   privateKeyPassphraseLabel: 'Phrase secrète de la clé privée',
+  enablePasswordLabel: "Mot de passe enable",
   serialPortLabel: 'Port série',
   serialPortPlaceholder: 'COM3',
   baudRateLabel: 'Débit en bauds',

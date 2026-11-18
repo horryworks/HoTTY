@@ -170,6 +170,21 @@ describe('useHostManager', () => {
     expect(getCachedCredential('host-1')?.privateKeyPassphrase).toBe('secret-pass');
   });
 
+  it('editNode caches an edited enable password and persists it only encrypted', async () => {
+    localStorage.setItem('hotty_host_tree', JSON.stringify(sampleTree));
+    const { result } = renderHook(() => useHostManager());
+    act(() => {
+      result.current.editNode('host-3', {
+        entry: { protocol: 'telnet', host: '192.168.1.1', port: 23, enablePassword: 'en-pass' },
+      });
+    });
+    expect(getCachedCredential('host-3')?.enablePassword).toBe('en-pass');
+    await waitFor(() => {
+      const saved = JSON.parse(localStorage.getItem('hotty_host_tree') ?? '[]') as HostTreeNode[];
+      expect(flattenHosts(saved).find(h => h.id === 'host-3')?.entry?.enablePassword).toBe('[SAFE]en-pass');
+    });
+  });
+
   it('deleteNode removes a node', () => {
     localStorage.setItem('hotty_host_tree', JSON.stringify(sampleTree));
     const { result } = renderHook(() => useHostManager());

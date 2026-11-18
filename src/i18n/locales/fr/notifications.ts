@@ -2,6 +2,10 @@
 // overlay, update banner, crash fallback). English is the source of truth; values
 // are byte-identical to the in-component literals they replace.
 export const notifications = {
+  enablePassword: {
+    notSaved: "Aucun mot de passe enable n’est enregistré pour cet hôte.",
+    decryptFailed: "Impossible de déchiffrer le mot de passe enable enregistré.",
+  },
   error: {
     dismiss: "Ignorer la notification d'erreur",
   },

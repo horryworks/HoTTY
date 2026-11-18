@@ -2,6 +2,10 @@
 // overlay, update banner, crash fallback). English is the source of truth; values
 // are byte-identical to the in-component literals they replace.
 export const notifications = {
+  enablePassword: {
+    notSaved: "此主机未保存特权密码。",
+    decryptFailed: "无法解密已保存的特权密码。",
+  },
   error: {
     dismiss: '关闭错误通知',
   },

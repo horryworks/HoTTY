@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { buildConfigFromHostNode, resolveHostLoginName } from './hostConnectConfig';
+import { buildConfigFromHostNode, resolveEnablePassword, resolveHostLoginName, sendableEnablePassword } from './hostConnectConfig';
 import { isEncrypted } from '../services/tauriService';
 import { decryptBatch, findStoredHostNode, getCachedCredential } from '../hooks/useHostManager';
 import { useSettingsStore } from '../stores/settingsStore';
@@ -156,5 +156,55 @@ describe('resolveHostLoginName', () => {
     await expect(resolveHostLoginName('gone')).resolves.toBeUndefined();
     mockFindStored.mockReturnValue(node({ host: '192.0.2.1' }));
     await expect(resolveHostLoginName('n1')).resolves.toBeUndefined();
+  });
+});
+
+describe('sendableEnablePassword', () => {
+  it('offers a saved enable password for SSH and Telnet hosts', () => {
+    expect(sendableEnablePassword({ protocol: 'ssh', host: '192.0.2.1', port: 22, enablePassword: 'enc:e' })).toBe('enc:e');
+    expect(sendableEnablePassword({ protocol: 'telnet', host: '192.0.2.1', port: 23, enablePassword: 'en' })).toBe('en');
+  });
+
+  it('never offers one for a gcloud-iap host, so the shortcut matches the hidden button', () => {
+    expect(sendableEnablePassword({ protocol: 'gcloud-iap', host: 'vm-01', port: 22, enablePassword: 'enc:e' })).toBeUndefined();
+  });
+
+  it('is undefined with no entry or an empty value', () => {
+    expect(sendableEnablePassword(undefined)).toBeUndefined();
+    expect(sendableEnablePassword({ protocol: 'ssh', host: '192.0.2.1', port: 22, enablePassword: '' })).toBeUndefined();
+  });
+});
+
+describe('resolveEnablePassword', () => {
+  it('is none when nothing is saved', async () => {
+    await expect(resolveEnablePassword(undefined)).resolves.toEqual({ kind: 'none' });
+    await expect(resolveEnablePassword('')).resolves.toEqual({ kind: 'none' });
+    expect(mockDecryptBatch).not.toHaveBeenCalled();
+  });
+
+  it('returns a plaintext value (a fresh edit in this window) without decrypting', async () => {
+    await expect(resolveEnablePassword('s3cret')).resolves.toEqual({ kind: 'ok', value: 's3cret' });
+    expect(mockDecryptBatch).not.toHaveBeenCalled();
+  });
+
+  it('always decrypts ciphertext, even when the cache holds a value', async () => {
+    // The cache is not refreshed by another window's edit, so it must not win.
+    mockGetCached.mockReturnValue({ enablePassword: 'stale' });
+    mockDecryptBatch.mockResolvedValueOnce(['fresh']);
+    await expect(resolveEnablePassword('enc:e')).resolves.toEqual({ kind: 'ok', value: 'fresh' });
+    expect(mockDecryptBatch).toHaveBeenCalledWith(['enc:e']);
+  });
+
+  it('reports a failed decrypt instead of handing back ciphertext', async () => {
+    mockDecryptBatch.mockResolvedValueOnce([undefined]);
+    await expect(resolveEnablePassword('enc:e')).resolves.toEqual({ kind: 'failed' });
+    mockDecryptBatch.mockRejectedValueOnce(new Error('dpapi'));
+    await expect(resolveEnablePassword('enc:e')).resolves.toEqual({ kind: 'failed' });
+  });
+
+  it('reports failed when a rejected decrypt hands the ciphertext back', async () => {
+    // decryptBatch fails open on an IPC rejection and returns its input.
+    mockDecryptBatch.mockResolvedValueOnce(['enc:e']);
+    await expect(resolveEnablePassword('enc:e')).resolves.toEqual({ kind: 'failed' });
   });
 });

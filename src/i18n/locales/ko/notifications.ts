@@ -2,6 +2,10 @@
 // overlay, update banner, crash fallback). English is the source of truth; values
 // are byte-identical to the in-component literals they replace.
 export const notifications = {
+  enablePassword: {
+    notSaved: "이 호스트에는 저장된 특권 비밀번호가 없습니다.",
+    decryptFailed: "저장된 특권 비밀번호를 복호화할 수 없습니다.",
+  },
   error: {
     dismiss: '오류 알림 닫기',
   },

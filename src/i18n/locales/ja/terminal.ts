@@ -1,6 +1,7 @@
 // ターミナルのクローム（マーカーレールとカスタムスクロールバーのアクセシビリティ
 // ラベル）。xterm 本体にはアプリ層のテキストはありません。
 export const terminal = {
+  sendEnablePassword: "特権パスワードを送る (Ctrl+Shift+E)",
   scrollbar: 'ターミナルのスクロールバー',
   markerRail: 'プロンプトマーカー',
   promptMarker: 'プロンプトへジャンプ',

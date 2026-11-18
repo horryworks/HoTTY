@@ -2,6 +2,7 @@
 // block markers) and the custom scrollbar rail. The xterm host itself renders
 // no app-level text. English is the source of truth.
 export const terminal = {
+  sendEnablePassword: "특권 비밀번호 보내기 (Ctrl+Shift+E)",
   scrollbar: '터미널 스크롤바',
   markerRail: '프롬프트 마커',
   promptMarker: '프롬프트로 이동',

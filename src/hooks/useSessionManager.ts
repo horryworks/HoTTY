@@ -139,9 +139,23 @@ export interface TerminalKeyHooks {
 export function handleTerminalKey(
   e: KeyboardEvent,
   term: TerminalKeyHooks,
-  onPaste: () => void
+  onPaste: () => void,
+  onSendEnablePassword?: () => void
 ): boolean {
   if (e.type !== 'keydown') return true;
+  // Ctrl+Shift+E: send the host's saved privileged-mode password. Handled here,
+  // in the focused terminal's own key handler, so it can only ever reach the
+  // terminal the user is typing in. Ctrl+Shift+E has no meaning of its own in a
+  // terminal, so nothing is taken away. Auto-repeat is ignored: holding the
+  // chord must not send the password over and over.
+  if (
+    onSendEnablePassword &&
+    e.ctrlKey && e.shiftKey && !e.altKey && !e.metaKey &&
+    e.code === 'KeyE'
+  ) {
+    if (!e.repeat) onSendEnablePassword();
+    return false;
+  }
   if (!e.ctrlKey || e.shiftKey || e.altKey || e.metaKey) return true;
   const k = e.key.toLowerCase();
   if (k === 'v') {
@@ -168,14 +182,18 @@ export const SESSION_END_AUTO_CLOSE_MS = 1500;
 interface UseSessionManagerOptions {
   onPasteRequest?: (sessionId: string) => void;
   onSessionRemoved?: (sessionId: string) => void;
+  /** Ctrl+Shift+E in a terminal: send its host's saved enable password. */
+  onEnablePasswordRequest?: (sessionId: string) => void;
 }
 
 export function useSessionManager(options: UseSessionManagerOptions = {}) {
   const onPasteRequestRef = useRef(options.onPasteRequest);
   const onSessionRemovedRef = useRef(options.onSessionRemoved);
+  const onEnablePasswordRequestRef = useRef(options.onEnablePasswordRequest);
   useEffect(() => {
     onPasteRequestRef.current = options.onPasteRequest;
     onSessionRemovedRef.current = options.onSessionRemoved;
+    onEnablePasswordRequestRef.current = options.onEnablePasswordRequest;
   });
 
   const [sessions, setSessions] = useState<Map<string, SessionRecord>>(
@@ -508,7 +526,12 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
       });
 
       term.attachCustomKeyEventHandler((e) =>
-        handleTerminalKey(e, term, () => onPasteRequestRef.current?.(id))
+        handleTerminalKey(
+          e,
+          term,
+          () => onPasteRequestRef.current?.(id),
+          () => onEnablePasswordRequestRef.current?.(id)
+        )
       );
 
       term.onData((data) => {

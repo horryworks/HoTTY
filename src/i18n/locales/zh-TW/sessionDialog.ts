@@ -57,6 +57,7 @@ export const sessionDialog = {
   keyPickerNone: '選擇金鑰…',
   keyPickerGenerate: '產生新金鑰…',
   privateKeyPassphraseLabel: '私密金鑰密碼短語',
+  enablePasswordLabel: "特權密碼",
   serialPortLabel: '序列埠',
   serialPortPlaceholder: 'COM3',
   baudRateLabel: '鮑率',
